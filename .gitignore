@@ -1,0 +1,13 @@
+node_modules/
+.npm-cache/
+.node-gyp/
+
+dist/
+dist-electron/
+
+.env
+.env.*
+!.env.example
+
+*.log
+.DS_Store
