@@ -70,29 +70,189 @@ function Ranking({ rows }: { rows: Standing[] }) {
     </div>
   );
 }
-function Game({ match }: { match: Match }) {
+function EditMatchModal({
+  match,
+  onClose,
+  onSaved,
+}: {
+  match: Match;
+  onClose: () => void;
+  onSaved: () => Promise<void>;
+}) {
+  const [score1, setScore1] = useState(String(match.score1));
+  const [score2, setScore2] = useState(String(match.score2));
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handleSave() {
+    const newScore1 = Number(score1);
+    const newScore2 = Number(score2);
+
+    if (!Number.isInteger(newScore1) || newScore1 < 0) {
+      setError("O placar do primeiro jogador é inválido.");
+      return;
+    }
+
+    if (!Number.isInteger(newScore2) || newScore2 < 0) {
+      setError("O placar do segundo jogador é inválido.");
+      return;
+    }
+
+    setSaving(true);
+    setError("");
+
+    try {
+      await window.arena.updateMatch({
+        id: match.id,
+        player1Id: match.player1Id,
+        player2Id: match.player2Id,
+        team1Id: match.team1Id,
+        team2Id: match.team2Id,
+        score1: newScore1,
+        score2: newScore2,
+        championshipId: match.championshipId ?? undefined,
+        playedAt: match.playedAt,
+      });
+
+      await onSaved();
+    } catch (error) {
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível atualizar a partida.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="edit-modal-backdrop" onMouseDown={onClose}>
+      <div className="edit-modal" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="edit-modal-header">
+          <div>
+            <span>EDITAR PARTIDA</span>
+            <h2>Alterar resultado</h2>
+          </div>
+
+          <button
+            type="button"
+            className="edit-modal-close"
+            onClick={onClose}
+            disabled={saving}
+            aria-label="Fechar"
+          >
+            ×
+          </button>
+        </div>
+
+        <div className="edit-match-info">
+          <small>
+            {date(match.playedAt)}
+            {match.championship ? ` · ${match.championship}` : ""}
+          </small>
+        </div>
+
+        <div className="edit-scoreboard">
+          <div className="edit-player">
+            <strong>{match.player1}</strong>
+            <span>{match.team1}</span>
+          </div>
+
+          <div className="edit-score">
+            <input
+              type="number"
+              min="0"
+              value={score1}
+              onChange={(e) => setScore1(e.target.value)}
+              disabled={saving}
+              autoFocus
+            />
+
+            <span>×</span>
+
+            <input
+              type="number"
+              min="0"
+              value={score2}
+              onChange={(e) => setScore2(e.target.value)}
+              disabled={saving}
+            />
+          </div>
+
+          <div className="edit-player edit-player-right">
+            <strong>{match.player2}</strong>
+            <span>{match.team2}</span>
+          </div>
+        </div>
+
+        {error && <div className="edit-error">{error}</div>}
+
+        <div className="edit-modal-actions">
+          <button
+            type="button"
+            className="edit-cancel"
+            onClick={onClose}
+            disabled={saving}
+          >
+            Cancelar
+          </button>
+
+          <button
+            type="button"
+            className="edit-save"
+            onClick={handleSave}
+            disabled={saving}
+          >
+            {saving ? "Salvando..." : "Salvar resultado"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Game({
+  match,
+  onEdit,
+}: {
+  match: Match;
+  onEdit: (match: Match) => void;
+}) {
   return (
     <div className="game">
       <small>
         {date(match.playedAt)}{" "}
         {match.championship ? `· ${match.championship}` : ""}
       </small>
+
       <div>
         <span>
           {match.player1}
           <em>{match.team1}</em>
         </span>
+
         <b>
           {match.score1} <i>×</i> {match.score2}
         </b>
+
         <span>
           {match.player2}
           <em>{match.team2}</em>
         </span>
       </div>
+
+      <button
+        type="button"
+        className="edit-match-btn"
+        onClick={() => onEdit(match)}
+      >
+        Editar resultado
+      </button>
     </div>
   );
 }
+
 function DashboardPage({
   data,
   go,
@@ -100,6 +260,7 @@ function DashboardPage({
   data: Dashboard;
   go: (page: Page) => void;
 }) {
+  const [editingMatch, setEditingMatch] = useState<Match | null>(null);
   const metrics = [
     ["PARTIDAS", data.matches],
     ["JOGADORES", data.players],
@@ -149,7 +310,7 @@ function DashboardPage({
           {data.recent.length ? (
             <div className="games">
               {data.recent.map((m) => (
-                <Game key={m.id} match={m} />
+                <Game key={m.id} match={m} onEdit={setEditingMatch} />
               ))}
             </div>
           ) : (
@@ -157,6 +318,16 @@ function DashboardPage({
           )}
         </article>
       </section>
+      {editingMatch && (
+        <EditMatchModal
+          match={editingMatch}
+          onClose={() => setEditingMatch(null)}
+          onSaved={async () => {
+            setEditingMatch(null);
+            window.location.reload();
+          }}
+        />
+      )}
     </>
   );
 }
@@ -169,6 +340,7 @@ function PlayersPage({
 }) {
   const [name, setName] = useState("");
   const [nickname, setNickname] = useState("");
+  const [deletePlayer, setDeletePlayer] = useState<Player | null>(null);
   const save = async (e: FormEvent) => {
     e.preventDefault();
     await window.arena.savePlayer({ name, nickname });
@@ -218,9 +390,23 @@ function PlayersPage({
                 <button
                   className="danger"
                   onClick={async () => {
-                    if (confirm(`Excluir ${p.name}?`)) {
+                    if (
+                      !confirm(
+                        `Excluir ${p.name}?\n\nAs partidas e participações desse jogador também serão removidas.`,
+                      )
+                    ) {
+                      return;
+                    }
+
+                    try {
                       await window.arena.deletePlayer(p.id);
-                      reload();
+                      await reload();
+                    } catch (error) {
+                      alert(
+                        error instanceof Error
+                          ? error.message
+                          : "Não foi possível excluir o jogador.",
+                      );
                     }
                   }}
                 >
@@ -232,6 +418,20 @@ function PlayersPage({
           </div>
         </article>
       </section>
+      {deletePlayer && (
+        <AppModal
+          title="Excluir jogador?"
+          message={`Tem certeza que deseja excluir ${deletePlayer.name}? As partidas e participações desse jogador também serão removidas.`}
+          confirmText="Excluir"
+          cancelText="Cancelar"
+          danger
+          onClose={() => setDeletePlayer(null)}
+          onConfirm={async () => {
+            await window.arena.deletePlayer(deletePlayer.id);
+            await reload();
+          }}
+        />
+      )}
     </>
   );
 }
@@ -245,6 +445,8 @@ function MatchesPage({
   reload: () => Promise<void>;
 }) {
   const [matches, setMatches] = useState<Match[]>([]);
+  const [editingMatch, setEditingMatch] = useState<Match | null>(null);
+  const [showClearModal, setShowClearModal] = useState(false);
   const [championships, setChampionships] = useState<Championship[]>([]);
   const [teamSearch1, setTeamSearch1] = useState("");
   const [teamSearch2, setTeamSearch2] = useState("");
@@ -432,7 +634,7 @@ function MatchesPage({
     const team2Id = Number(form.team2Id);
     const championshipId = form.championshipId
       ? Number(form.championshipId)
-      : null;
+      : undefined;
 
     if (!player1Id || !player2Id || !team1Id || !team2Id) {
       alert("Selecione os dois jogadores e os dois times.");
@@ -458,7 +660,7 @@ function MatchesPage({
         score1: Number(form.score1),
         score2: Number(form.score2),
         championshipId,
-      } as never);
+      });
 
       setMatches(await window.arena.matches());
       setForm({
@@ -532,30 +734,49 @@ function MatchesPage({
         <article className="panel wide">
           <div className="panel-head">
             <h2>Histórico</h2>
-            <button
-              className="danger"
-              onClick={async () => {
-                if (confirm("Tem certeza que deseja apagar todo o histórico de partidas? Essa ação não pode ser desfeita.")) {
-                  await window.arena.clearMatches();
-                  setMatches(await window.arena.matches());
-                  await reload();
-                }
-              }}
-            >
+            <button className="danger" onClick={() => setShowClearModal(true)}>
               Limpar histórico
             </button>
           </div>
           <div className="games">
             {matches.map((m) => (
-              <Game key={m.id} match={m} />
+              <Game key={m.id} match={m} onEdit={setEditingMatch} />
             ))}
             {!matches.length && <Empty text="As partidas aparecerão aqui." />}
           </div>
         </article>
       </section>
+
+      {editingMatch && (
+        <EditMatchModal
+          match={editingMatch}
+          onClose={() => setEditingMatch(null)}
+          onSaved={async () => {
+            setEditingMatch(null);
+            setMatches(await window.arena.matches());
+            await reload();
+          }}
+        />
+      )}
+      {showClearModal && (
+        <AppModal
+          title="Limpar histórico?"
+          message="Todas as partidas registradas serão apagadas. Essa ação não pode ser desfeita."
+          confirmText="Limpar histórico"
+          cancelText="Cancelar"
+          danger
+          onClose={() => setShowClearModal(false)}
+          onConfirm={async () => {
+            await window.arena.clearMatches();
+            setMatches(await window.arena.matches());
+            await reload();
+          }}
+        />
+      )}
     </>
   );
 }
+
 function ChampionshipPage({ players }: { players: Player[] }) {
   const [items, setItems] = useState<Championship[]>([]),
     [selected, setSelected] = useState<number>(),
@@ -757,6 +978,76 @@ function TeamsPage({ teams }: { teams: Team[] }) {
     </>
   );
 }
+function AppModal({
+  title,
+  message,
+  onClose,
+  onConfirm,
+  confirmText = "Confirmar",
+  cancelText = "Cancelar",
+  danger = false,
+}: {
+  title: string;
+  message: string;
+  onClose: () => void;
+  onConfirm?: () => void | Promise<void>;
+  confirmText?: string;
+  cancelText?: string;
+  danger?: boolean;
+}) {
+  const [loading, setLoading] = useState(false);
+
+  async function handleConfirm() {
+    if (!onConfirm) {
+      onClose();
+      return;
+    }
+
+    try {
+      setLoading(true);
+      await onConfirm();
+      onClose();
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="app-modal-backdrop" onMouseDown={onClose}>
+      <div className="app-modal" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="app-modal-icon">{danger ? "!" : "?"}</div>
+
+        <div className="app-modal-content">
+          <h2>{title}</h2>
+          <p>{message}</p>
+        </div>
+
+        <div className="app-modal-actions">
+          <button
+            type="button"
+            className="app-modal-cancel"
+            onClick={onClose}
+            disabled={loading}
+          >
+            {cancelText}
+          </button>
+
+          <button
+            type="button"
+            className={danger ? "app-modal-danger" : "app-modal-confirm"}
+            onClick={handleConfirm}
+            disabled={loading}
+          >
+            {loading ? "Aguarde..." : confirmText}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function App() {
   const [page, setPage] = useState<Page>("dashboard"),
     [data, setData] = useState<Dashboard>(),

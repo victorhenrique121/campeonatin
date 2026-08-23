@@ -40,6 +40,7 @@ app.whenReady().then(() => {
   ipcMain.handle("teams:list", (_, q) => repo.teams(q));
   ipcMain.handle("matches:list", () => repo.matches());
   ipcMain.handle("matches:save", (_, m) => repo.saveMatch(m));
+  ipcMain.handle("matches:update", (_, m) => repo.updateMatch(m));
   ipcMain.handle("matches:clear", () => repo.clearMatches());
   ipcMain.handle("ranking", () => repo.ranking());
   ipcMain.handle("championships:list", () => repo.championships());

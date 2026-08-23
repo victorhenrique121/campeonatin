@@ -16,6 +16,7 @@ export type Api = {
   teams: (query?: string) => Promise<Team[]>;
   matches: () => Promise<Match[]>;
   saveMatch: (match: MatchInput) => Promise<number>;
+  updateMatch: (match: MatchInput & { id: number }) => Promise<number>;
   clearMatches: () => Promise<void>;
   ranking: () => Promise<Standing[]>;
   championships: () => Promise<Championship[]>;

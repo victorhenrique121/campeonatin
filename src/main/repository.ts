@@ -54,7 +54,7 @@ export function createDatabase(file: string) {
   db.exec(
     "CREATE INDEX IF NOT EXISTS idx_fixtures_championship_round ON fixtures(championship_id, round_number)",
   );
-   const insert = db.prepare(`
+  const insert = db.prepare(`
     INSERT INTO teams (name, league, country)
     VALUES (@name, @league, @country)
     ON CONFLICT(name) DO UPDATE SET
@@ -180,7 +180,52 @@ export function repository(db: Database.Database) {
         .get(p.id) as Player;
     },
     deletePlayer: (id: number) => {
-      db.prepare("DELETE FROM players WHERE id=?").run(id);
+      const deletePlayerTransaction = db.transaction(() => {
+        const player = db
+          .prepare("SELECT id FROM players WHERE id = ?")
+          .get(id) as { id: number } | undefined;
+
+        if (!player) {
+          throw new Error("Jogador não encontrado.");
+        }
+
+        // Remove as partidas relacionadas ao jogador.
+        // O match_id das fixtures será automaticamente definido como NULL
+        // por causa do ON DELETE SET NULL.
+        db.prepare(
+          `
+      DELETE FROM matches
+      WHERE player1_id = ? OR player2_id = ?
+    `,
+        ).run(id, id);
+
+        // Remove os confrontos/fixtures do jogador.
+        db.prepare(
+          `
+      DELETE FROM fixtures
+      WHERE player1_id = ? OR player2_id = ?
+    `,
+        ).run(id, id);
+
+        // Remove a participação do jogador nos campeonatos.
+        db.prepare(
+          `
+      DELETE FROM championship_participants
+      WHERE player_id = ?
+    `,
+        ).run(id);
+
+        // Finalmente remove o jogador.
+        const result = db.prepare("DELETE FROM players WHERE id = ?").run(id);
+
+        if (result.changes === 0) {
+          throw new Error("Não foi possível excluir o jogador.");
+        }
+      });
+
+      deletePlayerTransaction();
+
+      return true;
     },
     teams: (q = "") =>
       db
@@ -282,10 +327,18 @@ export function repository(db: Database.Database) {
       if (m.player1Id === m.player2Id || m.team1Id === m.team2Id)
         throw new Error("Escolha jogadores e times diferentes.");
 
-      const player1Exists = db.prepare("SELECT 1 FROM players WHERE id=?").get(m.player1Id);
-      const player2Exists = db.prepare("SELECT 1 FROM players WHERE id=?").get(m.player2Id);
-      const team1Exists = db.prepare("SELECT 1 FROM teams WHERE id=?").get(m.team1Id);
-      const team2Exists = db.prepare("SELECT 1 FROM teams WHERE id=?").get(m.team2Id);
+      const player1Exists = db
+        .prepare("SELECT 1 FROM players WHERE id=?")
+        .get(m.player1Id);
+      const player2Exists = db
+        .prepare("SELECT 1 FROM players WHERE id=?")
+        .get(m.player2Id);
+      const team1Exists = db
+        .prepare("SELECT 1 FROM teams WHERE id=?")
+        .get(m.team1Id);
+      const team2Exists = db
+        .prepare("SELECT 1 FROM teams WHERE id=?")
+        .get(m.team2Id);
 
       if (!player1Exists || !player2Exists)
         throw new Error("Um dos jogadores selecionados não existe.");
@@ -293,12 +346,16 @@ export function repository(db: Database.Database) {
         throw new Error("Um dos times selecionados não existe.");
 
       if (championshipId !== null) {
-        const championshipExists = db.prepare("SELECT 1 FROM championships WHERE id=?").get(championshipId);
+        const championshipExists = db
+          .prepare("SELECT 1 FROM championships WHERE id=?")
+          .get(championshipId);
         if (!championshipExists)
           throw new Error("O campeonato selecionado não existe.");
       }
 
-      const existing = db.prepare("SELECT id FROM matches WHERE id=?").get(m.id);
+      const existing = db
+        .prepare("SELECT id FROM matches WHERE id=?")
+        .get(m.id);
       if (!existing) throw new Error("Partida não encontrada.");
 
       db.prepare(
@@ -324,11 +381,45 @@ export function repository(db: Database.Database) {
       db.prepare("DELETE FROM matches").run();
     },
     matches: () =>
-      db
-        .prepare(
-          `SELECT m.id,m.played_at playedAt,m.player1_id player1Id,m.player2_id player2Id,p1.name player1,p2.name player2,t1.name team1,t2.name team2,m.score1 score1,m.score2 score2,c.name championship FROM matches m JOIN players p1 ON p1.id=m.player1_id JOIN players p2 ON p2.id=m.player2_id JOIN teams t1 ON t1.id=m.team1_id JOIN teams t2 ON t2.id=m.team2_id LEFT JOIN championships c ON c.id=m.championship_id ORDER BY m.played_at DESC`,
-        )
-        .all(),
+  db
+    .prepare(
+      `
+      SELECT
+        m.id,
+        m.played_at AS playedAt,
+
+        m.player1_id AS player1Id,
+        m.player2_id AS player2Id,
+
+        m.team1_id AS team1Id,
+        m.team2_id AS team2Id,
+
+        m.score1 AS score1,
+        m.score2 AS score2,
+
+        p1.name AS player1,
+        p2.name AS player2,
+
+        t1.name AS team1,
+        t2.name AS team2,
+
+        m.championship_id AS championshipId,
+        c.name AS championship
+
+      FROM matches m
+
+      JOIN players p1 ON p1.id = m.player1_id
+      JOIN players p2 ON p2.id = m.player2_id
+
+      JOIN teams t1 ON t1.id = m.team1_id
+      JOIN teams t2 ON t2.id = m.team2_id
+
+      LEFT JOIN championships c
+        ON c.id = m.championship_id
+
+      ORDER BY m.played_at DESC`,
+    )
+    .all(),
     ranking: () => db.prepare(rankingSql).all(),
     dashboard: (): Dashboard => {
       const ranking = db.prepare(rankingSql).all() as Dashboard["ranking"];

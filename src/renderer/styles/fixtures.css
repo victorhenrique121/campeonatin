@@ -1,1 +1,57 @@
-.champ{width:100%;color:#ecf0fb;background:transparent;text-align:left}.champ.selected{background:#17213a;margin:0 -8px;padding-left:8px;padding-right:8px;border-radius:8px}.championship-detail{margin-top:22px}.fixtures{display:grid;gap:8px;max-height:460px;overflow:auto}.fixture{display:grid;grid-template-columns:72px 1fr auto 1fr;align-items:center;gap:10px;padding:12px;border:1px solid #25304a;border-radius:8px;font-size:12px}.fixture small{color:#7d89a4;font-weight:700}.fixture b{font-family:'Space Grotesk';color:#ada4ff}.fixture span:last-child{text-align:right}@media(max-width:600px){.fixture{grid-template-columns:60px 1fr auto 1fr;font-size:11px}}
+.champ {
+    width: 100%;
+    color: #ecf0fb;
+    background: transparent;
+    text-align: left
+}
+
+.champ.selected {
+    background: #17213a;
+    margin: 0 -8px;
+    padding-left: 8px;
+    padding-right: 8px;
+    border-radius: 8px
+}
+
+.championship-detail {
+    margin-top: 22px
+}
+
+.fixtures {
+    display: grid;
+    gap: 8px;
+    max-height: 460px;
+    overflow: auto
+}
+
+.fixture {
+    display: grid;
+    grid-template-columns: 72px 1fr auto 1fr;
+    align-items: center;
+    gap: 10px;
+    padding: 12px;
+    border: 1px solid #25304a;
+    border-radius: 8px;
+    font-size: 12px
+}
+
+.fixture small {
+    color: #7d89a4;
+    font-weight: 700
+}
+
+.fixture b {
+    font-family: 'Space Grotesk';
+    color: #ada4ff
+}
+
+.fixture span:last-child {
+    text-align: right
+}
+
+@media(max-width:600px) {
+    .fixture {
+        grid-template-columns: 60px 1fr auto 1fr;
+        font-size: 11px
+    }
+}

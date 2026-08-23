@@ -14,15 +14,24 @@ export type Team = {
 export type Match = {
   id: number;
   playedAt: string;
+
   player1Id: number;
   player2Id: number;
+
   player1: string;
   player2: string;
+
   team1: string;
   team2: string;
+
+  team1Id: number;
+  team2Id: number;
+
   score1: number;
   score2: number;
+
   championship?: string;
+  championshipId?: number | null;
 };
 export type Standing = {
   id: number;
