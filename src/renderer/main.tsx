@@ -387,29 +387,7 @@ function PlayersPage({
                   <b>{p.name}</b>
                   <small>@{p.nickname}</small>
                 </div>
-                <button
-                  className="danger"
-                  onClick={async () => {
-                    if (
-                      !confirm(
-                        `Excluir ${p.name}?\n\nAs partidas e participações desse jogador também serão removidas.`,
-                      )
-                    ) {
-                      return;
-                    }
-
-                    try {
-                      await window.arena.deletePlayer(p.id);
-                      await reload();
-                    } catch (error) {
-                      alert(
-                        error instanceof Error
-                          ? error.message
-                          : "Não foi possível excluir o jogador.",
-                      );
-                    }
-                  }}
-                >
+                <button className="danger" onClick={() => setDeletePlayer(p)}>
                   Excluir
                 </button>
               </div>
@@ -978,6 +956,7 @@ function TeamsPage({ teams }: { teams: Team[] }) {
     </>
   );
 }
+
 function AppModal({
   title,
   message,
@@ -996,6 +975,7 @@ function AppModal({
   danger?: boolean;
 }) {
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   async function handleConfirm() {
     if (!onConfirm) {
@@ -1003,12 +983,18 @@ function AppModal({
       return;
     }
 
+    setLoading(true);
+    setError("");
+
     try {
-      setLoading(true);
       await onConfirm();
       onClose();
     } catch (error) {
-      console.error(error);
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível realizar esta ação.",
+      );
     } finally {
       setLoading(false);
     }
@@ -1017,12 +1003,16 @@ function AppModal({
   return (
     <div className="app-modal-backdrop" onMouseDown={onClose}>
       <div className="app-modal" onMouseDown={(e) => e.stopPropagation()}>
-        <div className="app-modal-icon">{danger ? "!" : "?"}</div>
+        <div className={`app-modal-icon ${danger ? "danger" : ""}`}>
+          {danger ? "!" : "?"}
+        </div>
 
         <div className="app-modal-content">
           <h2>{title}</h2>
           <p>{message}</p>
         </div>
+
+        {error && <div className="app-modal-error">{error}</div>}
 
         <div className="app-modal-actions">
           <button

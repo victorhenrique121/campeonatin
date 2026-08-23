@@ -459,6 +459,26 @@ nav .active {
   cursor: not-allowed;
 }
 
+.app-modal-icon.danger {
+  border-color: #693f49;
+  background: #351b23;
+  color: #f0a7b1;
+}
+
+.app-modal-error {
+  margin-top: 18px;
+  padding: 11px 13px;
+
+  border: 1px solid #693f49;
+  border-radius: 8px;
+
+  background: #25151b;
+  color: #f0a7b1;
+
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 @keyframes appModalFade {
   from {
     opacity: 0;
