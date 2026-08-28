@@ -9,6 +9,7 @@
 --   * league: round-robin fixtures; odd participant counts receive a bye.
 --   * knockout: exactly 2, 4, 8, 16, or 32 participants, paired in input order.
 --   * groups_knockout remains intentionally unsupported.
+--   * newly created championships are active, matching the existing repository.
 
 create or replace function public.save_championship(
   p_name text,
@@ -93,7 +94,7 @@ begin
   end if;
 
   insert into public.championships (name, format, starts_at, status)
-  values (btrim(p_name), p_format, p_starts_at, 'draft')
+  values (btrim(p_name), p_format, p_starts_at, 'active')
   returning id into v_championship_id;
 
   insert into public.championship_participants (championship_id, player_id)
