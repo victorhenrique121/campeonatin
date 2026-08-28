@@ -28,7 +28,6 @@ declare
   v_total_count integer;
   v_next_round integer;
   v_winner_count integer;
-  v_exists boolean;
   v_winner_ids bigint[];
   v_index integer;
 begin
@@ -81,8 +80,15 @@ begin
     raise exception 'O campeonato selecionado não existe.' using errcode = '23503';
   end if;
 
-  -- Lock the target fixture before checking it. This prevents two clients from
-  -- registering the same pending fixture concurrently.
+  -- Serialize all match writes for the same championship before inspecting
+  -- fixtures. Without this lock, two clients could both observe a partially
+  -- completed knockout round and both return before either one generates the
+  -- next round. The advisory lock is transaction-scoped and therefore keeps
+  -- the entire RPC atomic while allowing unrelated championships to proceed.
+  if p_championship_id is not null then
+    perform pg_advisory_xact_lock(p_championship_id);
+  end if;
+
   if p_championship_id is not null then
     select f.id, f.round_number, f.stage
       into v_fixture_id, v_round, v_stage
@@ -155,30 +161,6 @@ begin
     and f.round_number = v_round
     and f.stage <> 'league'
     and f.match_id is not null;
-
-  if v_current_count <> v_total_count then
-    return v_match_id;
-  end if;
-
-  -- Serialize completion of this knockout round. The advisory lock is scoped
-  -- to the transaction and therefore also covers concurrent RPC calls for the
-  -- same championship.
-  perform pg_advisory_xact_lock(p_championship_id);
-
-  select count(*)::integer
-    into v_total_count
-  from public.fixtures
-  where championship_id = p_championship_id
-    and round_number = v_round
-    and stage <> 'league';
-
-  select count(*)::integer
-    into v_current_count
-  from public.fixtures f
-  join public.matches m on m.id = f.match_id
-  where f.championship_id = p_championship_id
-    and f.round_number = v_round
-    and f.stage <> 'league';
 
   if v_current_count <> v_total_count then
     return v_match_id;
