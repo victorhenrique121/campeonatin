@@ -11,9 +11,11 @@
     "typecheck": "tsc --noEmit && tsc -p tsconfig.electron.json --noEmit"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.57.0",
     "@vitejs/plugin-react": "6.0.4",
     "better-sqlite3": "13.0.1",
     "csv-parser": "^3.2.1",
+    "dotenv": "^17.2.2",
     "lucide-react": "1.26.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
