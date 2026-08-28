@@ -1,551 +1,388 @@
-import Database from "better-sqlite3";
-import fs from "node:fs";
+import fs from "node:fs/promises";
 
 import type {
   Championship,
   Dashboard,
+  Match,
   MatchInput,
   Player,
   Team,
 } from "../shared/models";
+import { supabase } from "./supabaseClient";
 
-import { clubRows } from "./clubRows";
-
-const clubs = clubRows.map(([name, league, country]) => ({
-  name,
-  league,
-  country,
-}));
-
-export function createDatabase(file: string) {
-  const db = new Database(file);
-  db.pragma("foreign_keys = ON");
-  db.pragma("journal_mode = WAL");
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS players (id INTEGER PRIMARY KEY, name TEXT NOT NULL, nickname TEXT NOT NULL UNIQUE, avatar TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
-    CREATE TABLE IF NOT EXISTS teams (id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE, league TEXT NOT NULL, country TEXT NOT NULL);
-    CREATE TABLE IF NOT EXISTS championships (id INTEGER PRIMARY KEY, name TEXT NOT NULL, format TEXT NOT NULL CHECK(format IN ('league','knockout','groups_knockout')), starts_at TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'draft');
-    CREATE TABLE IF NOT EXISTS championship_participants (championship_id INTEGER NOT NULL REFERENCES championships(id) ON DELETE CASCADE, player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE RESTRICT, PRIMARY KEY(championship_id, player_id));
-    CREATE TABLE IF NOT EXISTS fixtures (id INTEGER PRIMARY KEY, championship_id INTEGER NOT NULL REFERENCES championships(id) ON DELETE CASCADE, round_number INTEGER NOT NULL, stage TEXT NOT NULL DEFAULT 'league', player1_id INTEGER NOT NULL REFERENCES players(id) ON DELETE RESTRICT, player2_id INTEGER NOT NULL REFERENCES players(id) ON DELETE RESTRICT, match_id INTEGER UNIQUE REFERENCES matches(id) ON DELETE SET NULL, UNIQUE(championship_id, player1_id, player2_id));
-    CREATE TABLE IF NOT EXISTS matches (id INTEGER PRIMARY KEY, player1_id INTEGER NOT NULL REFERENCES players(id) ON DELETE RESTRICT, player2_id INTEGER NOT NULL REFERENCES players(id) ON DELETE RESTRICT, team1_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE RESTRICT, team2_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE RESTRICT, score1 INTEGER NOT NULL CHECK(score1 >= 0), score2 INTEGER NOT NULL CHECK(score2 >= 0), championship_id INTEGER REFERENCES championships(id) ON DELETE SET NULL, played_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, CHECK(player1_id <> player2_id));
-    CREATE INDEX IF NOT EXISTS idx_matches_played_at ON matches(played_at DESC); CREATE INDEX IF NOT EXISTS idx_matches_players ON matches(player1_id, player2_id);
-  `);
-  const fixtureColumns = db.prepare("PRAGMA table_info(fixtures)").all() as {
-    name: string;
-  }[];
-  if (!fixtureColumns.some((column) => column.name === "stage"))
-    db.exec(
-      "ALTER TABLE fixtures ADD COLUMN stage TEXT NOT NULL DEFAULT 'league'",
-    );
-
-  // Migração: remover campo 'rating' da tabela 'teams' se existir
-  const teamsColumns = db.prepare("PRAGMA table_info(teams)").all() as {
-    name: string;
-  }[];
-  if (teamsColumns.some((column) => column.name === "rating")) {
-    db.exec(`
-      CREATE TABLE teams_backup (id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE, league TEXT NOT NULL, country TEXT NOT NULL);
-      INSERT INTO teams_backup SELECT id, name, league, country FROM teams;
-      DROP TABLE teams;
-      ALTER TABLE teams_backup RENAME TO teams;
-    `);
-  }
-
-  db.exec(
-    "CREATE INDEX IF NOT EXISTS idx_fixtures_championship_round ON fixtures(championship_id, round_number)",
-  );
-  const insert = db.prepare(`
-    INSERT INTO teams (name, league, country)
-    VALUES (@name, @league, @country)
-    ON CONFLICT(name) DO UPDATE SET
-      league = excluded.league,
-      country = excluded.country
-  `);
-
-  const tx = db.transaction(() => {
-    clubs.forEach((c) => insert.run(c));
-  });
-
-  tx();
-  return db;
-}
-
-export function repository(db: Database.Database) {
-  const leagueFixtures = (playerIds: number[]) => {
-    const rotation = [...playerIds];
-    if (rotation.length % 2) rotation.push(-1);
-    const rounds: Array<Array<[number, number]>> = [];
-    const size = rotation.length;
-    for (let round = 0; round < size - 1; round++) {
-      const games: Array<[number, number]> = [];
-      for (let index = 0; index < size / 2; index++) {
-        const home = rotation[index];
-        const away = rotation[size - 1 - index];
-        if (home !== -1 && away !== -1)
-          games.push(round % 2 ? [away, home] : [home, away]);
-      }
-      rounds.push(games);
-      rotation.splice(1, 0, rotation.pop()!);
-    }
-    return rounds;
+export function repository() {
+  const throwIfError = (error: { message: string; code?: string } | null) => {
+    if (error) throw new Error(error.message);
   };
-  const knockoutStage = (playersInRound: number) =>
-    ({
-      2: "Final",
-      4: "Semifinal",
-      8: "Quartas de final",
-      16: "Oitavas de final",
-      32: "Dezesseis-avos",
-    })[playersInRound] ?? `Fase de ${playersInRound}`;
-  const advanceKnockout = (championshipId: number, completedRound: number) => {
-    const current = db
-      .prepare(
-        `SELECT f.id,f.player1_id player1Id,f.player2_id player2Id,m.score1 score1,m.score2 score2 FROM fixtures f JOIN matches m ON m.id=f.match_id WHERE f.championship_id=? AND f.round_number=? AND f.stage <> 'league' ORDER BY f.id`,
-      )
-      .all(championshipId, completedRound) as {
-      id: number;
-      player1Id: number;
-      player2Id: number;
-      score1: number;
-      score2: number;
-    }[];
-    if (!current.length || current.some((f) => f.score1 === f.score2))
-      throw new Error("Partidas eliminatórias não podem terminar empatadas.");
-    const total = db
-      .prepare(
-        `SELECT COUNT(*) count FROM fixtures WHERE championship_id=? AND round_number=? AND stage <> 'league'`,
-      )
-      .get(championshipId, completedRound) as { count: number };
-    if (current.length !== total.count) return;
-    if (current.length === 1) {
-      db.prepare("UPDATE championships SET status='finished' WHERE id=?").run(
-        championshipId,
-      );
-      return;
+
+  const players = async (): Promise<Player[]> => {
+    const { data, error } = await supabase
+      .from("players")
+      .select("id,name,nickname,avatar,created_at")
+      .order("name");
+    throwIfError(error);
+    return (data ?? []).map((row) => ({
+      id: Number(row.id),
+      name: row.name,
+      nickname: row.nickname,
+      avatar: row.avatar ?? undefined,
+      createdAt: row.created_at,
+    }));
+  };
+
+  const savePlayer = async (p: Partial<Player>): Promise<Player> => {
+    const name = p.name?.trim();
+    const nickname = p.nickname?.trim();
+    if (!name || !nickname) throw new Error("Nome e apelido são obrigatórios.");
+
+    if (p.id) {
+      const { error } = await supabase
+        .from("players")
+        .update({ name, nickname, avatar: p.avatar ?? null })
+        .eq("id", p.id);
+      throwIfError(error);
+    } else {
+      const { error } = await supabase
+        .from("players")
+        .insert({ name, nickname, avatar: p.avatar ?? null });
+      throwIfError(error);
     }
-    const nextRound = completedRound + 1;
-    const exists = db
-      .prepare(
-        "SELECT 1 FROM fixtures WHERE championship_id=? AND round_number=? LIMIT 1",
-      )
-      .get(championshipId, nextRound);
-    if (exists) return;
-    const winners = current.map((f) =>
-      f.score1 > f.score2 ? f.player1Id : f.player2Id,
-    );
-    const insert = db.prepare(
-      "INSERT INTO fixtures(championship_id,round_number,stage,player1_id,player2_id) VALUES (?,?,?,?,?)",
-    );
-    winners.forEach((winner, index) => {
-      if (index % 2 === 0)
-        insert.run(
-          championshipId,
-          nextRound,
-          knockoutStage(winners.length),
-          winner,
-          winners[index + 1],
-        );
+
+    const { data, error } = await supabase
+      .from("players")
+      .select("id,name,nickname,avatar,created_at")
+      .eq("nickname", nickname)
+      .single();
+    throwIfError(error);
+    if (!data) throw new Error("Jogador não encontrado após salvar.");
+    return {
+      id: Number(data.id),
+      name: data.name,
+      nickname: data.nickname,
+      avatar: data.avatar ?? undefined,
+      createdAt: data.created_at,
+    };
+  };
+
+  const deletePlayer = async (id: number): Promise<void> => {
+    const { error } = await supabase.rpc("delete_player", {
+      p_player_id: id,
     });
+    throwIfError(error);
   };
-  const rankingSql = `WITH results AS (
-    SELECT player1_id player_id, score1 gf, score2 ga FROM matches UNION ALL SELECT player2_id, score2, score1 FROM matches
-  ), aggregate AS (SELECT player_id, COUNT(*) played, SUM(gf > ga) wins, SUM(gf = ga) draws, SUM(gf < ga) losses, SUM(gf) goals_for, SUM(ga) goals_against FROM results GROUP BY player_id)
-  SELECT p.id,p.name,COALESCE(a.played,0) played,COALESCE(a.wins,0) wins,COALESCE(a.draws,0) draws,COALESCE(a.losses,0) losses,COALESCE(a.goals_for,0) goalsFor,COALESCE(a.goals_against,0) goalsAgainst,COALESCE(a.wins*3+a.draws,0) points,CASE WHEN COALESCE(a.played,0)=0 THEN 0 ELSE ROUND((a.wins*3.0+a.draws)/(a.played*3)*100,1) END winRate,0 streak FROM players p LEFT JOIN aggregate a ON a.player_id=p.id ORDER BY points DESC,(goalsFor-goalsAgainst) DESC,goalsFor DESC,p.name`;
-  return {
-    players: () =>
-      db
-        .prepare(
-          "SELECT id,name,nickname,avatar,created_at createdAt FROM players ORDER BY name",
+
+  const teams = async (q = ""): Promise<Team[]> => {
+    const query = supabase
+      .from("teams")
+      .select("id,name,league,country")
+      .order("name");
+    const { data, error } = q.trim()
+      ? await query.or(
+          `name.ilike.%${q.trim()}%,league.ilike.%${q.trim()}%,country.ilike.%${q.trim()}%`,
         )
-        .all() as Player[],
-    savePlayer: (p: Partial<Player>) => {
-      const name = p.name?.trim(),
-        nickname = p.nickname?.trim();
-      if (!name || !nickname)
-        throw new Error("Nome e apelido são obrigatórios.");
-      if (p.id)
-        db.prepare(
-          "UPDATE players SET name=?,nickname=?,avatar=? WHERE id=?",
-        ).run(name, nickname, p.avatar ?? null, p.id);
-      else
-        p.id = Number(
-          db
-            .prepare("INSERT INTO players(name,nickname,avatar) VALUES (?,?,?)")
-            .run(name, nickname, p.avatar ?? null).lastInsertRowid,
-        );
-      return db
-        .prepare(
-          "SELECT id,name,nickname,avatar,created_at createdAt FROM players WHERE id=?",
-        )
-        .get(p.id) as Player;
-    },
-    deletePlayer: (id: number) => {
-      const deletePlayerTransaction = db.transaction(() => {
-        const player = db
-          .prepare("SELECT id FROM players WHERE id = ?")
-          .get(id) as { id: number } | undefined;
+      : await query;
+    throwIfError(error);
+    return (data ?? []).map((row) => ({
+      id: Number(row.id),
+      name: row.name,
+      league: row.league,
+      country: row.country,
+    }));
+  };
 
-        if (!player) {
-          throw new Error("Jogador não encontrado.");
-        }
+  const matches = async (): Promise<Match[]> => {
+    const { data, error } = await supabase
+      .from("matches")
+      .select(`
+        id,played_at,player1_id,player2_id,team1_id,team2_id,score1,score2,championship_id,
+        player1:players!matches_player1_id_fkey(name),
+        player2:players!matches_player2_id_fkey(name),
+        team1:teams!matches_team1_id_fkey(name),
+        team2:teams!matches_team2_id_fkey(name),
+        championship:championships!matches_championship_id_fkey(name)
+      `)
+      .order("played_at", { ascending: false });
+    throwIfError(error);
+    return (data ?? []).map((row) => ({
+      id: Number(row.id),
+      playedAt: row.played_at,
+      player1Id: Number(row.player1_id),
+      player2Id: Number(row.player2_id),
+      team1Id: Number(row.team1_id),
+      team2Id: Number(row.team2_id),
+      score1: row.score1,
+      score2: row.score2,
+      player1: row.player1?.name ?? "",
+      player2: row.player2?.name ?? "",
+      team1: row.team1?.name ?? "",
+      team2: row.team2?.name ?? "",
+      championshipId:
+        row.championship_id == null ? null : Number(row.championship_id),
+      championship: row.championship?.name,
+    }));
+  };
 
-        // Remove as partidas relacionadas ao jogador.
-        // O match_id das fixtures será automaticamente definido como NULL
-        // por causa do ON DELETE SET NULL.
-        db.prepare(
-          `
-      DELETE FROM matches
-      WHERE player1_id = ? OR player2_id = ?
-    `,
-        ).run(id, id);
+  const saveMatch = async (m: MatchInput): Promise<number> => {
+    if (!m.player1Id || !m.player2Id || !m.team1Id || !m.team2Id)
+      throw new Error("Selecione os dois jogadores e os dois times.");
+    if (m.player1Id === m.player2Id || m.team1Id === m.team2Id)
+      throw new Error("Escolha jogadores e times diferentes.");
+    if (m.score1 < 0 || m.score2 < 0)
+      throw new Error("Os placares não podem ser negativos.");
 
-        // Remove os confrontos/fixtures do jogador.
-        db.prepare(
-          `
-      DELETE FROM fixtures
-      WHERE player1_id = ? OR player2_id = ?
-    `,
-        ).run(id, id);
+    const { data, error } = await supabase.rpc("save_match", {
+      p_player1_id: m.player1Id,
+      p_player2_id: m.player2Id,
+      p_team1_id: m.team1Id,
+      p_team2_id: m.team2Id,
+      p_score1: m.score1,
+      p_score2: m.score2,
+      p_championship_id: m.championshipId ?? null,
+      p_played_at: m.playedAt ?? new Date().toISOString(),
+    });
+    throwIfError(error);
+    if (data == null) throw new Error("O servidor não retornou o ID da partida.");
+    return Number(data);
+  };
 
-        // Remove a participação do jogador nos campeonatos.
-        db.prepare(
-          `
-      DELETE FROM championship_participants
-      WHERE player_id = ?
-    `,
-        ).run(id);
+  const updateMatch = async (m: MatchInput & { id: number }): Promise<number> => {
+    if (!m.id || !m.player1Id || !m.player2Id || !m.team1Id || !m.team2Id)
+      throw new Error("Selecione os dois jogadores e os dois times.");
+    if (m.player1Id === m.player2Id || m.team1Id === m.team2Id)
+      throw new Error("Escolha jogadores e times diferentes.");
+    if (m.score1 < 0 || m.score2 < 0)
+      throw new Error("Os placares não podem ser negativos.");
 
-        // Finalmente remove o jogador.
-        const result = db.prepare("DELETE FROM players WHERE id = ?").run(id);
+    const { error } = await supabase
+      .from("matches")
+      .update({
+        player1_id: m.player1Id,
+        player2_id: m.player2Id,
+        team1_id: m.team1Id,
+        team2_id: m.team2Id,
+        score1: m.score1,
+        score2: m.score2,
+        championship_id: m.championshipId ?? null,
+        played_at: m.playedAt ?? new Date().toISOString(),
+      })
+      .eq("id", m.id);
+    throwIfError(error);
+    return m.id;
+  };
 
-        if (result.changes === 0) {
-          throw new Error("Não foi possível excluir o jogador.");
-        }
-      });
+  const clearMatches = async (): Promise<void> => {
+    const { error } = await supabase
+      .from("matches")
+      .delete()
+      .not("id", "is", null);
+    throwIfError(error);
+  };
 
-      deletePlayerTransaction();
-
-      return true;
-    },
-    teams: (q = "") =>
-      db
-        .prepare(
-          `SELECT id,name,league,country FROM teams WHERE name LIKE ? OR league LIKE ? OR country LIKE ? ORDER BY name`,
-        )
-        .all(`%${q}%`, `%${q}%`, `%${q}%`) as Team[],
-    saveMatch: (m: MatchInput) => {
-      const championshipId = m.championshipId ? Number(m.championshipId) : null;
-
-      if (!m.player1Id || !m.player2Id || !m.team1Id || !m.team2Id)
-        throw new Error("Selecione os dois jogadores e os dois times.");
-
-      if (m.player1Id === m.player2Id || m.team1Id === m.team2Id)
-        throw new Error("Escolha jogadores e times diferentes.");
-
-      const player1Exists = db
-        .prepare("SELECT 1 FROM players WHERE id=?")
-        .get(m.player1Id);
-      const player2Exists = db
-        .prepare("SELECT 1 FROM players WHERE id=?")
-        .get(m.player2Id);
-      const team1Exists = db
-        .prepare("SELECT 1 FROM teams WHERE id=?")
-        .get(m.team1Id);
-      const team2Exists = db
-        .prepare("SELECT 1 FROM teams WHERE id=?")
-        .get(m.team2Id);
-
-      if (!player1Exists || !player2Exists)
-        throw new Error("Um dos jogadores selecionados não existe.");
-      if (!team1Exists || !team2Exists)
-        throw new Error("Um dos times selecionados não existe.");
-
-      if (championshipId !== null) {
-        const championshipExists = db
-          .prepare("SELECT 1 FROM championships WHERE id=?")
-          .get(championshipId);
-        if (!championshipExists)
-          throw new Error("O campeonato selecionado não existe.");
-      }
-
-      const save = db.transaction(() => {
-        let fixture: { id: number; round: number; stage: string } | undefined;
-        if (championshipId !== null) {
-          fixture = db
-            .prepare(
-              "SELECT id,round_number round,stage FROM fixtures WHERE championship_id=? AND match_id IS NULL AND ((player1_id=? AND player2_id=?) OR (player1_id=? AND player2_id=?))",
-            )
-            .get(
-              championshipId,
-              m.player1Id,
-              m.player2Id,
-              m.player2Id,
-              m.player1Id,
-            ) as { id: number; round: number; stage: string } | undefined;
-          if (!fixture)
-            throw new Error(
-              "Este confronto não está pendente neste campeonato.",
-            );
-          if (fixture.stage !== "league" && m.score1 === m.score2)
-            throw new Error(
-              "No mata-mata informe um vencedor; empates não são permitidos.",
-            );
-        }
-        const info = db
-          .prepare(
-            "INSERT INTO matches(player1_id,player2_id,team1_id,team2_id,score1,score2,championship_id,played_at) VALUES (?,?,?,?,?,?,?,?)",
-          )
-          .run(
-            m.player1Id,
-            m.player2Id,
-            m.team1Id,
-            m.team2Id,
-            m.score1,
-            m.score2,
-            championshipId,
-            m.playedAt ?? new Date().toISOString(),
-          );
-        const id = Number(info.lastInsertRowid);
-        if (fixture) {
-          db.prepare("UPDATE fixtures SET match_id=? WHERE id=?").run(
-            id,
-            fixture.id,
-          );
-          if (fixture.stage !== "league")
-            advanceKnockout(championshipId!, fixture.round);
-        }
-        return id;
-      });
-      return save();
-    },
-    updateMatch: (m: MatchInput & { id: number }) => {
-      const championshipId = m.championshipId ? Number(m.championshipId) : null;
-
-      if (!m.id || !m.player1Id || !m.player2Id || !m.team1Id || !m.team2Id)
-        throw new Error("Selecione os dois jogadores e os dois times.");
-
-      if (m.player1Id === m.player2Id || m.team1Id === m.team2Id)
-        throw new Error("Escolha jogadores e times diferentes.");
-
-      const player1Exists = db
-        .prepare("SELECT 1 FROM players WHERE id=?")
-        .get(m.player1Id);
-      const player2Exists = db
-        .prepare("SELECT 1 FROM players WHERE id=?")
-        .get(m.player2Id);
-      const team1Exists = db
-        .prepare("SELECT 1 FROM teams WHERE id=?")
-        .get(m.team1Id);
-      const team2Exists = db
-        .prepare("SELECT 1 FROM teams WHERE id=?")
-        .get(m.team2Id);
-
-      if (!player1Exists || !player2Exists)
-        throw new Error("Um dos jogadores selecionados não existe.");
-      if (!team1Exists || !team2Exists)
-        throw new Error("Um dos times selecionados não existe.");
-
-      if (championshipId !== null) {
-        const championshipExists = db
-          .prepare("SELECT 1 FROM championships WHERE id=?")
-          .get(championshipId);
-        if (!championshipExists)
-          throw new Error("O campeonato selecionado não existe.");
-      }
-
-      const existing = db
-        .prepare("SELECT id FROM matches WHERE id=?")
-        .get(m.id);
-      if (!existing) throw new Error("Partida não encontrada.");
-
-      db.prepare(
-        `UPDATE matches
-         SET player1_id=?, player2_id=?, team1_id=?, team2_id=?,
-             score1=?, score2=?, championship_id=?, played_at=?
-         WHERE id=?`,
-      ).run(
-        m.player1Id,
-        m.player2Id,
-        m.team1Id,
-        m.team2Id,
-        m.score1,
-        m.score2,
-        championshipId,
-        m.playedAt ?? new Date().toISOString(),
-        m.id,
+  const ranking = async () => {
+    const { data, error } = await supabase
+      .from("ranking")
+      .select(
+        "id,name,played,wins,draws,losses,goalsFor,goalsAgainst,points,winRate,streak",
       );
+    throwIfError(error);
+    return (data ?? []).map((row) => ({
+      id: Number(row.id),
+      name: row.name,
+      played: Number(row.played),
+      wins: Number(row.wins),
+      draws: Number(row.draws),
+      losses: Number(row.losses),
+      goalsFor: Number(row.goalsFor),
+      goalsAgainst: Number(row.goalsAgainst),
+      points: Number(row.points),
+      winRate: Number(row.winRate),
+      streak: Number(row.streak),
+    }));
+  };
 
-      return m.id;
-    },
-    clearMatches: () => {
-      db.prepare("DELETE FROM matches").run();
-    },
-    matches: () =>
-  db
-    .prepare(
-      `
-      SELECT
-        m.id,
-        m.played_at AS playedAt,
+  const championships = async (): Promise<Championship[]> => {
+    const { data, error } = await supabase
+      .from("championships")
+      .select("id,name,format,starts_at,status,championship_participants(count)")
+      .order("starts_at", { ascending: false });
+    throwIfError(error);
+    return (data ?? []).map((row) => ({
+      id: Number(row.id),
+      name: row.name,
+      format: row.format,
+      startsAt: row.starts_at,
+      status: row.status,
+      participants: row.championship_participants?.[0]?.count ?? 0,
+    }));
+  };
 
-        m.player1_id AS player1Id,
-        m.player2_id AS player2Id,
+  const championshipDetail = async (id: number) => {
+    const { data: championshipRow, error: championshipError } = await supabase
+      .from("championships")
+      .select("id,name,format,starts_at,status,championship_participants(count)")
+      .eq("id", id)
+      .single();
+    throwIfError(championshipError);
+    if (!championshipRow) throw new Error("Campeonato não encontrado.");
 
-        m.team1_id AS team1Id,
-        m.team2_id AS team2Id,
+    const [standingResult, fixturesResult] = await Promise.all([
+      supabase
+        .from("championship_standings")
+        .select("id,name,played,wins,draws,losses,goalsFor,goalsAgainst,points,winRate,streak")
+        .eq("championship_id", id)
+        .order("points", { ascending: false })
+        .order("goalsFor", { ascending: false }),
+      supabase
+        .from("fixtures")
+        .select(`
+          id,round_number,stage,player1_id,player2_id,match_id,
+          player1:players!fixtures_player1_id_fkey(name),
+          player2:players!fixtures_player2_id_fkey(name),
+          match:matches!fixtures_match_id_fkey(score1,score2)
+        `)
+        .eq("championship_id", id)
+        .order("round_number")
+        .order("id"),
+    ]);
+    throwIfError(standingResult.error);
+    throwIfError(fixturesResult.error);
 
-        m.score1 AS score1,
-        m.score2 AS score2,
+    const championship: Championship = {
+      id: Number(championshipRow.id),
+      name: championshipRow.name,
+      format: championshipRow.format,
+      startsAt: championshipRow.starts_at,
+      status: championshipRow.status,
+      participants: championshipRow.championship_participants?.[0]?.count ?? 0,
+    };
 
-        p1.name AS player1,
-        p2.name AS player2,
+    const standing = (standingResult.data ?? []).map((row) => ({
+      id: Number(row.id),
+      name: row.name,
+      played: Number(row.played),
+      wins: Number(row.wins),
+      draws: Number(row.draws),
+      losses: Number(row.losses),
+      goalsFor: Number(row.goalsFor),
+      goalsAgainst: Number(row.goalsAgainst),
+      points: Number(row.points),
+      winRate: Number(row.winRate),
+      streak: Number(row.streak),
+    }));
 
-        t1.name AS team1,
-        t2.name AS team2,
-
-        m.championship_id AS championshipId,
-        c.name AS championship
-
-      FROM matches m
-
-      JOIN players p1 ON p1.id = m.player1_id
-      JOIN players p2 ON p2.id = m.player2_id
-
-      JOIN teams t1 ON t1.id = m.team1_id
-      JOIN teams t2 ON t2.id = m.team2_id
-
-      LEFT JOIN championships c
-        ON c.id = m.championship_id
-
-      ORDER BY m.played_at DESC`,
-    )
-    .all(),
-    ranking: () => db.prepare(rankingSql).all(),
-    dashboard: (): Dashboard => {
-      const ranking = db.prepare(rankingSql).all() as Dashboard["ranking"];
-      const recent = db
-        .prepare(
-          `SELECT m.id,m.played_at playedAt,p1.name player1,p2.name player2,t1.name team1,t2.name team2,m.score1 score1,m.score2 score2 FROM matches m JOIN players p1 ON p1.id=m.player1_id JOIN players p2 ON p2.id=m.player2_id JOIN teams t1 ON t1.id=m.team1_id JOIN teams t2 ON t2.id=m.team2_id ORDER BY m.played_at DESC LIMIT 5`,
-        )
-        .all() as Dashboard["recent"];
-      const used = db
-        .prepare(
-          `SELECT t.name FROM (SELECT team1_id team_id FROM matches UNION ALL SELECT team2_id FROM matches) u JOIN teams t ON t.id=u.team_id GROUP BY t.id ORDER BY COUNT(*) DESC,t.name LIMIT 1`,
-        )
-        .get() as { name?: string } | undefined;
+    const fixtures = (fixturesResult.data ?? []).map((row) => {
+      const match = Array.isArray(row.match) ? row.match[0] : row.match;
       return {
-        players: Number(
-          (
-            db.prepare("SELECT COUNT(*) count FROM players").get() as {
-              count: number;
-            }
-          ).count,
-        ),
-        matches: Number(
-          (
-            db.prepare("SELECT COUNT(*) count FROM matches").get() as {
-              count: number;
-            }
-          ).count,
-        ),
-        leader: ranking[0],
-        mostUsedTeam: used?.name,
-        recent,
-        ranking: ranking.slice(0, 5),
+        id: Number(row.id),
+        round: row.round_number,
+        stage: row.stage,
+        player1Id: Number(row.player1_id),
+        player2Id: Number(row.player2_id),
+        player1: row.player1?.name ?? "",
+        player2: row.player2?.name ?? "",
+        matchId: row.match_id == null ? undefined : Number(row.match_id),
+        score1: match?.score1,
+        score2: match?.score2,
       };
-    },
-    championships: () =>
-      db
-        .prepare(
-          `SELECT c.id,c.name,c.format,c.starts_at startsAt,c.status,COUNT(cp.player_id) participants FROM championships c LEFT JOIN championship_participants cp ON cp.championship_id=c.id GROUP BY c.id ORDER BY c.starts_at DESC`,
-        )
-        .all() as Championship[],
-    championshipDetail: (id: number) => {
-      const championship = db
-        .prepare(
-          `SELECT c.id,c.name,c.format,c.starts_at startsAt,c.status,COUNT(cp.player_id) participants FROM championships c LEFT JOIN championship_participants cp ON cp.championship_id=c.id WHERE c.id=? GROUP BY c.id`,
-        )
-        .get(id) as Championship | undefined;
-      if (!championship) throw new Error("Campeonato não encontrado.");
-      const standing = db
-        .prepare(
-          `WITH results AS (SELECT player1_id player_id,score1 gf,score2 ga FROM matches WHERE championship_id=? UNION ALL SELECT player2_id,score2,score1 FROM matches WHERE championship_id=?), aggregate AS (SELECT player_id,COUNT(*) played,SUM(gf>ga) wins,SUM(gf=ga) draws,SUM(gf<ga) losses,SUM(gf) goals_for,SUM(ga) goals_against FROM results GROUP BY player_id) SELECT p.id,p.name,COALESCE(a.played,0) played,COALESCE(a.wins,0) wins,COALESCE(a.draws,0) draws,COALESCE(a.losses,0) losses,COALESCE(a.goals_for,0) goalsFor,COALESCE(a.goals_against,0) goalsAgainst,COALESCE(a.wins*3+a.draws,0) points,CASE WHEN COALESCE(a.played,0)=0 THEN 0 ELSE ROUND((a.wins*3.0+a.draws)/(a.played*3)*100,1) END winRate,0 streak FROM championship_participants cp JOIN players p ON p.id=cp.player_id LEFT JOIN aggregate a ON a.player_id=p.id WHERE cp.championship_id=? ORDER BY points DESC,(goalsFor-goalsAgainst) DESC,goalsFor DESC,p.name`,
-        )
-        .all(id, id, id);
-      const fixtures = db
-        .prepare(
-          `SELECT f.id,f.round_number round,f.stage,f.player1_id player1Id,f.player2_id player2Id,p1.name player1,p2.name player2,f.match_id matchId,m.score1 score1,m.score2 score2 FROM fixtures f JOIN players p1 ON p1.id=f.player1_id JOIN players p2 ON p2.id=f.player2_id LEFT JOIN matches m ON m.id=f.match_id WHERE f.championship_id=? ORDER BY f.round_number,f.id`,
-        )
-        .all(id);
-      return { championship, standing, fixtures };
-    },
-    saveChampionship: (
-      c: Omit<Championship, "id" | "participants"> & {
-        participantIds: number[];
-      },
-    ) => {
-      if (!c.name.trim() || c.participantIds.length < 2)
-        throw new Error("Informe nome e pelo menos dois participantes.");
-      if (c.format === "groups_knockout")
-        throw new Error(
-          "Grupos + mata-mata será disponibilizado na próxima etapa.",
-        );
-      if (
-        c.format === "knockout" &&
-        ![2, 4, 8, 16, 32].includes(c.participantIds.length)
-      )
-        throw new Error("O mata-mata exige 2, 4, 8, 16 ou 32 participantes.");
-      const tx = db.transaction(() => {
-        const id = Number(
-          db
-            .prepare(
-              "INSERT INTO championships(name,format,starts_at,status) VALUES (?,?,?,?)",
-            )
-            .run(c.name.trim(), c.format, c.startsAt, "active").lastInsertRowid,
-        );
-        const add = db.prepare(
-          "INSERT INTO championship_participants(championship_id,player_id) VALUES (?,?)",
-        );
-        c.participantIds.forEach((player) => add.run(id, player));
-        const fixture = db.prepare(
-          "INSERT INTO fixtures(championship_id,round_number,stage,player1_id,player2_id) VALUES (?,?,?,?,?)",
-        );
-        if (c.format === "league")
-          leagueFixtures(c.participantIds).forEach((round, index) =>
-            round.forEach(([p1, p2]) =>
-              fixture.run(id, index + 1, "league", p1, p2),
-            ),
-          );
-        else {
-          const firstStage = knockoutStage(c.participantIds.length);
-          for (let index = 0; index < c.participantIds.length; index += 2)
-            fixture.run(
-              id,
-              1,
-              firstStage,
-              c.participantIds[index],
-              c.participantIds[index + 1],
-            );
-        }
-        return id;
-      });
-      const id = tx();
-      return db
-        .prepare(
-          `SELECT c.id,c.name,c.format,c.starts_at startsAt,c.status,COUNT(cp.player_id) participants FROM championships c LEFT JOIN championship_participants cp ON cp.championship_id=c.id WHERE c.id=? GROUP BY c.id`,
-        )
-        .get(id) as Championship;
-    },
-    backup: (destination: string) => {
-      db.pragma("wal_checkpoint(TRUNCATE)");
-      fs.copyFileSync(db.name, destination);
-      return destination;
-    },
-    restore: (source: string) => {
-      db.pragma("wal_checkpoint(TRUNCATE)");
-      const destination = db.name;
-      db.close();
-      fs.copyFileSync(source, destination);
-    },
+    });
+
+    return { championship, standing, fixtures };
+  };
+
+  const saveChampionship = async (
+    c: Omit<Championship, "id" | "participants"> & { participantIds: number[] },
+  ): Promise<Championship> => {
+    if (!c.name.trim() || c.participantIds.length < 2)
+      throw new Error("Informe nome e pelo menos dois participantes.");
+    if (c.format === "groups_knockout")
+      throw new Error("Grupos + mata-mata será disponibilizado na próxima etapa.");
+    if (c.format === "knockout" && ![2, 4, 8, 16, 32].includes(c.participantIds.length))
+      throw new Error("O mata-mata exige 2, 4, 8, 16 ou 32 participantes.");
+
+    const { data, error } = await supabase.rpc("save_championship", {
+      p_name: c.name.trim(),
+      p_format: c.format,
+      p_starts_at: c.startsAt,
+      p_participant_ids: c.participantIds,
+    });
+    throwIfError(error);
+    if (data == null) throw new Error("O servidor não retornou o campeonato criado.");
+
+    const result = await championships();
+    const created = result.find((item) => item.id === Number(data));
+    if (!created) throw new Error("Campeonato criado, mas não pôde ser recarregado.");
+    return created;
+  };
+
+  const dashboard = async (): Promise<Dashboard> => {
+    const [playersResult, matchesResult, rankingResult] = await Promise.all([
+      supabase.from("players").select("id", { count: "exact", head: true }),
+      supabase.from("matches").select("id", { count: "exact", head: true }),
+      ranking(),
+    ]);
+    throwIfError(playersResult.error);
+    throwIfError(matchesResult.error);
+    const allMatches = await matches();
+    const recent = allMatches.slice(0, 5);
+
+    const usage = new Map<number, { name: string; count: number }>();
+    for (const match of allMatches) {
+      for (const [id, name] of [
+        [match.team1Id, match.team1],
+        [match.team2Id, match.team2],
+      ] as const) {
+        const current = usage.get(id) ?? { name, count: 0 };
+        current.count += 1;
+        usage.set(id, current);
+      }
+    }
+    const mostUsedTeam = [...usage.values()].sort(
+      (a, b) => b.count - a.count || a.name.localeCompare(b.name),
+    )[0]?.name;
+
+    return {
+      players: playersResult.count ?? 0,
+      matches: matchesResult.count ?? 0,
+      leader: rankingResult[0],
+      mostUsedTeam,
+      recent,
+      ranking: rankingResult.slice(0, 5),
+    };
+  };
+
+  const backup = async (destination: string): Promise<string> => {
+    const snapshot = {
+      exportedAt: new Date().toISOString(),
+      players: await players(),
+      teams: await teams(),
+      championships: await championships(),
+      matches: await matches(),
+    };
+    await fs.writeFile(destination, JSON.stringify(snapshot, null, 2), "utf8");
+    return destination;
+  };
+
+  const restore = async (_source: string): Promise<void> => {
+    throw new Error(
+      "Restore do banco em nuvem ainda não está disponível nesta etapa. Use a exportação JSON como backup até a migração administrativa ser concluída.",
+    );
+  };
+
+  return {
+    players,
+    savePlayer,
+    deletePlayer,
+    teams,
+    saveMatch,
+    updateMatch,
+    clearMatches,
+    matches,
+    ranking,
+    dashboard,
+    championships,
+    championshipDetail,
+    saveChampionship,
+    backup,
+    restore,
   };
 }
