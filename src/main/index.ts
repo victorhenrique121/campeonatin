@@ -1,9 +1,8 @@
 import { app, BrowserWindow, dialog, ipcMain } from "electron";
 import path from "node:path";
-import { createDatabase, repository } from "./repository";
+import { repository } from "./repository";
 
 let window: BrowserWindow | null = null;
-const dbPath = () => path.join(app.getPath("userData"), "fc-arena.sqlite");
 
 function createWindow() {
   window = new BrowserWindow({
@@ -20,7 +19,6 @@ function createWindow() {
     },
   });
 
-  // Se a variável existir, usa ela; caso contrário, se estiver em Dev, usa localhost:5173
   const devUrl = process.env.VITE_DEV_SERVER_URL || "http://localhost:5173";
 
   if (!app.isPackaged) {
@@ -31,7 +29,7 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
-  const repo = repository(createDatabase(dbPath()));
+  const repo = repository();
 
   ipcMain.handle("dashboard", () => repo.dashboard());
   ipcMain.handle("players:list", () => repo.players());
@@ -44,26 +42,25 @@ app.whenReady().then(() => {
   ipcMain.handle("matches:clear", () => repo.clearMatches());
   ipcMain.handle("ranking", () => repo.ranking());
   ipcMain.handle("championships:list", () => repo.championships());
-  ipcMain.handle("championships:detail", (_, id) =>
-    repo.championshipDetail(id),
-  );
+  ipcMain.handle("championships:detail", (_, id) => repo.championshipDetail(id));
   ipcMain.handle("championships:save", (_, c) => repo.saveChampionship(c));
+
   ipcMain.handle("backup", async () => {
     const dest = await dialog.showSaveDialog({
-      defaultPath: "fc-arena-backup.sqlite",
+      defaultPath: "fc-arena-backup.json",
+      filters: [{ name: "FC Arena backup", extensions: ["json"] }],
     });
     if (dest.canceled || !dest.filePath) return "";
     return repo.backup(dest.filePath);
   });
+
   ipcMain.handle("restore", async () => {
     const src = await dialog.showOpenDialog({
       properties: ["openFile"],
-      filters: [{ name: "SQLite", extensions: ["sqlite", "db"] }],
+      filters: [{ name: "FC Arena backup", extensions: ["json"] }],
     });
     if (src.canceled || !src.filePaths[0]) return;
-    repo.restore(src.filePaths[0]);
-    app.relaunch();
-    app.exit(0);
+    return repo.restore(src.filePaths[0]);
   });
 
   createWindow();
