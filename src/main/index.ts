@@ -41,13 +41,18 @@ app.whenReady().then(() => {
   ipcMain.handle("matches:list", () => repo.matches());
   ipcMain.handle("matches:save", (_, m) => repo.saveMatch(m));
   ipcMain.handle("matches:update", (_, m) => repo.updateMatch(m));
+  ipcMain.handle("matches:delete", (_, id) => repo.deleteMatch(id));
   ipcMain.handle("matches:clear", () => repo.clearMatches());
+  ipcMain.handle("arena:reset", () => repo.resetArena());
   ipcMain.handle("ranking", () => repo.ranking());
   ipcMain.handle("championships:list", () => repo.championships());
   ipcMain.handle("championships:detail", (_, id) =>
     repo.championshipDetail(id),
   );
   ipcMain.handle("championships:save", (_, c) => repo.saveChampionship(c));
+  ipcMain.handle("championships:delete", (_, id) => repo.deleteChampionship(id));
+  ipcMain.handle("arena:export", () => repo.exportArena());
+  ipcMain.handle("arena:import", (_, data) => repo.importArena(data));
   ipcMain.handle("backup", async () => {
     const dest = await dialog.showSaveDialog({
       defaultPath: "fc-arena-backup.sqlite",

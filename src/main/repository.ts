@@ -6,6 +6,7 @@ import type {
   Dashboard,
   MatchInput,
   Player,
+  Standing,
   Team,
 } from "../shared/models";
 
@@ -151,6 +152,12 @@ export function repository(db: Database.Database) {
     SELECT player1_id player_id, score1 gf, score2 ga FROM matches UNION ALL SELECT player2_id, score2, score1 FROM matches
   ), aggregate AS (SELECT player_id, COUNT(*) played, SUM(gf > ga) wins, SUM(gf = ga) draws, SUM(gf < ga) losses, SUM(gf) goals_for, SUM(ga) goals_against FROM results GROUP BY player_id)
   SELECT p.id,p.name,COALESCE(a.played,0) played,COALESCE(a.wins,0) wins,COALESCE(a.draws,0) draws,COALESCE(a.losses,0) losses,COALESCE(a.goals_for,0) goalsFor,COALESCE(a.goals_against,0) goalsAgainst,COALESCE(a.wins*3+a.draws,0) points,CASE WHEN COALESCE(a.played,0)=0 THEN 0 ELSE ROUND((a.wins*3.0+a.draws)/(a.played*3)*100,1) END winRate,0 streak FROM players p LEFT JOIN aggregate a ON a.player_id=p.id ORDER BY points DESC,(goalsFor-goalsAgainst) DESC,goalsFor DESC,p.name`;
+  const withStreaks = (rows: Standing[]) => rows.map((row) => {
+    const games = db.prepare("SELECT player1_id player1Id,player2_id player2Id,score1,score2 FROM matches WHERE player1_id=? OR player2_id=? ORDER BY played_at DESC,id DESC").all(row.id, row.id) as { player1Id: number; player2Id: number; score1: number; score2: number }[];
+    let streak = 0;
+    for (const game of games) { const won = game.player1Id === row.id ? game.score1 > game.score2 : game.score2 > game.score1; if (!won) break; streak += 1; }
+    return { ...row, streak };
+  });
   return {
     players: () =>
       db
@@ -233,6 +240,10 @@ export function repository(db: Database.Database) {
           `SELECT id,name,league,country FROM teams WHERE name LIKE ? OR league LIKE ? OR country LIKE ? ORDER BY name`,
         )
         .all(`%${q}%`, `%${q}%`, `%${q}%`) as Team[],
+    deleteMatch: (id: number) => {
+      const result = db.prepare("DELETE FROM matches WHERE id=?").run(id);
+      if (!result.changes) throw new Error("Partida não encontrada.");
+    },
     saveMatch: (m: MatchInput) => {
       const championshipId = m.championshipId ? Number(m.championshipId) : null;
 
@@ -420,9 +431,9 @@ export function repository(db: Database.Database) {
       ORDER BY m.played_at DESC`,
     )
     .all(),
-    ranking: () => db.prepare(rankingSql).all(),
+    ranking: () => withStreaks(db.prepare(rankingSql).all() as Standing[]),
     dashboard: (): Dashboard => {
-      const ranking = db.prepare(rankingSql).all() as Dashboard["ranking"];
+      const ranking = withStreaks(db.prepare(rankingSql).all() as Dashboard["ranking"]);
       const recent = db
         .prepare(
           `SELECT m.id,m.played_at playedAt,p1.name player1,p2.name player2,t1.name team1,t2.name team2,m.score1 score1,m.score2 score2 FROM matches m JOIN players p1 ON p1.id=m.player1_id JOIN players p2 ON p2.id=m.player2_id JOIN teams t1 ON t1.id=m.team1_id JOIN teams t2 ON t2.id=m.team2_id ORDER BY m.played_at DESC LIMIT 5`,
@@ -535,6 +546,40 @@ export function repository(db: Database.Database) {
           `SELECT c.id,c.name,c.format,c.starts_at startsAt,c.status,COUNT(cp.player_id) participants FROM championships c LEFT JOIN championship_participants cp ON cp.championship_id=c.id WHERE c.id=? GROUP BY c.id`,
         )
         .get(id) as Championship;
+    },
+    resetArena: () => {
+      db.transaction(() => {
+        db.exec("DELETE FROM matches; DELETE FROM fixtures; DELETE FROM championship_participants; DELETE FROM championships; DELETE FROM players;");
+      })();
+    },
+    deleteChampionship: (id: number) => {
+      const result = db.prepare("DELETE FROM championships WHERE id=?").run(id);
+      if (!result.changes) throw new Error("Campeonato não encontrado.");
+    },
+    exportArena: () => ({
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      players: db.prepare("SELECT * FROM players").all(),
+      teams: db.prepare("SELECT * FROM teams").all(),
+      championships: db.prepare("SELECT * FROM championships").all(),
+      participants: db.prepare("SELECT * FROM championship_participants").all(),
+      fixtures: db.prepare("SELECT * FROM fixtures").all(),
+      matches: db.prepare("SELECT * FROM matches").all(),
+    }),
+    importArena: (data: Record<string, unknown>) => {
+      const rows = (key: string) => Array.isArray(data[key]) ? data[key] as Record<string, unknown>[] : [];
+      if (!Array.isArray(data.players) || !Array.isArray(data.matches)) throw new Error("Arquivo de backup inválido.");
+      db.transaction(() => {
+        db.exec("DELETE FROM matches; DELETE FROM fixtures; DELETE FROM championship_participants; DELETE FROM championships; DELETE FROM players; DELETE FROM teams;");
+        const insert = (sql: string, values: Record<string, unknown>[]) => { const statement = db.prepare(sql); values.forEach((value) => statement.run(value)); };
+        insert("INSERT INTO teams(id,name,league,country) VALUES (@id,@name,@league,@country)", rows("teams"));
+        insert("INSERT INTO players(id,name,nickname,avatar,created_at) VALUES (@id,@name,@nickname,@avatar,@created_at)", rows("players"));
+        insert("INSERT INTO championships(id,name,format,starts_at,status) VALUES (@id,@name,@format,@starts_at,@status)", rows("championships"));
+        insert("INSERT INTO championship_participants(championship_id,player_id) VALUES (@championship_id,@player_id)", rows("participants"));
+        insert("INSERT INTO fixtures(id,championship_id,round_number,stage,player1_id,player2_id,match_id) VALUES (@id,@championship_id,@round_number,@stage,@player1_id,@player2_id,NULL)", rows("fixtures"));
+        insert("INSERT INTO matches(id,player1_id,player2_id,team1_id,team2_id,score1,score2,championship_id,played_at) VALUES (@id,@player1_id,@player2_id,@team1_id,@team2_id,@score1,@score2,@championship_id,@played_at)", rows("matches"));
+        const restoreFixture = db.prepare("UPDATE fixtures SET match_id=? WHERE id=?"); rows("fixtures").forEach((fixture) => { if (fixture.match_id) restoreFixture.run(fixture.match_id, fixture.id); });
+      })();
     },
     backup: (destination: string) => {
       db.pragma("wal_checkpoint(TRUNCATE)");

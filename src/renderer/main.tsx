@@ -1,14 +1,28 @@
 import React, { FormEvent, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
+  ArrowRight,
   BarChart3,
   CalendarDays,
+  Check,
+  Clipboard,
   CirclePlus,
+  Dices,
+  EyeOff,
+  Flag,
   Gamepad2,
+  Gauge,
+  Goal,
   LayoutDashboard,
+  Shuffle,
   Shield,
+  Sparkles,
+  Trash2,
   Trophy,
   Users,
+  UsersRound,
+  Volume2,
+  VolumeX,
 } from "lucide-react";
 import type {
   Championship,
@@ -29,11 +43,22 @@ type Page =
   | "matches"
   | "ranking"
   | "championships"
+  | "settings"
   | "teams";
 const date = (value: string) =>
   new Intl.DateTimeFormat("pt-BR", { dateStyle: "medium" }).format(
     new Date(value),
   );
+const playArenaSound = (kind: "click" | "draw" | "whistle" = "click") => {
+  if (localStorage.getItem("arena-muted") === "true") return;
+  const Audio = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  if (!Audio) return;
+  const context = new Audio(), oscillator = context.createOscillator(), gain = context.createGain();
+  oscillator.frequency.value = kind === "whistle" ? 880 : kind === "draw" ? 510 : 290;
+  gain.gain.setValueAtTime(.035, context.currentTime); gain.gain.exponentialRampToValueAtTime(.001, context.currentTime + .16);
+  oscillator.connect(gain).connect(context.destination); oscillator.start(); oscillator.stop(context.currentTime + .18);
+};
+const copyMatchSummary = async (match: Match) => { await navigator.clipboard.writeText(`⚽ *FC Arena*\n${match.player1} ${match.score1} × ${match.score2} ${match.player2}\n🏟️ ${match.team1} vs ${match.team2}${match.championship ? `\n🏆 ${match.championship}` : ""}`); playArenaSound("whistle"); alert("Resumo copiado para o WhatsApp."); };
 const Empty = ({ text }: { text: string }) => (
   <div className="empty">{text}</div>
 );
@@ -57,6 +82,7 @@ function Ranking({ rows }: { rows: Standing[] }) {
           <span className="player-cell">
             <i>{row.name[0]}</i>
             {row.name}
+            {row.streak >= 3 && <span className="hot-streak">🔥 Em chamas</span>}
           </span>
           <b>{row.points}</b>
           <span>{row.played}</span>
@@ -215,9 +241,13 @@ function EditMatchModal({
 function Game({
   match,
   onEdit,
+  onDelete,
+  onShare,
 }: {
   match: Match;
   onEdit: (match: Match) => void;
+  onDelete?: (match: Match) => void;
+  onShare?: (match: Match) => void;
 }) {
   return (
     <div className="game">
@@ -249,6 +279,8 @@ function Game({
       >
         Editar resultado
       </button>
+      {onDelete && <button type="button" className="delete-match-btn" onClick={() => onDelete(match)} aria-label={`Apagar partida entre ${match.player1} e ${match.player2}`}><Trash2 size={15} /> Apagar</button>}
+      {onShare && <button type="button" className="share-match-btn" onClick={() => onShare(match)}><Clipboard size={14} /> WhatsApp</button>}
     </div>
   );
 }
@@ -310,7 +342,7 @@ function DashboardPage({
           {data.recent.length ? (
             <div className="games">
               {data.recent.map((m) => (
-                <Game key={m.id} match={m} onEdit={setEditingMatch} />
+                <Game key={m.id} match={m} onEdit={setEditingMatch} onShare={copyMatchSummary} />
               ))}
             </div>
           ) : (
@@ -425,6 +457,7 @@ function MatchesPage({
   const [matches, setMatches] = useState<Match[]>([]);
   const [editingMatch, setEditingMatch] = useState<Match | null>(null);
   const [showClearModal, setShowClearModal] = useState(false);
+  const [deletingMatch, setDeletingMatch] = useState<Match | null>(null);
   const [championships, setChampionships] = useState<Championship[]>([]);
   const [teamSearch1, setTeamSearch1] = useState("");
   const [teamSearch2, setTeamSearch2] = useState("");
@@ -639,6 +672,7 @@ function MatchesPage({
         score2: Number(form.score2),
         championshipId,
       });
+      playArenaSound("whistle");
 
       setMatches(await window.arena.matches());
       setForm({
@@ -665,6 +699,10 @@ function MatchesPage({
     id,
     name: String(id),
   }));
+  const headToHead = matches.filter((match) => (match.player1Id === Number(form.player1Id) && match.player2Id === Number(form.player2Id)) || (match.player1Id === Number(form.player2Id) && match.player2Id === Number(form.player1Id)));
+  const playerOneWins = headToHead.filter((match) => match.player1Id === Number(form.player1Id) ? match.score1 > match.score2 : match.score2 > match.score1).length;
+  const playerTwoWins = headToHead.filter((match) => match.player1Id === Number(form.player2Id) ? match.score1 > match.score2 : match.score2 > match.score1).length;
+  const goalBalance = headToHead.reduce((sum, match) => sum + (match.player1Id === Number(form.player1Id) ? match.score1 - match.score2 : match.score2 - match.score1), 0);
   return (
     <>
       <section className="page-title">
@@ -682,6 +720,7 @@ function MatchesPage({
           <form className="form" onSubmit={submit}>
             {select("championshipId", "Campeonato", championships, true)}
             {select("player1Id", "Jogador 1", players)}
+            {form.player1Id && form.player2Id && <div className="head-to-head"><span className="eyebrow">CONFRONTO DIRETO</span><b>{players.find((p) => p.id === Number(form.player1Id))?.name} <em>{playerOneWins}V</em> · {headToHead.length} jogos · <em>{playerTwoWins}V</em> {players.find((p) => p.id === Number(form.player2Id))?.name}</b><small>Saldo de gols: {goalBalance > 0 ? "+" : ""}{goalBalance}</small></div>}
             {selectTeam(
               "team1Id",
               "Time do jogador 1",
@@ -718,7 +757,7 @@ function MatchesPage({
           </div>
           <div className="games">
             {matches.map((m) => (
-              <Game key={m.id} match={m} onEdit={setEditingMatch} />
+              <Game key={m.id} match={m} onEdit={setEditingMatch} onDelete={setDeletingMatch} onShare={copyMatchSummary} />
             ))}
             {!matches.length && <Empty text="As partidas aparecerão aqui." />}
           </div>
@@ -751,17 +790,35 @@ function MatchesPage({
           }}
         />
       )}
+      {deletingMatch && <AppModal title="Apagar resultado?" message={`O placar de ${deletingMatch.player1} x ${deletingMatch.player2} será removido do histórico.`} confirmText="Apagar resultado" danger onClose={() => setDeletingMatch(null)} onConfirm={async () => { await window.arena.deleteMatch(deletingMatch.id); setMatches(await window.arena.matches()); await reload(); }} />}
     </>
   );
 }
 
-function ChampionshipPage({ players }: { players: Player[] }) {
+const CARD_TONES = ["#876fff", "#35cbb9", "#ff6aa7", "#e4bd55", "#5aa8ff", "#ef7b4d"];
+
+const MUTATORS = [
+  { icon: UsersRound, title: "10 em Campo", text: "Jogue com um a menos até o apito final.", tag: "ELENCO" },
+  { icon: EyeOff, title: "Visão Turva", text: "Sem minimapa ou HUD durante 10 minutos.", tag: "FOCO" },
+  { icon: Goal, title: "Pé Ruim", text: "Finalizações só valem com o pé não dominante.", tag: "TÉCNICA" },
+  { icon: Gauge, title: "Goleiro Linha", text: "A cada ataque, seu goleiro deve cruzar o meio-campo.", tag: "CAOS" },
+];
+
+function ChampionshipPage({ players, teams }: { players: Player[]; teams: Team[] }) {
   const [items, setItems] = useState<Championship[]>([]),
     [selected, setSelected] = useState<number>(),
     [detail, setDetail] = useState<ChampionshipDetail>(),
     [name, setName] = useState(""),
     [format, setFormat] = useState<"league" | "knockout">("league"),
-    [participants, setParticipants] = useState<number[]>([]);
+    [participants, setParticipants] = useState<number[]>([]),
+    [mode, setMode] = useState<"classic" | "duo" | "mad">("classic"),
+    [team, setTeam] = useState<Team | undefined>(),
+    [mutator, setMutator] = useState<number | null>(null),
+    [rolling, setRolling] = useState(false),
+    [confirming, setConfirming] = useState(false),
+    [deletingChampionship, setDeletingChampionship] = useState<Championship | null>(null),
+    [assignments, setAssignments] = useState<Record<number, Team>>({});
+  useEffect(() => { if (!team && teams[0]) setTeam(teams[0]); }, [teams, team]);
   const load = async () => {
     const list = await window.arena.championships();
     setItems(list);
@@ -795,94 +852,95 @@ function ChampionshipPage({ players }: { players: Player[] }) {
       );
     }
   };
+
+  const toggleParticipant = (id: number) => setParticipants((list) => {
+    const included = list.includes(id);
+    setAssignments((current) => { const next = { ...current }; if (included) delete next[id]; else if (team) next[id] = team; return next; });
+    return included ? list.filter((item) => item !== id) : [...list, id];
+  });
+  const drawMutator = () => {
+    playArenaSound("draw");
+    setRolling(true);
+    setMutator(null);
+    window.setTimeout(() => {
+      setMutator(Math.floor(Math.random() * MUTATORS.length));
+      setRolling(false);
+    }, 700);
+  };
+  const drawTeam = () => { playArenaSound("draw"); if (teams.length) setTeam(teams[Math.floor(Math.random() * teams.length)]); };
+  const pairPlayers = () => { playArenaSound("draw"); const shuffled = [...players].sort(() => Math.random() - .5); setParticipants(shuffled.map((p) => p.id)); setAssignments(Object.fromEntries(shuffled.map((p) => [p.id, teams[Math.floor(Math.random() * teams.length)]].filter(Boolean) as [number, Team]))); };
   return (
     <>
-      <section className="page-title">
+      <section className="page-title championships-heading">
         <div>
-          <p>COMPETIÇÕES</p>
+          <p><Sparkles size={13} /> ARENA COMPETITIONS</p>
           <h1>Campeonatos</h1>
-          <span>Tabela de pontos corridos ou chave eliminatória.</span>
+          <span>Crie a próxima história. Domine a arena.</span>
+        </div>
+        <div className="championships-kpis">
+          <span><Trophy size={16} /> {items.length} temporadas</span>
+          <span><Users size={16} /> {players.length} jogadores</span>
         </div>
       </section>
-      <section className="grid">
-        <article className="panel">
-          <form className="form" onSubmit={save}>
-            <label>
-              Nome do campeonato
-              <input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-              />
-            </label>
-            <label>
-              Formato
-              <select
-                value={format}
-                onChange={(e) =>
-                  setFormat(e.target.value as "league" | "knockout")
-                }
-              >
-                <option value="league">Pontos corridos</option>
-                <option value="knockout">Mata-mata</option>
-              </select>
-            </label>
-            <label>
-              Participantes{" "}
-              {format === "knockout" && <small>(2, 4, 8, 16 ou 32)</small>}
-            </label>
-            <div className="check-list">
-              {players.map((p) => (
-                <label key={p.id}>
-                  <input
-                    type="checkbox"
-                    checked={participants.includes(p.id)}
-                    onChange={() =>
-                      setParticipants((list) =>
-                        list.includes(p.id)
-                          ? list.filter((id) => id !== p.id)
-                          : [...list, p.id],
-                      )
-                    }
-                  />
-                  {p.name}
-                </label>
-              ))}
+
+      <section className="mode-switcher" aria-label="Modo do campeonato">
+        <button className={mode === "classic" ? "active" : ""} onClick={() => setMode("classic")}><Trophy /> <span>Clássico<small>1v1 competitivo</small></span></button>
+        <button className={mode === "duo" ? "active duo" : ""} onClick={() => setMode("duo")}><UsersRound /> <span>Modo Dupla<small>Co-op · 2v2</small></span></button>
+        <button className={mode === "mad" ? "active mad" : ""} onClick={() => setMode("mad")}><Dices /> <span>Campeonato Maluco<small>Regras fora da caixa</small></span><Sparkles className="mode-glint" /></button>
+      </section>
+
+      <section className="championship-builder">
+        <article className="arena-create-card">
+          <div className="create-card-top">
+            <div>
+              <span className="eyebrow">NOVA TEMPORADA</span>
+              <h2>{mode === "mad" ? "Aperte o caos" : mode === "duo" ? "Juntos pela taça" : "Monte sua liga"}</h2>
             </div>
-            <button className="primary">
-              {format === "league" ? "Gerar rodadas" : "Gerar chave"}
-            </button>
+            <div className={`mode-orb ${mode}`}><Trophy size={25} /></div>
+          </div>
+          <form onSubmit={(e) => { if (mode === "mad" && mutator === null) { e.preventDefault(); drawMutator(); return; } setConfirming(true); e.preventDefault(); }}>
+            <label className="arena-field">Nome da competição<input value={name} onChange={(e) => setName(e.target.value)} placeholder={mode === "duo" ? "Duplas da Resenha" : "FC Arena League"} required /></label>
+            <div className="format-toggle">
+              <button type="button" className={format === "league" ? "selected" : ""} onClick={() => setFormat("league")}><CalendarDays /> Pontos corridos</button>
+              <button type="button" className={format === "knockout" ? "selected" : ""} onClick={() => setFormat("knockout")}><Trophy /> Mata-mata</button>
+            </div>
+            <button className="launch-championship" type="submit"><CirclePlus size={18} /> {mode === "mad" ? "Iniciar desafio" : "Criar campeonato"}<ArrowRight size={17} /></button>
           </form>
         </article>
-        <article className="panel wide">
-          <div className="panel-head">
-            <h2>Temporadas</h2>
-          </div>
-          {items.map((c) => (
-            <button
-              className={"champ " + (selected === c.id ? "selected" : "")}
-              onClick={() => setSelected(c.id)}
-              key={c.id}
-            >
-              <Trophy size={22} />
-              <div>
-                <b>{c.name}</b>
-                <small>
-                  {c.format === "knockout" ? "Mata-mata" : "Pontos corridos"} ·{" "}
-                  {c.participants} participantes
-                </small>
-              </div>
-              <span>{c.status === "draft" ? "Rascunho" : "Ativo"}</span>
-            </button>
-          ))}
-          {!items.length && <Empty text="Nenhum campeonato criado." />}
+
+        <article className="team-selector-card">
+          <div className="section-label"><div><span className="eyebrow">EQUIPES DA PARTIDA</span><h2>Escolha ou sorteie</h2></div><button className="random-team" type="button" onClick={drawTeam}><Shuffle size={14} /> Sortear aleatório</button></div>
+          <div className="drawn-team"><Shield size={22} /><span><small>EQUIPE SORTEADA / SELECIONADA</small><b>{team?.name ?? "Carregando clubes..."}</b><em>{team?.league} · {team?.country}</em></span></div>
+          <div className="nation-grid">{teams.slice(0, 9).map((option, index) => <button type="button" key={option.id} onClick={() => setTeam(option)} className={team?.id === option.id ? "picked" : ""} style={{ "--team-tone": CARD_TONES[index % CARD_TONES.length] } as React.CSSProperties}><span><Shield size={18} /></span><b>{option.name}</b><i><Check size={12} /></i></button>)}</div>
+          <p className="selector-hint"><Flag size={14} /> Catálogo real da Arena · disponível em todos os modos.</p>
         </article>
       </section>
-      {detail && <ChampionshipDetailView detail={detail} />}
+
+      {mode === "mad" && <section className="mutator-zone">
+        <div className="mutator-copy"><span className="eyebrow"><Dices size={13} /> DRAFT CEGO · CAMPEONATO MALUCO</span><h2>Qual regra vai virar o jogo?</h2><p>A roleta define obrigatoriamente o desafio da rodada antes do apito inicial.</p><button type="button" onClick={drawMutator} disabled={rolling}><Shuffle size={17} /> {rolling ? "Roleta girando..." : "Sortear desafio obrigatório"}</button></div>
+        <div className={`mutator-cards ${rolling ? "rolling" : ""}`}>{MUTATORS.map((rule, index) => { const Icon = rule.icon; return <button type="button" key={rule.title} onClick={() => setMutator(index)} className={mutator === index ? "revealed" : ""} title={rule.text}><span className="mutator-icon"><Icon size={20} /></span><small>{rule.tag}</small><b>{rule.title}</b><p>{rule.text}</p>{mutator === index && <i><Check size={15} /> selecionado</i>}</button>; })}</div>
+      </section>}
+
+      <section className="enrollment-section">
+        <div className="section-label"><div><span className="eyebrow">{mode === "duo" ? "INSCRIÇÕES EM DUPLA" : "CONFIRMAR PARTICIPANTES"}</span><h2>{mode === "duo" ? "Forme os esquadrões" : "Quem entra em campo?"}</h2></div><span className="selection-count">{participants.length} selecionados</span></div>
+        {mode === "duo" && <div className="duo-notice"><UsersRound size={19} /><span><b>Modo dupla ativo.</b> Selecione jogadores em pares ou deixe a Arena equilibrar os esquadrões.</span><button type="button" onClick={pairPlayers}><Shuffle size={14} /> Sortear duplas</button></div>}
+        <div className={`player-picks ${mode === "duo" ? "duo-picks" : ""}`}>{players.map((p) => <button type="button" onClick={() => toggleParticipant(p.id)} className={participants.includes(p.id) ? "chosen" : ""} key={p.id}><span className="player-initial">{p.name[0]}</span><span><b>{p.name}</b><small>{participants.includes(p.id) ? `→ ${assignments[p.id]?.name ?? "Escolha uma equipe"}` : mode === "duo" ? "Toque para compor dupla" : "Participante"}</small></span>{participants.includes(p.id) && <Check size={16} />}</button>)}</div>
+        {mode === "duo" && participants.length > 0 && <div className="duo-preview">{participants.reduce<number[][]>((pairs, id, index) => { if (index % 2 === 0) pairs.push([id]); else pairs[pairs.length - 1].push(id); return pairs; }, []).map((pair, index) => <div className="duo-team" key={pair.join("-")}><span className="duo-team-label">DUPLA {index + 1}</span><div>{pair.map((id) => { const player = players.find((p) => p.id === id); return player && <span className="duo-member" key={id}><i>{player.name[0]}</i>{player.name}</span>; })}{pair.length === 1 && <span className="duo-empty">+ Convide alguém</span>}<span className="duo-club">→ {assignments[pair[0]]?.name ?? "Sorteie uma equipe"}</span></div></div>)}</div>}
+        {!players.length && <Empty text="Cadastre jogadores para montar o campeonato." />}
+      </section>
+
+      <section className="season-gallery">
+        <div className="section-label"><div><span className="eyebrow">HISTÓRICO DA ARENA</span><h2>Suas temporadas</h2></div></div>
+        <div className="championship-cards">{items.map((c, index) => <button className={`season-card ${selected === c.id ? "selected" : ""}`} onClick={() => setSelected(c.id)} key={c.id}><div className="season-card-glow" style={{ background: CARD_TONES[index % CARD_TONES.length] }} /><div className="season-card-head"><span className="season-emblem"><Trophy size={20} /></span><span className={`status-pill ${c.status}`}>{c.status === "finished" ? "FINALIZADO" : c.status === "draft" ? "RASCUNHO" : "EM ANDAMENTO"}</span></div><div><span className="eyebrow">{c.format === "knockout" ? "MATA-MATA" : "PONTOS CORRIDOS"}</span><h3>{c.name}</h3></div><footer><span><Users size={15} /> {c.participants} players</span><span>Ver arena <ArrowRight size={15} /></span></footer></button>)}</div>
+        {!items.length && <Empty text="Sua primeira temporada começa aqui." />}
+      </section>
+      {detail && <ChampionshipDetailView detail={detail} onDelete={() => { if (window.confirm(`Apagar definitivamente o campeonato “${detail.championship.name}”?`)) setDeletingChampionship(detail.championship); }} />}
+      {confirming && <AppModal title="Confirmar campeonato" message={`Você vai abrir ${name || "uma nova competição"}${mode === "mad" && mutator !== null ? ` com o desafio ${MUTATORS[mutator].title}` : ""}. Participantes selecionados: ${participants.length}.`} confirmText="Abrir temporada" onClose={() => setConfirming(false)} onConfirm={async () => { await save({ preventDefault() {} } as FormEvent); }} />}
+      {deletingChampionship && <AppModal title="Apagar campeonato?" message={`A temporada ${deletingChampionship.name}, suas partidas e confrontos serão removidos permanentemente.`} confirmText="Apagar campeonato" danger onClose={() => setDeletingChampionship(null)} onConfirm={async () => { await window.arena.deleteChampionship(deletingChampionship.id); setDetail(undefined); setSelected(undefined); await load(); }} />}
     </>
   );
 }
-function ChampionshipDetailView({ detail }: { detail: ChampionshipDetail }) {
+function ChampionshipDetailView({ detail, onDelete }: { detail: ChampionshipDetail; onDelete: () => void }) {
   const grouped = detail.fixtures.reduce<Record<string, Fixture[]>>(
     (all, fixture) => {
       const group =
@@ -901,6 +959,7 @@ function ChampionshipDetailView({ detail }: { detail: ChampionshipDetail }) {
               ? "Tabela"
               : "Participantes"}
           </h2>
+          <button type="button" className="delete-championship-btn" onClick={onDelete}><Trash2 size={15} /> Apagar campeonato</button>
         </div>
         <Ranking rows={detail.standing} />
       </article>
@@ -1038,6 +1097,22 @@ function AppModal({
   );
 }
 
+function ThemeControl() {
+  const [open, setOpen] = useState(false);
+  const [accent, setAccent] = useState(() => localStorage.getItem("arena-accent") ?? "#8872ff");
+  const [background, setBackground] = useState(() => localStorage.getItem("arena-background") ?? "#0a0f1f");
+  useEffect(() => { document.documentElement.style.setProperty("--arena-accent", accent); document.documentElement.style.setProperty("--arena-bg", background); localStorage.setItem("arena-accent", accent); localStorage.setItem("arena-background", background); }, [accent, background]);
+  return <div className="theme-control"><button type="button" className="theme-fab" onClick={() => setOpen(!open)} aria-label="Personalizar tema"><Sparkles size={18} /></button>{open && <div className="theme-popover"><b>Personalizar arena</b><label>Cor de destaque<input type="color" value={accent} onChange={(e) => setAccent(e.target.value)} /></label><label>Fundo principal<input type="color" value={background} onChange={(e) => setBackground(e.target.value)} /></label><div className="theme-swatches">{["#8872ff", "#22c7b8", "#ef4f91", "#f0a947"].map((color) => <button type="button" key={color} style={{ background: color }} onClick={() => setAccent(color)} aria-label={`Usar destaque ${color}`} />)}</div></div>}</div>;
+}
+
+function SettingsPage({ reload }: { reload: () => Promise<void> }) {
+  const [accent, setAccent] = useState(() => localStorage.getItem("arena-accent") ?? "#8872ff"), [background, setBackground] = useState(() => localStorage.getItem("arena-background") ?? "#0a0f1f"), [muted, setMuted] = useState(() => localStorage.getItem("arena-muted") === "true"), [message, setMessage] = useState("");
+  useEffect(() => { document.documentElement.style.setProperty("--arena-accent", accent); document.documentElement.style.setProperty("--arena-bg", background); localStorage.setItem("arena-accent", accent); localStorage.setItem("arena-background", background); }, [accent, background]);
+  const toggleMute = () => { const next = !muted; setMuted(next); localStorage.setItem("arena-muted", String(next)); if (!next) playArenaSound("click"); };
+  const reset = async () => { if (!window.confirm("Limpar jogadores, partidas e campeonatos? Esta ação não pode ser desfeita.")) return; await window.arena.resetArena(); await reload(); setMessage("Dados da Arena limpos."); };
+  return <><section className="page-title"><div><p>PAINEL DA ARENA</p><h1>Configurações</h1><span>Som, cores e dados essenciais.</span></div></section><section className="settings-layout compact-settings"><article className="settings-card"><Sparkles /><div><h2>Personalizar cores</h2><p>As cores são aplicadas na hora e ficam salvas nesta máquina.</p><div className="color-settings"><label>Fundo<input type="color" value={background} onChange={(e) => setBackground(e.target.value)} /></label><label>Destaque<input type="color" value={accent} onChange={(e) => setAccent(e.target.value)} /></label></div></div></article><article className="settings-card"><button className="mute-toggle" onClick={toggleMute}>{muted ? <VolumeX /> : <Volume2 />}<span><b>{muted ? "Efeitos desligados" : "Efeitos ligados"}</b><small>Clique para {muted ? "ativar" : "silenciar"}</small></span></button></article><article className="settings-card reset-card"><Trash2 /><div><h2>Limpar dados</h2><p>Remove jogadores, partidas e campeonatos. O catálogo de clubes é mantido.</p><button onClick={reset}>Resetar Arena</button></div></article></section>{message && <div className="settings-toast">{message}</div>}</>;
+}
+
 function App() {
   const [page, setPage] = useState<Page>("dashboard"),
     [data, setData] = useState<Dashboard>(),
@@ -1064,6 +1139,7 @@ function App() {
     ["ranking", "Ranking", BarChart3],
     ["championships", "Campeonatos", Trophy],
     ["teams", "Times", Shield],
+    ["settings", "Configurações", Sparkles],
   ];
   const view =
     page === "dashboard" ? (
@@ -1085,7 +1161,9 @@ function App() {
         </article>
       </>
     ) : page === "championships" ? (
-      <ChampionshipPage players={players} />
+      <ChampionshipPage players={players} teams={teams} />
+    ) : page === "settings" ? (
+      <SettingsPage reload={reload} />
     ) : (
       <TeamsPage teams={teams} />
     );
@@ -1121,6 +1199,7 @@ function App() {
         </div>
       </aside>
       <main>{view}</main>
+      <ThemeControl />
     </div>
   );
 }
