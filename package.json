@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "concurrently -k \"vite\" \"npm:dev:electron\"",
     "dev:electron": "wait-on tcp:5173 && electron .",
-    "build": "tsc -p tsconfig.electron.json && vite build && electron-builder",
+    "build": "tsc -p tsconfig.electron.json && vite build && electron-builder --publish never",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.electron.json --noEmit"
   },
   "dependencies": {
