@@ -1,6 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain } from "electron";
 import path from "node:path";
 import { createDatabase, repository } from "./repository";
+import { updateChampionshipName } from "./championship-service";
 
 let window: BrowserWindow | null = null;
 const dbPath = () => path.join(app.getPath("userData"), "fc-arena.sqlite");
@@ -20,7 +21,6 @@ function createWindow() {
     },
   });
 
-  // Se a variável existir, usa ela; caso contrário, se estiver em Dev, usa localhost:5173
   const devUrl = process.env.VITE_DEV_SERVER_URL || "http://localhost:5173";
 
   if (!app.isPackaged) {
@@ -31,7 +31,8 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
-  const repo = repository(createDatabase(dbPath()));
+  const db = createDatabase(dbPath());
+  const repo = repository(db);
 
   ipcMain.handle("dashboard", () => repo.dashboard());
   ipcMain.handle("players:list", () => repo.players());
@@ -46,19 +47,17 @@ app.whenReady().then(() => {
   ipcMain.handle("arena:reset", () => repo.resetArena());
   ipcMain.handle("ranking", () => repo.ranking());
   ipcMain.handle("championships:list", () => repo.championships());
-  ipcMain.handle("championships:detail", (_, id) =>
-    repo.championshipDetail(id),
-  );
+  ipcMain.handle("championships:detail", (_, id) => repo.championshipDetail(id));
   ipcMain.handle("championships:save", (_, c) => repo.saveChampionship(c));
-  ipcMain.handle("championships:delete", (_, id) =>
-    repo.deleteChampionship(id),
-  );
+  ipcMain.handle("championships:update", (_, id, name) => {
+    updateChampionshipName(db, id, name);
+    return repo.championshipDetail(id).championship;
+  });
+  ipcMain.handle("championships:delete", (_, id) => repo.deleteChampionship(id));
   ipcMain.handle("arena:export", () => repo.exportArena());
   ipcMain.handle("arena:import", (_, data) => repo.importArena(data));
   ipcMain.handle("backup", async () => {
-    const dest = await dialog.showSaveDialog({
-      defaultPath: "fc-arena-backup.sqlite",
-    });
+    const dest = await dialog.showSaveDialog({ defaultPath: "fc-arena-backup.sqlite" });
     if (dest.canceled || !dest.filePath) return "";
     return repo.backup(dest.filePath);
   });
@@ -73,9 +72,7 @@ app.whenReady().then(() => {
     app.exit(0);
   });
   ipcMain.handle("game-rules:get", () => repo.gameRules());
-  ipcMain.handle("game-rules:save", (_, settings) =>
-    repo.saveGameRules(settings),
-  );
+  ipcMain.handle("game-rules:save", (_, settings) => repo.saveGameRules(settings));
 
   createWindow();
 
