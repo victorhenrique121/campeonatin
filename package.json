@@ -2,6 +2,10 @@
   "name": "fc-arena",
   "version": "0.1.0",
   "private": true,
+  "author": {
+    "name": "Victor Henrique",
+    "email": "victor.henrique@example.com"
+  },
   "description": "Gerenciador desktop de campeonatos EA Sports FC",
   "main": "dist-electron/main/index.js",
   "scripts": {
@@ -39,7 +43,16 @@
       "package.json"
     ],
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "icon": "src/midia/fcarena.ico"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "src/midia/fcarena.icns"
+    },
+    "linux": {
+      "target": "AppImage",
+      "icon": "src/midia/fcarena.png"
     }
   }
 }

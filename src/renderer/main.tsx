@@ -1043,6 +1043,7 @@ function ChampionshipPage({
     [mutator, setMutator] = useState<number | null>(null),
     [rolling, setRolling] = useState(false),
     [confirming, setConfirming] = useState(false),
+    [formError, setFormError] = useState(""),
     [deletingChampionship, setDeletingChampionship] =
       useState<Championship | null>(null),
     [assignments, setAssignments] = useState<Record<number, Team>>({});
@@ -1075,7 +1076,7 @@ function ChampionshipPage({
       setSelected(champ.id);
       await load();
     } catch (error) {
-      alert(
+      setFormError(
         error instanceof Error
           ? error.message
           : "Não foi possível criar o campeonato.",
@@ -1192,9 +1193,20 @@ function ChampionshipPage({
           </div>
           <form
             onSubmit={(e) => {
+              setFormError("");
               if (mode === "mad" && mutator === null) {
                 e.preventDefault();
                 drawMutator();
+                return;
+              }
+              if (
+                format === "knockout" &&
+                ![2, 4, 8, 16, 32].includes(participants.length)
+              ) {
+                e.preventDefault();
+                setFormError(
+                  "O mata-mata exige 2, 4, 8, 16 ou 32 participantes.",
+                );
                 return;
               }
               setConfirming(true);
@@ -1227,7 +1239,8 @@ function ChampionshipPage({
               >
                 <Trophy /> Mata-mata
               </button>
-            </div>
+                        </div>
+             {formError && <div className="arena-form-error">{formError}</div>}
             <button className="launch-championship" type="submit">
               <CirclePlus size={18} />{" "}
               {mode === "mad" ? "Iniciar desafio" : "Criar campeonato"}
