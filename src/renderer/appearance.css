@@ -14,9 +14,7 @@ body.arena-light aside {
   border-color: #dbe2ee;
 }
 
-body.arena-light main {
-  color: #182033;
-}
+body.arena-light main { color: #182033; }
 
 body.arena-light .panel,
 body.arena-light .metric,
@@ -50,9 +48,7 @@ body.arena-light .metric strong,
 body.arena-light .stat-card strong,
 body.arena-light .stats-mini strong,
 body.arena-light .stats-mini h3,
-body.arena-light .settings-card h2 {
-  color: #182033;
-}
+body.arena-light .settings-card h2 { color: #182033; }
 
 body.arena-light .page-title span,
 body.arena-light .metric small,
@@ -60,15 +56,11 @@ body.arena-light .stat-card span,
 body.arena-light .stat-card small,
 body.arena-light .stats-mini small,
 body.arena-light .settings-card p,
-body.arena-light .settings-nav button small {
-  color: #647089;
-}
+body.arena-light .settings-nav button small { color: #647089; }
 
 body.arena-light nav button,
 body.arena-light .side-bottom button,
-body.arena-light .settings-nav button {
-  color: #66728a;
-}
+body.arena-light .settings-nav button { color: #66728a; }
 
 body.arena-light nav button:hover,
 body.arena-light nav .active,
@@ -82,13 +74,9 @@ body.arena-light .settings-nav button.active {
 body.arena-light .row,
 body.arena-light .game,
 body.arena-light .champ,
-body.arena-light .team-card footer {
-  border-color: #e3e8f1;
-}
+body.arena-light .team-card footer { border-color: #e3e8f1; }
 
-body.arena-light .row:has(.rank):hover {
-  background: #f5f7fb;
-}
+body.arena-light .row:has(.rank):hover { background: #f5f7fb; }
 
 body.arena-light .appearance-preferences,
 body.arena-light .appearance-choice {
@@ -97,35 +85,16 @@ body.arena-light .appearance-choice {
 }
 
 body.arena-light .appearance-choice b,
-body.arena-light .appearance-stats-title b {
-  color: #182033;
-}
+body.arena-light .appearance-stats-title b { color: #182033; }
 
 body.arena-light .appearance-choice small,
-body.arena-light .appearance-stats-title small {
-  color: #647089;
-}
+body.arena-light .appearance-stats-title small { color: #647089; }
 
-body.arena-compact-sidebar .shell {
-  grid-template-columns: 76px 1fr;
-}
-
-body.arena-compact-sidebar aside {
-  padding-left: 9px;
-  padding-right: 9px;
-}
-
-body.arena-compact-sidebar .brand {
-  justify-content: center;
-  padding-left: 0;
-  padding-right: 0;
-}
-
+body.arena-compact-sidebar .shell { grid-template-columns: 76px 1fr; }
+body.arena-compact-sidebar aside { padding-left: 9px; padding-right: 9px; }
+body.arena-compact-sidebar .brand { justify-content: center; padding-left: 0; padding-right: 0; }
 body.arena-compact-sidebar .brand b,
-body.arena-compact-sidebar .side-bottom small {
-  display: none;
-}
-
+body.arena-compact-sidebar .side-bottom small { display: none; }
 body.arena-compact-sidebar aside nav button,
 body.arena-compact-sidebar .side-bottom button {
   justify-content: center;
@@ -134,111 +103,128 @@ body.arena-compact-sidebar .side-bottom button {
   font-size: 0;
 }
 
-.appearance-preferences {
-  margin-top: 15px;
-}
-
-.appearance-preferences-head {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-}
-
+.appearance-preferences { margin-top: 15px; }
+.appearance-preferences-head { display: flex; align-items: flex-start; gap: 12px; }
 .appearance-preferences-head h2,
-.appearance-preferences p {
-  margin: 0;
-}
-
-.appearance-preferences-head p {
-  margin-top: 5px;
-  color: #8795ad;
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-.appearance-icon {
-  width: 34px;
-  height: 34px;
-  display: grid;
-  place-items: center;
-  flex: 0 0 auto;
-  border-radius: 9px;
-  background: color-mix(in srgb, var(--arena-accent) 14%, transparent);
-  color: var(--arena-accent);
-}
-
+.appearance-preferences p { margin: 0; }
+.appearance-preferences-head p { margin-top: 5px; color: #8795ad; font-size: 12px; line-height: 1.5; }
+.appearance-icon { width: 34px; height: 34px; display: grid; place-items: center; flex: 0 0 auto; border-radius: 9px; background: color-mix(in srgb, var(--arena-accent) 14%, transparent); color: var(--arena-accent); }
 .appearance-options,
-.appearance-stat-list {
-  display: grid;
-  gap: 8px;
-  margin-top: 16px;
-}
+.appearance-stat-list { display: grid; gap: 8px; margin-top: 16px; }
+.appearance-choice { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 11px 12px; border: 1px solid #293653; border-radius: 9px; background: #0d1629; cursor: pointer; }
+.appearance-choice > span { display: grid; gap: 3px; }
+.appearance-choice b { color: #e9edf7; font-size: 12px; }
+.appearance-choice small,
+.appearance-stats-title small { color: #7e8ba5; font-size: 10px; }
+.appearance-choice input { width: 17px; height: 17px; accent-color: var(--arena-accent); }
+.appearance-stats { margin-top: 18px; }
+.appearance-stats-title { display: grid; gap: 4px; margin-bottom: 8px; }
+.appearance-stats-title b { color: #e9edf7; font-size: 12px; }
+.compact-choice { padding: 9px 11px; }
 
-.appearance-choice {
+/* Campeonatos: ações sem alterar a árvore React dos cards. */
+.season-gallery { position: relative; min-width: 0; overflow: visible; }
+.championship-cards { min-width: 0; }
+.season-card {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+  transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
+}
+.season-card:hover,
+.season-card:focus-visible {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, .16);
+}
+.season-card h3 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.season-card footer { gap: 10px; flex-wrap: wrap; }
+.championship-actions-floating {
+  position: fixed;
+  z-index: 1100;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 11px 12px;
+  gap: 6px;
+  padding: 6px;
   border: 1px solid #293653;
-  border-radius: 9px;
-  background: #0d1629;
+  border-radius: 10px;
+  background: rgba(10, 15, 31, .96);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, .28);
+  backdrop-filter: blur(10px);
+}
+.championship-actions-floating button {
+  border: 0;
+  border-radius: 7px;
+  padding: 7px 10px;
+  background: transparent;
+  color: #dfe5f2;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
   cursor: pointer;
 }
+.championship-actions-floating button:hover { background: #202c47; }
+.championship-actions-floating button[data-action="delete"] { color: #ff8b9b; }
 
-.appearance-choice > span {
+.championship-edit-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
   display: grid;
-  gap: 3px;
+  place-items: center;
+  padding: 20px;
+  background: rgba(3, 7, 16, .72);
+  backdrop-filter: blur(5px);
 }
+.championship-edit-modal {
+  width: min(100%, 460px);
+  max-height: min(90vh, 560px);
+  overflow: auto;
+  padding: 22px;
+  border: 1px solid #293653;
+  border-radius: 16px;
+  background: #0e172a;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, .38);
+}
+.championship-edit-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.championship-edit-head h2 { margin: 5px 0 0; color: #f1f4fb; font-size: 20px; }
+.championship-edit-close { border: 0; background: transparent; color: #8491a9; font-size: 24px; line-height: 1; cursor: pointer; }
+.championship-edit-field { display: grid; gap: 7px; margin-top: 22px; }
+.championship-edit-field span { color: #aab5c9; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; }
+.championship-edit-field input { width: 100%; box-sizing: border-box; min-width: 0; padding: 12px 13px; border: 1px solid #293653; border-radius: 9px; outline: 0; background: #0a1222; color: #f1f4fb; font: inherit; }
+.championship-edit-field input:focus { border-color: var(--arena-accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--arena-accent) 15%, transparent); }
+.championship-edit-error { margin: 10px 0 0; color: #ff8b9b; font-size: 12px; }
+.championship-edit-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+.championship-edit-actions button { min-height: 38px; padding: 0 14px; border: 1px solid #293653; border-radius: 8px; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+.championship-edit-cancel { background: transparent; color: #aab5c9; }
+.championship-edit-save { background: var(--arena-accent); border-color: var(--arena-accent) !important; color: #fff; }
+.championship-edit-actions button:disabled { opacity: .55; cursor: wait; }
 
-.appearance-choice b {
-  color: #e9edf7;
-  font-size: 12px;
-}
-
-.appearance-choice small,
-.appearance-stats-title small {
-  color: #7e8ba5;
-  font-size: 10px;
-}
-
-.appearance-choice input {
-  width: 17px;
-  height: 17px;
-  accent-color: var(--arena-accent);
-}
-
-.appearance-stats {
-  margin-top: 18px;
-}
-
-.appearance-stats-title {
-  display: grid;
-  gap: 4px;
-  margin-bottom: 8px;
-}
-
-.appearance-stats-title b {
-  color: #e9edf7;
-  font-size: 12px;
-}
-
-.compact-choice {
-  padding: 9px 11px;
-}
+body.arena-light .championship-actions-floating { background: rgba(255,255,255,.98); border-color: #dbe2ee; box-shadow: 0 14px 34px rgba(31,43,68,.16); }
+body.arena-light .championship-actions-floating button { color: #34405a; }
+body.arena-light .championship-actions-floating button:hover { background: #eef1f8; }
+body.arena-light .championship-edit-modal { background: #fff; border-color: #dbe2ee; }
+body.arena-light .championship-edit-head h2 { color: #182033; }
+body.arena-light .championship-edit-close { color: #68748b; }
+body.arena-light .championship-edit-field span { color: #647089; }
+body.arena-light .championship-edit-field input { background: #f6f8fc; border-color: #dbe2ee; color: #182033; }
+body.arena-light .championship-edit-cancel { color: #536078; border-color: #dbe2ee; }
 
 @media (max-width: 950px) {
-  body.arena-compact-sidebar .shell {
-    grid-template-columns: 70px 1fr;
-  }
+  body.arena-compact-sidebar .shell { grid-template-columns: 70px 1fr; }
+  .championship-actions-floating { position: fixed; left: auto !important; top: auto !important; right: 14px; bottom: 14px; }
+}
+
+@media (max-width: 700px) {
+  .season-gallery { padding-left: 14px; padding-right: 14px; }
+  .championship-cards { grid-template-columns: minmax(0, 1fr) !important; }
+  .season-card { width: 100%; }
+  .season-card footer { align-items: flex-start; }
+  .championship-edit-backdrop { padding: 12px; }
+  .championship-edit-modal { padding: 18px; border-radius: 13px; }
+  .championship-edit-actions { flex-direction: column-reverse; }
+  .championship-edit-actions button { width: 100%; }
 }
 
 @media (max-width: 600px) {
-  body.arena-compact-sidebar .shell {
-    display: block;
-  }
-
-  .appearance-preferences-head {
-    flex-direction: column;
-  }
+  body.arena-compact-sidebar .shell { display: block; }
+  .appearance-preferences-head { flex-direction: column; }
 }
