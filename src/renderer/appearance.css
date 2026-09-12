@@ -1,23 +1,41 @@
+/*
+ * Tema visual claro da aplicação.
+ *
+ * Os seletores deste arquivo dependem de classes e atributos adicionados
+ * pelo React no elemento <body> ou no elemento raiz. Por isso, as regras
+ * aqui complementam os estilos gerais, em vez de substituir a estrutura
+ * dos componentes.
+ */
+
+/* Define a cor base e a cor de destaque quando o tema claro está ativo. */
 :root[data-arena-theme="light"] {
   color: #182033;
   --arena-accent: #6d5ce7;
 }
 
+/* Cores gerais da página no tema claro. O !important vence o fundo global. */
 body.arena-light {
   --arena-bg: #eef2f8 !important;
   background: var(--arena-bg);
   color: #182033;
 }
 
+/* Sidebar clara, separada visualmente do conteúdo principal. */
 body.arena-light aside {
   background: #ffffff;
   border-color: #dbe2ee;
 }
 
+/* Garante a cor de texto correta na área principal. */
 body.arena-light main {
   color: #182033;
 }
 
+/*
+ * Superfícies do tema claro.
+ * O mesmo tratamento é compartilhado por painéis, cartões e seções para
+ * manter a hierarquia visual consistente e evitar sombras muito pesadas.
+ */
 body.arena-light .panel,
 body.arena-light .metric,
 body.arena-light .settings-nav,
@@ -33,6 +51,7 @@ body.arena-light .season-gallery {
   box-shadow: 0 10px 30px rgba(31, 43, 68, .06);
 }
 
+/* Campos e pequenos cartões usam um cinza muito claro para se distinguirem do painel branco. */
 body.arena-light .stat-card,
 body.arena-light .stats-mini,
 body.arena-light .search,
@@ -44,6 +63,7 @@ body.arena-light .rules-fields input {
   color: #182033;
 }
 
+/* Títulos e valores importantes recebem o maior contraste. */
 body.arena-light .page-title h1,
 body.arena-light .panel-head h2,
 body.arena-light .metric strong,
@@ -54,6 +74,7 @@ body.arena-light .settings-card h2 {
   color: #182033;
 }
 
+/* Textos auxiliares ficam mais suaves, mas ainda legíveis sobre o fundo claro. */
 body.arena-light .page-title span,
 body.arena-light .metric small,
 body.arena-light .stat-card span,
@@ -64,12 +85,14 @@ body.arena-light .settings-nav button small {
   color: #647089;
 }
 
+/* Estado padrão dos controles de navegação no tema claro. */
 body.arena-light nav button,
 body.arena-light .side-bottom button,
 body.arena-light .settings-nav button {
   color: #66728a;
 }
 
+/* Hover e item selecionado da navegação. */
 body.arena-light nav button:hover,
 body.arena-light nav .active,
 body.arena-light .settings-nav button:hover,
@@ -79,6 +102,7 @@ body.arena-light .settings-nav button.active {
   border-color: #d2d9e7;
 }
 
+/* Divisórias discretas entre linhas, jogos e rodapés. */
 body.arena-light .row,
 body.arena-light .game,
 body.arena-light .champ,
@@ -86,46 +110,59 @@ body.arena-light .team-card footer {
   border-color: #e3e8f1;
 }
 
+/* Realce das linhas de classificação ao passar o mouse. :has() só afeta linhas com ranking. */
 body.arena-light .row:has(.rank):hover {
   background: #f5f7fb;
 }
 
+/* Área e opções de preferência de aparência no tema claro. */
 body.arena-light .appearance-preferences,
 body.arena-light .appearance-choice {
   background: #ffffff;
   border-color: #dbe2ee;
 }
 
+/* Texto principal das opções de aparência. */
 body.arena-light .appearance-choice b,
 body.arena-light .appearance-stats-title b {
   color: #182033;
 }
 
+/* Descrições secundárias das opções de aparência. */
 body.arena-light .appearance-choice small,
 body.arena-light .appearance-stats-title small {
   color: #647089;
 }
 
+/*
+ * Sidebar compacta.
+ * A classe é aplicada ao body e reduz a primeira coluna do shell para
+ * preservar espaço horizontal sem remover os botões da navegação.
+ */
 body.arena-compact-sidebar .shell {
   grid-template-columns: 76px 1fr;
 }
 
+/* Reduz as margens laterais da sidebar compacta. */
 body.arena-compact-sidebar aside {
   padding-left: 9px;
   padding-right: 9px;
 }
 
+/* Centraliza a marca quando o texto dela deixa de ser exibido. */
 body.arena-compact-sidebar .brand {
   justify-content: center;
   padding-left: 0;
   padding-right: 0;
 }
 
+/* Oculta rótulos textuais para deixar apenas os ícones visíveis. */
 body.arena-compact-sidebar .brand b,
 body.arena-compact-sidebar .side-bottom small {
   display: none;
 }
 
+/* Centraliza os botões compactos e esconde seu texto visual. */
 body.arena-compact-sidebar aside nav button,
 body.arena-compact-sidebar .side-bottom button {
   justify-content: center;
@@ -134,21 +171,25 @@ body.arena-compact-sidebar .side-bottom button {
   font-size: 0;
 }
 
+/* Espaçamento superior do painel de preferências de aparência. */
 .appearance-preferences {
   margin-top: 15px;
 }
 
+/* Cabeçalho horizontal com ícone, título e descrição. */
 .appearance-preferences-head {
   display: flex;
   align-items: flex-start;
   gap: 12px;
 }
 
+/* Remove margens padrão para controlar o espaçamento pelo próprio componente. */
 .appearance-preferences-head h2,
 .appearance-preferences p {
   margin: 0;
 }
 
+/* Texto explicativo abaixo do título das preferências. */
 .appearance-preferences-head p {
   margin-top: 5px;
   color: #8795ad;
@@ -156,6 +197,7 @@ body.arena-compact-sidebar .side-bottom button {
   line-height: 1.5;
 }
 
+/* Ícone de aparência com tamanho fixo e cor derivada do destaque atual. */
 .appearance-icon {
   width: 34px;
   height: 34px;
@@ -167,6 +209,7 @@ body.arena-compact-sidebar .side-bottom button {
   color: var(--arena-accent);
 }
 
+/* Listas de opções e estatísticas organizadas em uma coluna com espaçamento uniforme. */
 .appearance-options,
 .appearance-stat-list {
   display: grid;
@@ -174,6 +217,7 @@ body.arena-compact-sidebar .side-bottom button {
   margin-top: 16px;
 }
 
+/* Cada opção funciona como uma linha clicável com texto à esquerda e controle à direita. */
 .appearance-choice {
   display: flex;
   align-items: center;
@@ -186,58 +230,406 @@ body.arena-compact-sidebar .side-bottom button {
   cursor: pointer;
 }
 
-.appearance-choice > span {
+/* Agrupa título e descrição da opção. */
+.appearance-choice>span {
   display: grid;
   gap: 3px;
 }
 
+/* Nome principal da opção. */
 .appearance-choice b {
   color: #e9edf7;
   font-size: 12px;
 }
 
+/* Descrição curta e rótulos auxiliares. */
 .appearance-choice small,
 .appearance-stats-title small {
   color: #7e8ba5;
   font-size: 10px;
 }
 
+/* Mantém o controle nativo acessível e usa a cor de destaque da aplicação. */
 .appearance-choice input {
   width: 17px;
   height: 17px;
   accent-color: var(--arena-accent);
 }
 
+/* Separa visualmente a seção de estatísticas das opções anteriores. */
 .appearance-stats {
   margin-top: 18px;
 }
 
+/* Título e subtítulo da lista de estatísticas. */
 .appearance-stats-title {
   display: grid;
   gap: 4px;
   margin-bottom: 8px;
 }
 
+/* Texto principal do título das estatísticas. */
 .appearance-stats-title b {
   color: #e9edf7;
   font-size: 12px;
 }
 
+/* Variante mais compacta de uma opção, usada quando há menos espaço disponível. */
 .compact-choice {
   padding: 9px 11px;
 }
 
+/* Campeonatos: ações sem alterar a árvore React dos cards. */
+
+/* Contêiner da galeria; permite posicionar ações flutuantes sem cortar seu conteúdo. */
+.season-gallery {
+  position: relative;
+  min-width: 0;
+  overflow: visible;
+}
+
+/* Evita que a grade force uma largura mínima indesejada. */
+.championship-cards {
+  min-width: 0;
+}
+
+/* Cartão individual de temporada, com transição para os estados interativos. */
+.season-card {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+  transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
+}
+
+/* Eleva levemente o cartão em hover ou quando recebe foco pelo teclado. */
+.season-card:hover,
+.season-card:focus-visible {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, .16);
+}
+
+/* Nomes longos são truncados para não quebrarem a altura do cartão. */
+.season-card h3 {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Permite que os itens do rodapé quebrem linha em telas estreitas. */
+.season-card footer {
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/*
+ * Barra de ações posicionada sobre a interface.
+ * O z-index garante que ela fique acima dos cartões, enquanto o blur cria
+ * uma superfície legível sem ocupar uma nova área do layout.
+ */
+.championship-actions-floating {
+  position: fixed;
+  z-index: 1100;
+  display: flex;
+  gap: 6px;
+  padding: 6px;
+  border: 1px solid #293653;
+  border-radius: 10px;
+  background: rgba(10, 15, 31, .96);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, .28);
+  backdrop-filter: blur(10px);
+}
+
+/* Botões transparentes que herdam a tipografia e destacam apenas no hover. */
+.championship-actions-floating button {
+  border: 0;
+  border-radius: 7px;
+  padding: 7px 10px;
+  background: transparent;
+  color: #dfe5f2;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* Fundo de interação da barra de ações. */
+.championship-actions-floating button:hover {
+  background: #202c47;
+}
+
+/* Ação destrutiva usa vermelho para comunicar risco. */
+.championship-actions-floating button[data-action="delete"] {
+  color: #ff8b9b;
+}
+
+/* Camada escura que bloqueia a página enquanto o modal está aberto. */
+.championship-edit-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(3, 7, 16, .72);
+  backdrop-filter: blur(5px);
+}
+
+/*
+ * Janela de edição.
+ * A largura e a altura máximas evitam que o modal domine telas grandes ou
+ * ultrapasse a viewport; o overflow permite rolagem em conteúdos maiores.
+ */
+.championship-edit-modal {
+  width: min(100%, 460px);
+  max-height: min(90vh, 560px);
+  overflow: auto;
+  padding: 22px;
+  border: 1px solid #293653;
+  border-radius: 16px;
+  background: #0e172a;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, .38);
+}
+
+/* Cabeçalho do modal com título à esquerda e fechamento à direita. */
+.championship-edit-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+/* Título principal da janela de edição. */
+.championship-edit-head h2 {
+  margin: 5px 0 0;
+  color: #f1f4fb;
+  font-size: 20px;
+}
+
+/* Botão de fechar sem moldura, usando apenas o símbolo visual. */
+.championship-edit-close {
+  border: 0;
+  background: transparent;
+  color: #8491a9;
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+/* Campo formado por rótulo e input, com separação vertical. */
+.championship-edit-field {
+  display: grid;
+  gap: 7px;
+  margin-top: 22px;
+}
+
+/* Rótulos dos campos em caixa alta para diferenciá-los dos valores digitados. */
+.championship-edit-field span {
+  color: #aab5c9;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+
+/* Input dimensionado para o modal e com cores do tema escuro padrão. */
+.championship-edit-field input {
+  width: 100%;
+  box-sizing: border-box;
+  min-width: 0;
+  padding: 12px 13px;
+  border: 1px solid #293653;
+  border-radius: 9px;
+  outline: 0;
+  background: #0a1222;
+  color: #f1f4fb;
+  font: inherit;
+}
+
+/* Realce de foco para indicar claramente o campo ativo. */
+.championship-edit-field input:focus {
+  border-color: var(--arena-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--arena-accent) 15%, transparent);
+}
+
+/* Mensagem de validação ou erro do formulário. */
+.championship-edit-error {
+  margin: 10px 0 0;
+  color: #ff8b9b;
+  font-size: 12px;
+}
+
+/* Grupo de ações alinhado à direita no desktop. */
+.championship-edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+/* Estilo compartilhado dos botões de cancelar e salvar. */
+.championship-edit-actions button {
+  min-height: 38px;
+  padding: 0 14px;
+  border: 1px solid #293653;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* Botão de cancelamento: visual secundário e sem preenchimento. */
+.championship-edit-cancel {
+  background: transparent;
+  color: #aab5c9;
+}
+
+/* Botão principal do formulário, usando a cor de destaque atual. */
+.championship-edit-save {
+  background: var(--arena-accent);
+  border-color: var(--arena-accent) !important;
+  color: #fff;
+}
+
+/* Indica operações temporariamente indisponíveis, como durante o salvamento. */
+.championship-edit-actions button:disabled {
+  opacity: .55;
+  cursor: wait;
+}
+
+/*
+ * Ajustes do modal e da barra flutuante no tema claro.
+ * A estrutura e o comportamento continuam iguais; apenas as superfícies,
+ * bordas e textos são adaptados para manter contraste sobre o fundo claro.
+ */
+body.arena-light .championship-actions-floating {
+  background: rgba(255, 255, 255, .98);
+  border-color: #dbe2ee;
+  box-shadow: 0 14px 34px rgba(31, 43, 68, .16);
+}
+
+/* Cor dos botões da barra flutuante clara. */
+body.arena-light .championship-actions-floating button {
+  color: #34405a;
+}
+
+/* Estado hover da barra flutuante clara. */
+body.arena-light .championship-actions-floating button:hover {
+  background: #eef1f8;
+}
+
+/* Superfície clara da janela de edição. */
+body.arena-light .championship-edit-modal {
+  background: #fff;
+  border-color: #dbe2ee;
+}
+
+/* Contraste do título no modal claro. */
+body.arena-light .championship-edit-head h2 {
+  color: #182033;
+}
+
+/* Cor do botão de fechar no modal claro. */
+body.arena-light .championship-edit-close {
+  color: #68748b;
+}
+
+/* Cor dos rótulos dos campos no modal claro. */
+body.arena-light .championship-edit-field span {
+  color: #647089;
+}
+
+/* Campos claros, mantendo borda e texto legíveis. */
+body.arena-light .championship-edit-field input {
+  background: #f6f8fc;
+  border-color: #dbe2ee;
+  color: #182033;
+}
+
+/* Borda explícita para o botão secundário sobre a superfície clara. */
+body.arena-light .championship-edit-cancel {
+  color: #536078;
+  border-color: #dbe2ee;
+}
+
+/*
+ * Tablets e telas intermediárias.
+ * A sidebar compacta fica um pouco menor e a barra de ações deixa de seguir
+ * o cartão para ficar fixa no canto inferior direito.
+ */
 @media (max-width: 950px) {
   body.arena-compact-sidebar .shell {
     grid-template-columns: 70px 1fr;
   }
+
+  /* Corrige o posicionamento calculado pelo desktop em telas menores. */
+  .championship-actions-floating {
+    position: fixed;
+    left: auto !important;
+    top: auto !important;
+    right: 14px;
+    bottom: 14px;
+  }
 }
 
+/*
+ * Celulares largos.
+ * A galeria passa a ter uma coluna, e o modal usa margens internas menores.
+ */
+@media (max-width: 700px) {
+
+  /* Espaçamento lateral para a galeria não encostar nas bordas da tela. */
+  .season-gallery {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  /* Um cartão por linha melhora leitura e evita conteúdo comprimido. */
+  .championship-cards {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  /* Ocupa toda a largura útil da coluna única. */
+  .season-card {
+    width: 100%;
+  }
+
+  /* Mantém o rodapé organizado quando seus itens quebram linha. */
+  .season-card footer {
+    align-items: flex-start;
+  }
+
+  /* Reduz a margem externa da camada do modal. */
+  .championship-edit-backdrop {
+    padding: 12px;
+  }
+
+  /* Modal mais compacto para aproveitar a altura do celular. */
+  .championship-edit-modal {
+    padding: 18px;
+    border-radius: 13px;
+  }
+
+  /* Inverte a ordem visual para deixar o salvar depois do cancelar no fluxo vertical. */
+  .championship-edit-actions {
+    flex-direction: column-reverse;
+  }
+
+  /* Ações em largura total facilitam o toque. */
+  .championship-edit-actions button {
+    width: 100%;
+  }
+}
+
+/* Celulares estreitos: a sidebar deixa de usar grid e o cabeçalho empilha seus elementos. */
 @media (max-width: 600px) {
+
+  /* Libera a largura total do conteúdo quando a coluna lateral não cabe. */
   body.arena-compact-sidebar .shell {
     display: block;
   }
 
+  /* Ícone, título e descrição ficam em uma única coluna. */
   .appearance-preferences-head {
     flex-direction: column;
   }

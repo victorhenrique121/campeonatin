@@ -29,6 +29,7 @@ export type Api = {
       participantIds: number[];
     },
   ) => Promise<Championship>;
+  updateChampionship: (id: number, name: string) => Promise<Championship>;
   deleteChampionship: (id: number) => Promise<void>;
   exportArena: () => Promise<Record<string, unknown>>;
   importArena: (data: Record<string, unknown>) => Promise<void>;
