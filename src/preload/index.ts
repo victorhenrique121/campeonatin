@@ -1,0 +1,31 @@
+import { contextBridge, ipcRenderer } from "electron";
+import type { Api } from "../shared/api";
+const invoke =
+  (channel: string) =>
+  (...args: unknown[]) =>
+    ipcRenderer.invoke(channel, ...args);
+const api: Api = {
+  dashboard: invoke("dashboard"),
+  players: invoke("players:list"),
+  savePlayer: invoke("players:save"),
+  deletePlayer: invoke("players:delete"),
+  teams: invoke("teams:list"),
+  matches: invoke("matches:list"),
+  saveMatch: invoke("matches:save"),
+  updateMatch: invoke("matches:update"),
+  deleteMatch: invoke("matches:delete"),
+  clearMatches: invoke("matches:clear"),
+  resetArena: invoke("arena:reset"),
+  ranking: invoke("ranking"),
+  championships: invoke("championships:list"),
+  championshipDetail: invoke("championships:detail"),
+  saveChampionship: invoke("championships:save"),
+  deleteChampionship: invoke("championships:delete"),
+  exportArena: invoke("arena:export"),
+  importArena: invoke("arena:import"),
+  backup: invoke("backup"),
+  restore: invoke("restore"),
+  gameRules: invoke("game-rules:get"),
+  saveGameRules: invoke("game-rules:save"),
+} as Api;
+contextBridge.exposeInMainWorld("arena", api);
