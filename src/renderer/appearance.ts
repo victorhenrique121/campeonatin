@@ -128,9 +128,160 @@ const handleClick = (event: Event) => {
   }
 };
 
+let championshipActionRequest = 0;
+let activeChampionshipId: number | null = null;
+let activeChampionshipName = "";
+
+const closeChampionshipEditor = () => {
+  document.querySelector<HTMLElement>(".championship-edit-backdrop")?.remove();
+};
+
+const openChampionshipEditor = (id: number, name: string) => {
+  closeChampionshipEditor();
+  const backdrop = document.createElement("div");
+  backdrop.className = "championship-edit-backdrop";
+  backdrop.innerHTML = `
+    <div class="championship-edit-modal" role="dialog" aria-modal="true" aria-labelledby="championship-edit-title">
+      <div class="championship-edit-head">
+        <div>
+          <span class="eyebrow">EDITAR CAMPEONATO</span>
+          <h2 id="championship-edit-title">Nome da temporada</h2>
+        </div>
+        <button type="button" class="championship-edit-close" aria-label="Fechar">×</button>
+      </div>
+      <label class="championship-edit-field">
+        <span>Nome</span>
+        <input type="text" maxlength="80" value="" autocomplete="off" />
+      </label>
+      <p class="championship-edit-error" role="alert" hidden></p>
+      <div class="championship-edit-actions">
+        <button type="button" class="championship-edit-cancel">Cancelar</button>
+        <button type="button" class="championship-edit-save">Salvar alterações</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(backdrop);
+  const input = backdrop.querySelector<HTMLInputElement>("input")!;
+  const error = backdrop.querySelector<HTMLElement>(".championship-edit-error")!;
+  input.value = name;
+  input.focus();
+  input.select();
+
+  const close = () => backdrop.remove();
+  backdrop.addEventListener("mousedown", (event) => {
+    if (event.target === backdrop) close();
+  });
+  backdrop.querySelector(".championship-edit-close")?.addEventListener("click", close);
+  backdrop.querySelector(".championship-edit-cancel")?.addEventListener("click", close);
+  backdrop.querySelector(".championship-edit-save")?.addEventListener("click", async () => {
+    const nextName = input.value.trim();
+    if (!nextName) {
+      error.textContent = "Informe um nome para o campeonato.";
+      error.hidden = false;
+      input.focus();
+      return;
+    }
+    const save = backdrop.querySelector<HTMLButtonElement>(".championship-edit-save")!;
+    save.disabled = true;
+    save.textContent = "Salvando...";
+    error.hidden = true;
+    try {
+      await window.arena.updateChampionship(id, nextName);
+      close();
+      window.location.reload();
+    } catch (cause) {
+      error.textContent = cause instanceof Error ? cause.message : "Não foi possível salvar o campeonato.";
+      error.hidden = false;
+      save.disabled = false;
+      save.textContent = "Salvar alterações";
+    }
+  });
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      backdrop.querySelector<HTMLButtonElement>(".championship-edit-save")?.click();
+    }
+    if (event.key === "Escape") close();
+  });
+};
+
+const buildChampionshipActions = async () => {
+  const gallery = document.querySelector<HTMLElement>(".season-gallery");
+  if (!gallery) return;
+  const cards = Array.from(gallery.querySelectorAll<HTMLElement>(".season-card"));
+  if (!cards.length || gallery.querySelector(".championship-actions-floating")) return;
+
+  const request = ++championshipActionRequest;
+  let championships;
+  try {
+    championships = await window.arena.championships();
+  } catch {
+    return;
+  }
+  if (request !== championshipActionRequest || !document.body.contains(gallery)) return;
+
+  const floating = document.createElement("div");
+  floating.className = "championship-actions-floating";
+  floating.hidden = true;
+  floating.innerHTML = `
+    <button type="button" data-action="edit" title="Editar campeonato"><span>Editar</span></button>
+    <button type="button" data-action="delete" title="Excluir campeonato"><span>Excluir</span></button>
+  `;
+  document.body.appendChild(floating);
+
+  let currentIndex = -1;
+  const showFor = (index: number) => {
+    currentIndex = index;
+    const card = cards[index];
+    if (!card) return;
+    const rect = card.getBoundingClientRect();
+    const top = Math.max(12, Math.min(window.innerHeight - 64, rect.bottom - 50));
+    floating.style.top = `${top}px`;
+    floating.style.left = `${Math.max(12, Math.min(window.innerWidth - 210, rect.right - 204))}px`;
+    floating.hidden = false;
+  };
+
+  cards.forEach((card, index) => {
+    card.addEventListener("mouseenter", () => showFor(index));
+    card.addEventListener("focus", () => showFor(index));
+  });
+
+  floating.querySelector('[data-action="edit"]')?.addEventListener("click", () => {
+    const championship = championships[currentIndex];
+    if (championship) {
+      activeChampionshipId = championship.id;
+      activeChampionshipName = championship.name;
+      openChampionshipEditor(championship.id, championship.name);
+    }
+  });
+
+  floating.querySelector('[data-action="delete"]')?.addEventListener("click", async () => {
+    const championship = championships[currentIndex];
+    if (!championship) return;
+    const confirmed = window.confirm(
+      `Excluir definitivamente “${championship.name}”? Todas as partidas e confrontos desse campeonato serão removidos.`,
+    );
+    if (!confirmed) return;
+    try {
+      await window.arena.deleteChampionship(championship.id);
+      window.location.reload();
+    } catch (cause) {
+      window.alert(cause instanceof Error ? cause.message : "Não foi possível excluir o campeonato.");
+    }
+  });
+
+  window.addEventListener("scroll", () => {
+    if (currentIndex >= 0 && !floating.hidden) showFor(currentIndex);
+  }, { passive: true });
+  window.addEventListener("resize", () => {
+    if (currentIndex >= 0 && !floating.hidden) showFor(currentIndex);
+  });
+};
+
 const sync = () => {
   applyAppearance();
   buildAppearanceCard();
+  void buildChampionshipActions();
 };
 
 document.addEventListener("change", handleClick);
