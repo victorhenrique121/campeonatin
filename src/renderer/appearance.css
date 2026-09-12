@@ -1,0 +1,235 @@
+:root[data-arena-theme="light"] {
+  color: #182033;
+  --arena-bg: #eef2f8;
+  --arena-accent: #6d5ce7;
+}
+
+body.arena-light {
+  background: var(--arena-bg);
+  color: #182033;
+}
+
+body.arena-light aside {
+  background: #ffffff;
+  border-color: #dbe2ee;
+}
+
+body.arena-light main {
+  color: #182033;
+}
+
+body.arena-light .panel,
+body.arena-light .metric,
+body.arena-light .settings-nav,
+body.arena-light .settings-card,
+body.arena-light .team-card,
+body.arena-light .arena-create-card,
+body.arena-light .team-selector-card,
+body.arena-light .enrollment-section,
+body.arena-light .mutator-zone,
+body.arena-light .season-gallery {
+  background: #ffffff;
+  border-color: #dbe2ee;
+  box-shadow: 0 10px 30px rgba(31, 43, 68, .06);
+}
+
+body.arena-light .stat-card,
+body.arena-light .stats-mini,
+body.arena-light .search,
+body.arena-light .form input,
+body.arena-light .form select,
+body.arena-light .rules-fields input {
+  background: #f6f8fc;
+  border-color: #dbe2ee;
+  color: #182033;
+}
+
+body.arena-light .page-title h1,
+body.arena-light .panel-head h2,
+body.arena-light .metric strong,
+body.arena-light .stat-card strong,
+body.arena-light .stats-mini strong,
+body.arena-light .stats-mini h3,
+body.arena-light .settings-card h2 {
+  color: #182033;
+}
+
+body.arena-light .page-title span,
+body.arena-light .metric small,
+body.arena-light .stat-card span,
+body.arena-light .stat-card small,
+body.arena-light .stats-mini small,
+body.arena-light .settings-card p,
+body.arena-light .settings-nav button small {
+  color: #647089;
+}
+
+body.arena-light nav button,
+body.arena-light .side-bottom button,
+body.arena-light .settings-nav button {
+  color: #66728a;
+}
+
+body.arena-light nav button:hover,
+body.arena-light nav .active,
+body.arena-light .settings-nav button:hover,
+body.arena-light .settings-nav button.active {
+  background: #eef1f8;
+  color: #182033;
+  border-color: #d2d9e7;
+}
+
+body.arena-light .row,
+body.arena-light .game,
+body.arena-light .champ,
+body.arena-light .team-card footer {
+  border-color: #e3e8f1;
+}
+
+body.arena-light .row:has(.rank):hover {
+  background: #f5f7fb;
+}
+
+body.arena-light .settings-appearance-panel,
+body.arena-light .appearance-preferences {
+  background: #ffffff;
+  border-color: #dbe2ee;
+}
+
+body.arena-compact-sidebar .shell {
+  grid-template-columns: 76px 1fr;
+}
+
+body.arena-compact-sidebar aside {
+  padding-left: 9px;
+  padding-right: 9px;
+}
+
+body.arena-compact-sidebar .brand {
+  justify-content: center;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+body.arena-compact-sidebar .brand b,
+body.arena-compact-sidebar aside nav button > :not(svg),
+body.arena-compact-sidebar .side-bottom button > :not(svg),
+body.arena-compact-sidebar .side-bottom small {
+  display: none;
+}
+
+body.arena-compact-sidebar aside nav button,
+body.arena-compact-sidebar .side-bottom button {
+  justify-content: center;
+  padding-left: 10px;
+  padding-right: 10px;
+}
+
+.appearance-preferences {
+  margin-top: 15px;
+}
+
+.appearance-preferences-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.appearance-preferences-head h2,
+.appearance-preferences p {
+  margin: 0;
+}
+
+.appearance-preferences-head p {
+  margin-top: 5px;
+  color: #8795ad;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.appearance-icon {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--arena-accent) 14%, transparent);
+  color: var(--arena-accent);
+}
+
+.appearance-options,
+.appearance-stat-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.appearance-choice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 11px 12px;
+  border: 1px solid #293653;
+  border-radius: 9px;
+  background: #0d1629;
+  cursor: pointer;
+}
+
+.appearance-choice > span {
+  display: grid;
+  gap: 3px;
+}
+
+.appearance-choice b {
+  color: #e9edf7;
+  font-size: 12px;
+}
+
+.appearance-choice small,
+.appearance-stats-title small {
+  color: #7e8ba5;
+  font-size: 10px;
+}
+
+.appearance-choice input {
+  width: 17px;
+  height: 17px;
+  accent-color: var(--arena-accent);
+}
+
+.appearance-stats {
+  margin-top: 18px;
+}
+
+.appearance-stats-title {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.appearance-stats-title b {
+  color: #e9edf7;
+  font-size: 12px;
+}
+
+.compact-choice {
+  padding: 9px 11px;
+}
+
+@media (max-width: 950px) {
+  body.arena-compact-sidebar .shell {
+    grid-template-columns: 70px 1fr;
+  }
+}
+
+@media (max-width: 600px) {
+  body.arena-compact-sidebar .shell {
+    display: block;
+  }
+
+  .appearance-preferences-head {
+    flex-direction: column;
+  }
+}
