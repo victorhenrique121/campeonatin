@@ -129,8 +129,6 @@ const handleClick = (event: Event) => {
 };
 
 let championshipActionRequest = 0;
-let activeChampionshipId: number | null = null;
-let activeChampionshipName = "";
 
 const closeChampionshipEditor = () => {
   document.querySelector<HTMLElement>(".championship-edit-backdrop")?.remove();
@@ -207,9 +205,17 @@ const openChampionshipEditor = (id: number, name: string) => {
 
 const buildChampionshipActions = async () => {
   const gallery = document.querySelector<HTMLElement>(".season-gallery");
-  if (!gallery) return;
+  const previousFloating = document.querySelector<HTMLElement>(".championship-actions-floating");
+  if (!gallery) {
+    previousFloating?.remove();
+    return;
+  }
   const cards = Array.from(gallery.querySelectorAll<HTMLElement>(".season-card"));
-  if (!cards.length || gallery.querySelector(".championship-actions-floating")) return;
+  if (!cards.length) {
+    previousFloating?.remove();
+    return;
+  }
+  if (previousFloating) return;
 
   const request = ++championshipActionRequest;
   let championships;
@@ -224,8 +230,8 @@ const buildChampionshipActions = async () => {
   floating.className = "championship-actions-floating";
   floating.hidden = true;
   floating.innerHTML = `
-    <button type="button" data-action="edit" title="Editar campeonato"><span>Editar</span></button>
-    <button type="button" data-action="delete" title="Excluir campeonato"><span>Excluir</span></button>
+    <button type="button" data-action="edit" title="Editar campeonato">Editar</button>
+    <button type="button" data-action="delete" title="Excluir campeonato">Excluir</button>
   `;
   document.body.appendChild(floating);
 
@@ -235,9 +241,17 @@ const buildChampionshipActions = async () => {
     const card = cards[index];
     if (!card) return;
     const rect = card.getBoundingClientRect();
-    const top = Math.max(12, Math.min(window.innerHeight - 64, rect.bottom - 50));
-    floating.style.top = `${top}px`;
-    floating.style.left = `${Math.max(12, Math.min(window.innerWidth - 210, rect.right - 204))}px`;
+    if (window.innerWidth <= 950) {
+      floating.style.top = "auto";
+      floating.style.left = "auto";
+      floating.style.right = "14px";
+      floating.style.bottom = "14px";
+    } else {
+      floating.style.bottom = "auto";
+      floating.style.right = "auto";
+      floating.style.top = `${Math.max(12, Math.min(window.innerHeight - 64, rect.bottom - 50))}px`;
+      floating.style.left = `${Math.max(12, Math.min(window.innerWidth - 210, rect.right - 204))}px`;
+    }
     floating.hidden = false;
   };
 
@@ -248,20 +262,13 @@ const buildChampionshipActions = async () => {
 
   floating.querySelector('[data-action="edit"]')?.addEventListener("click", () => {
     const championship = championships[currentIndex];
-    if (championship) {
-      activeChampionshipId = championship.id;
-      activeChampionshipName = championship.name;
-      openChampionshipEditor(championship.id, championship.name);
-    }
+    if (championship) openChampionshipEditor(championship.id, championship.name);
   });
 
   floating.querySelector('[data-action="delete"]')?.addEventListener("click", async () => {
     const championship = championships[currentIndex];
     if (!championship) return;
-    const confirmed = window.confirm(
-      `Excluir definitivamente “${championship.name}”? Todas as partidas e confrontos desse campeonato serão removidos.`,
-    );
-    if (!confirmed) return;
+    if (!window.confirm(`Excluir definitivamente “${championship.name}”? Todas as partidas e confrontos desse campeonato serão removidos.`)) return;
     try {
       await window.arena.deleteChampionship(championship.id);
       window.location.reload();
