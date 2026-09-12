@@ -20,6 +20,7 @@ const api: Api = {
   championships: invoke("championships:list"),
   championshipDetail: invoke("championships:detail"),
   saveChampionship: invoke("championships:save"),
+  updateChampionship: invoke("championships:update"),
   deleteChampionship: invoke("championships:delete"),
   exportArena: invoke("arena:export"),
   importArena: invoke("arena:import"),
