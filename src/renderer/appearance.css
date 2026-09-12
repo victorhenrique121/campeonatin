@@ -1,10 +1,10 @@
 :root[data-arena-theme="light"] {
   color: #182033;
-  --arena-bg: #eef2f8;
   --arena-accent: #6d5ce7;
 }
 
 body.arena-light {
+  --arena-bg: #eef2f8 !important;
   background: var(--arena-bg);
   color: #182033;
 }
@@ -90,10 +90,20 @@ body.arena-light .row:has(.rank):hover {
   background: #f5f7fb;
 }
 
-body.arena-light .settings-appearance-panel,
-body.arena-light .appearance-preferences {
+body.arena-light .appearance-preferences,
+body.arena-light .appearance-choice {
   background: #ffffff;
   border-color: #dbe2ee;
+}
+
+body.arena-light .appearance-choice b,
+body.arena-light .appearance-stats-title b {
+  color: #182033;
+}
+
+body.arena-light .appearance-choice small,
+body.arena-light .appearance-stats-title small {
+  color: #647089;
 }
 
 body.arena-compact-sidebar .shell {
@@ -112,8 +122,6 @@ body.arena-compact-sidebar .brand {
 }
 
 body.arena-compact-sidebar .brand b,
-body.arena-compact-sidebar aside nav button > :not(svg),
-body.arena-compact-sidebar .side-bottom button > :not(svg),
 body.arena-compact-sidebar .side-bottom small {
   display: none;
 }
@@ -123,6 +131,7 @@ body.arena-compact-sidebar .side-bottom button {
   justify-content: center;
   padding-left: 10px;
   padding-right: 10px;
+  font-size: 0;
 }
 
 .appearance-preferences {
