@@ -4,7 +4,7 @@ import { createDatabase, repository } from "./repository";
 import { createPlayersService } from "./players-service";
 import { initSupabase, testSupabaseConnection } from "./supabase";
 import { updateChampionshipName } from "./championship-service";
-import "../supabase";
+import "./supabase";
 
 let window: BrowserWindow | null = null;
 const dbPath = () => path.join(app.getPath("userData"), "fc-arena.sqlite");

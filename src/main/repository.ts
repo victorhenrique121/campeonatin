@@ -739,29 +739,6 @@ export function repository(db: Database.Database) {
 
   return m.id;
 },
-      }
-
-      
-
-      db.prepare(
-        `UPDATE matches
-         SET player1_id=?, player2_id=?, team1_id=?, team2_id=?,
-             score1=?, score2=?, championship_id=?, played_at=?
-         WHERE id=?`,
-      ).run(
-        m.player1Id,
-        m.player2Id,
-        m.team1Id,
-        m.team2Id,
-        m.score1,
-        m.score2,
-        championshipId,
-        m.playedAt ?? new Date().toISOString(),
-        m.id,
-      );
-
-      return m.id;
-    },
     clearMatches: () => {
       db.prepare("DELETE FROM matches").run();
     },
