@@ -2,6 +2,7 @@ import { app, BrowserWindow, dialog, ipcMain } from "electron";
 import path from "node:path";
 import { createDatabase, repository } from "./repository";
 import { updateChampionshipName } from "./championship-service";
+import "../supabase";
 
 let window: BrowserWindow | null = null;
 const dbPath = () => path.join(app.getPath("userData"), "fc-arena.sqlite");
