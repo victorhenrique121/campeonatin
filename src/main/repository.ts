@@ -679,44 +679,69 @@ export function repository(db: Database.Database) {
       return save();
     },
     updateMatch: (m: MatchInput & { id: number }) => {
-      const championshipId = m.championshipId ? Number(m.championshipId) : null;
+  if (!m.id || !m.player1Id || !m.player2Id || !m.team1Id || !m.team2Id)
+    throw new Error("Selecione os dois jogadores e os dois times.");
 
-      if (!m.id || !m.player1Id || !m.player2Id || !m.team1Id || !m.team2Id)
-        throw new Error("Selecione os dois jogadores e os dois times.");
+  if (m.player1Id === m.player2Id || m.team1Id === m.team2Id)
+    throw new Error("Escolha jogadores e times diferentes.");
 
-      if (m.player1Id === m.player2Id || m.team1Id === m.team2Id)
-        throw new Error("Escolha jogadores e times diferentes.");
+  const player1Exists = db
+    .prepare("SELECT 1 FROM players WHERE id=?")
+    .get(m.player1Id);
 
-      const player1Exists = db
-        .prepare("SELECT 1 FROM players WHERE id=?")
-        .get(m.player1Id);
-      const player2Exists = db
-        .prepare("SELECT 1 FROM players WHERE id=?")
-        .get(m.player2Id);
-      const team1Exists = db
-        .prepare("SELECT 1 FROM teams WHERE id=?")
-        .get(m.team1Id);
-      const team2Exists = db
-        .prepare("SELECT 1 FROM teams WHERE id=?")
-        .get(m.team2Id);
+  const player2Exists = db
+    .prepare("SELECT 1 FROM players WHERE id=?")
+    .get(m.player2Id);
 
-      if (!player1Exists || !player2Exists)
-        throw new Error("Um dos jogadores selecionados não existe.");
-      if (!team1Exists || !team2Exists)
-        throw new Error("Um dos times selecionados não existe.");
+  const team1Exists = db
+    .prepare("SELECT 1 FROM teams WHERE id=?")
+    .get(m.team1Id);
 
-      if (championshipId !== null) {
-        const championshipExists = db
-          .prepare("SELECT 1 FROM championships WHERE id=?")
-          .get(championshipId);
-        if (!championshipExists)
-          throw new Error("O campeonato selecionado não existe.");
+  const team2Exists = db
+    .prepare("SELECT 1 FROM teams WHERE id=?")
+    .get(m.team2Id);
+
+  if (!player1Exists || !player2Exists)
+    throw new Error("Um dos jogadores selecionados não existe.");
+
+  if (!team1Exists || !team2Exists)
+    throw new Error("Um dos times selecionados não existe.");
+
+  const existing = db
+    .prepare(
+      "SELECT id, championship_id FROM matches WHERE id=?",
+    )
+    .get(m.id) as
+    | { id: number; championship_id: number | null }
+    | undefined;
+
+  if (!existing)
+    throw new Error("Partida não encontrada.");
+
+  const championshipId = existing.championship_id;
+
+  db.prepare(
+    `UPDATE matches
+     SET player1_id=?, player2_id=?, team1_id=?, team2_id=?,
+         score1=?, score2=?, championship_id=?, played_at=?
+     WHERE id=?`,
+  ).run(
+    m.player1Id,
+    m.player2Id,
+    m.team1Id,
+    m.team2Id,
+    m.score1,
+    m.score2,
+    championshipId,
+    m.playedAt ?? new Date().toISOString(),
+    m.id,
+  );
+
+  return m.id;
+},
       }
 
-      const existing = db
-        .prepare("SELECT id FROM matches WHERE id=?")
-        .get(m.id);
-      if (!existing) throw new Error("Partida não encontrada.");
+      
 
       db.prepare(
         `UPDATE matches

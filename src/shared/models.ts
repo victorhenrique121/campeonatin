@@ -132,6 +132,7 @@ export type Fixture = {
   matchId?: number;
   score1?: number;
   score2?: number;
+  match?: Match;
 };
 export type ChampionshipDetail = {
   championship: Championship;
