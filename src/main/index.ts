@@ -1,6 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain } from "electron";
 import path from "node:path";
 import { createDatabase, repository } from "./repository";
+import { initSupabase, testSupabaseConnection } from "./supabase";
 import { updateChampionshipName } from "./championship-service";
 
 let window: BrowserWindow | null = null;
@@ -73,6 +74,22 @@ app.whenReady().then(() => {
   });
   ipcMain.handle("game-rules:get", () => repo.gameRules());
   ipcMain.handle("game-rules:save", (_, settings) => repo.saveGameRules(settings));
+
+  // -------------------------------------------------------------------------
+  // ETAPA 1 — Supabase: conexão PARALELA ao SQLite (que segue como banco
+  // principal). Inicialização não bloqueante: qualquer falha ou ausência de
+  // configuração é apenas logada no console do processo main e NÃO afeta o
+  // funcionamento do aplicativo.
+  // -------------------------------------------------------------------------
+  initSupabase({ rootDir: app.getAppPath() });
+  void testSupabaseConnection()
+    .then((status) => {
+      const log = status.ok ? console.info : console.warn;
+      log(`[supabase] Teste de conexão (${status.reason}): ${status.message}`);
+    })
+    .catch((err) => {
+      console.error("[supabase] Erro inesperado no teste de conexão:", err);
+    });
 
   createWindow();
 
