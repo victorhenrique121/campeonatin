@@ -10,11 +10,12 @@
   "main": "dist-electron/main/index.js",
   "scripts": {
     "dev": "concurrently -k \"vite\" \"npm:dev:electron\"",
-    "dev:electron": "wait-on tcp:5173 && electron .",
+    "dev:electron": "tsc -p tsconfig.electron.json && wait-on tcp:5173 && electron .",
     "build": "tsc -p tsconfig.electron.json && vite build && electron-builder --publish never",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.electron.json --noEmit",
     "migrate:players": "node scripts/migrate-players-to-supabase.mjs",
     "migrate:teams": "node scripts/migrate-teams-to-supabase.mjs",
+    "migrate:matches": "node scripts/migrate-matches-to-supabase.mjs",
     "test:stage2": "node scripts/dev-tests/run-stage2-tests.cjs"
   },
   "dependencies": {

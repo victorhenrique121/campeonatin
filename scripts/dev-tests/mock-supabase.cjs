@@ -218,25 +218,28 @@ const server = http.createServer(async (req, res) => {
     });
   }
 
-  if (req.method === "POST" && (table === "players" || table === "teams")) {
-    const uniqueColumn = table === "players" ? "nickname" : "name";
+  if (req.method === "POST" && (table === "players" || table === "teams" || table === "matches")) {
+    const uniqueColumn =
+      table === "players" ? "nickname" : table === "teams" ? "name" : null;
     const constraint = table === "players" ? "players_nickname_key" : "teams_name_key";
-    const store = table === "players" ? players : teams;
+    const store = table === "players" ? players : table === "teams" ? teams : matches;
     const body = await readBody(req);
     const incoming = Array.isArray(body) ? body : [body];
     const out = [];
     for (const row of incoming) {
       const id = row.id != null ? Number(row.id) : nextIds[table];
-      const uniqueConflict = store.some(
-        (r) => r[uniqueColumn] === row[uniqueColumn] && Number(r.id) !== id,
-      );
-      if (uniqueConflict) {
-        return send(res, 409, {
-          code: "23505",
-          message: `duplicate key value violates unique constraint "${constraint}"`,
-          details: `Key (${uniqueColumn})=(${row[uniqueColumn]}) already exists.`,
-          hint: null,
-        });
+      if (uniqueColumn) {
+        const uniqueConflict = store.some(
+          (r) => r[uniqueColumn] === row[uniqueColumn] && Number(r.id) !== id,
+        );
+        if (uniqueConflict) {
+          return send(res, 409, {
+            code: "23505",
+            message: `duplicate key value violates unique constraint "${constraint}"`,
+            details: `Key (${uniqueColumn})=(${row[uniqueColumn]}) already exists.`,
+            hint: null,
+          });
+        }
       }
       const existingIndex = store.findIndex((r) => Number(r.id) === id);
       let merged;
@@ -252,8 +255,32 @@ const server = http.createServer(async (req, res) => {
           updated_at: new Date().toISOString(),
           user_id: null,
         };
-      } else {
+      } else if (table === "teams") {
         merged = { id, name: row.name, league: row.league, country: row.country };
+      } else {
+        // Etapa 4 — matches: id identity (gera quando ausente), created_by
+        // obrigatório no schema real, championship_id praticamente sempre
+        // null (o app nunca o envia nesta etapa).
+        const prev = existingIndex >= 0 ? store[existingIndex] : null;
+        merged = {
+          id,
+          player1_id: Number(row.player1_id),
+          player2_id: Number(row.player2_id),
+          team1_id: Number(row.team1_id),
+          team2_id: Number(row.team2_id),
+          score1: Number(row.score1),
+          score2: Number(row.score2),
+          championship_id:
+            row.championship_id !== undefined
+              ? row.championship_id
+              : prev
+                ? prev.championship_id
+                : null,
+          played_at: row.played_at || (prev ? prev.played_at : new Date().toISOString()),
+          created_by: row.created_by ?? (prev ? prev.created_by : null),
+          created_at: row.created_at || (prev ? prev.created_at : new Date().toISOString()),
+          updated_at: new Date().toISOString(),
+        };
       }
       if (existingIndex >= 0 && isUpsert) store[existingIndex] = merged;
       else if (existingIndex >= 0) {
@@ -271,12 +298,15 @@ const server = http.createServer(async (req, res) => {
     return send(res, isUpsert ? 200 : 201, wantsRepresentation ? out : null);
   }
 
-  if (req.method === "PATCH" && table === "players") {
+  if (req.method === "PATCH" && (table === "players" || table === "matches")) {
     const body = (await readBody(req)) || {};
     if (idFilter === null) return send(res, 400, { code: "PGRST100", message: "mock: PATCH sem filtro id" });
-    const row = players.find((p) => Number(p.id) === idFilter);
+    const store = table === "players" ? players : matches;
+    const row = store.find((p) => Number(p.id) === idFilter);
+    // Sem linha -> 200 com array vazio (comportamento real do PostgREST; o
+    // service da Etapa 4 usa isso para detectar partida legada e convergir).
     if (!row) return send(res, 200, wantsRepresentation ? [] : null);
-    if (body.nickname && nicknameConflict(body.nickname, row.id)) {
+    if (table === "players" && body.nickname && nicknameConflict(body.nickname, row.id)) {
       return send(res, 409, {
         code: "23505",
         message: 'duplicate key value violates unique constraint "players_nickname_key"',

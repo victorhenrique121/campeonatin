@@ -48,6 +48,14 @@ const scenarios = [
   { name: "s11", env: configuredEnv },
   { name: "s12", env: { ...configuredEnv, SUPABASE_URL: "http://127.0.0.1:54399" } },
   { name: "s13", env: { ...configuredEnv, SUPABASE_APP_EMAIL: undefined, SUPABASE_APP_PASSWORD: undefined } },
+  // Etapa 4 — matches (híbrido: escrita remota estrita-online + leitura local)
+  { name: "s14", env: legacyEnv },
+  { name: "s15", env: configuredEnv },
+  { name: "s16", env: configuredEnv },
+  { name: "s17", env: { ...configuredEnv, SUPABASE_URL: "http://127.0.0.1:54399" } },
+  { name: "s18", env: { ...configuredEnv, SUPABASE_APP_EMAIL: undefined, SUPABASE_APP_PASSWORD: undefined } },
+  { name: "s19", env: configuredEnv },
+  { name: "s20", env: configuredEnv },
 ];
 // Remove chaves explicitamente undefined (s9 simula ausência de conta de serviço).
 for (const scenario of scenarios) {

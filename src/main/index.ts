@@ -3,6 +3,7 @@ import path from "node:path";
 import { createDatabase, repository } from "./repository";
 import { createPlayersService } from "./players-service";
 import { createTeamsService } from "./teams-service";
+import { createMatchesService } from "./matches-service";
 import { initSupabase, testSupabaseConnection } from "./supabase";
 import { updateChampionshipName } from "./championship-service";
 
@@ -51,16 +52,27 @@ app.whenReady().then(() => {
   // O canal IPC "teams:list" mantém assinatura idêntica (renderer inalterado).
   const teams = createTeamsService(repo);
 
+  // ETAPA 4: "matches" segue o padrão HÍBRIDO aprovado — ESCRITA remota
+  // primeiro (estrita-online, id gerado pelo Supabase) + transação local
+  // intacta (fixtures/mata-mata exatamente como hoje); LEITURA (matches:list)
+  // permanece SEMPRE local, pois championship_id fica NULL no remoto até a
+  // Etapa 5 migrar championships. Sem .env configurado, o serviço delega
+  // tudo ao repository (modo legado, idêntico ao anterior). Os canais IPC
+  // mantêm assinaturas idênticas (renderer inalterado).
+  const matches = createMatchesService(db, repo);
+
   ipcMain.handle("dashboard", () => repo.dashboard());
   ipcMain.handle("players:list", () => players.list());
   ipcMain.handle("players:save", (_, p) => players.save(p));
   ipcMain.handle("players:delete", (_, id) => players.remove(id));
   ipcMain.handle("teams:list", (_, q) => teams.list(q));
+  // ETAPA 4: matches:list continua no repository — leitura SEMPRE local
+  // (decisão aprovada: o Supabase é destino de escrita/histórico nesta etapa).
   ipcMain.handle("matches:list", () => repo.matches());
-  ipcMain.handle("matches:save", (_, m) => repo.saveMatch(m));
-  ipcMain.handle("matches:update", (_, m) => repo.updateMatch(m));
-  ipcMain.handle("matches:delete", (_, id) => repo.deleteMatch(id));
-  ipcMain.handle("matches:clear", () => repo.clearMatches());
+  ipcMain.handle("matches:save", (_, m) => matches.save(m));
+  ipcMain.handle("matches:update", (_, m) => matches.update(m));
+  ipcMain.handle("matches:delete", (_, id) => matches.remove(id));
+  ipcMain.handle("matches:clear", () => matches.clear());
   ipcMain.handle("arena:reset", () => repo.resetArena());
   ipcMain.handle("ranking", () => repo.ranking());
   ipcMain.handle("championships:list", () => repo.championships());
@@ -106,11 +118,16 @@ app.whenReady().then(() => {
     .then((status) => {
       const log = status.ok ? console.info : console.warn;
       log(`[supabase] Teste de conexão (${status.reason}): ${status.message}`);
-      // Com conexão OK, mantém o espelho local de players atualizado (boot).
+      // Com conexão OK, mantém os espelhos locais atualizados (boot).
+      // ORDEM IMPORTA (Etapa 4): players ANTES de matches — o espelho de
+      // matches referencia players/teams com FK RESTRICT no SQLite.
       if (status.ok && status.authenticated) {
-        void players.syncMirror().catch((err) => {
-          console.warn("[players] falha na sincronização do espelho local:", err);
-        });
+        void players
+          .syncMirror()
+          .then(() => matches.syncMirror())
+          .catch((err) => {
+            console.warn("[supabase] falha na sincronização dos espelhos locais:", err);
+          });
       }
     })
     .catch((err) => {

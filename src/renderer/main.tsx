@@ -802,6 +802,7 @@ function MatchesPage({
       return;
     }
 
+
     try {
       await window.arena.saveMatch({
         player1Id,
