@@ -2,9 +2,9 @@ import { app, BrowserWindow, dialog, ipcMain } from "electron";
 import path from "node:path";
 import { createDatabase, repository } from "./repository";
 import { createPlayersService } from "./players-service";
+import { createTeamsService } from "./teams-service";
 import { initSupabase, testSupabaseConnection } from "./supabase";
 import { updateChampionshipName } from "./championship-service";
-import "./supabase";
 
 let window: BrowserWindow | null = null;
 const dbPath = () => path.join(app.getPath("userData"), "fc-arena.sqlite");
@@ -44,11 +44,18 @@ app.whenReady().then(() => {
   // As assinaturas dos canais IPC NÃO mudam — o renderer segue intacto.
   const players = createPlayersService(db, repo);
 
+  // ETAPA 3: leitura de "teams" (catálogo estático) passa a vir do Supabase
+  // quando configurado/autenticado, com fallback para o catálogo local
+  // (seed do boot) quando offline/erro. O aplicativo NÃO escreve no remoto
+  // para teams — o povoamento é manual via `npm run migrate:teams`.
+  // O canal IPC "teams:list" mantém assinatura idêntica (renderer inalterado).
+  const teams = createTeamsService(repo);
+
   ipcMain.handle("dashboard", () => repo.dashboard());
   ipcMain.handle("players:list", () => players.list());
   ipcMain.handle("players:save", (_, p) => players.save(p));
   ipcMain.handle("players:delete", (_, id) => players.remove(id));
-  ipcMain.handle("teams:list", (_, q) => repo.teams(q));
+  ipcMain.handle("teams:list", (_, q) => teams.list(q));
   ipcMain.handle("matches:list", () => repo.matches());
   ipcMain.handle("matches:save", (_, m) => repo.saveMatch(m));
   ipcMain.handle("matches:update", (_, m) => repo.updateMatch(m));

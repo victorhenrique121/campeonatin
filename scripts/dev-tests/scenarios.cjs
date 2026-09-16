@@ -51,7 +51,9 @@ function ctx(name, opts = {}) {
   sup.initSupabase({ sessionStoragePath: sessionFile });
   const { createPlayersService } = require(path.join(MAIN, "players-service.js"));
   const service = createPlayersService(db, repo);
-  return { db, repo, sup, service, file, sessionFile };
+  const { createTeamsService } = require(path.join(MAIN, "teams-service.js"));
+  const teams = createTeamsService(repo);
+  return { db, repo, sup, service, teams, file, sessionFile };
 }
 
 async function mockState() {
@@ -255,6 +257,76 @@ const scenarios = {
     check("reexecução é idempotente", out2.includes("2 migrado(s)/atualizado(s), 0 falha(s)"));
   },
 
+  // ===========================================================================
+  // ETAPA 3 — teams (catálogo: leitura remota + fallback local; escrita manual)
+  // ===========================================================================
+
+  /** Sem configuração: catálogo 100% local, como antes da Etapa 3. */
+  async s10() {
+    console.log("S10 — teams no modo legado (Supabase não configurado):");
+    const c = ctx("s10");
+    const all = await c.teams.list();
+    check("list() devolve o catálogo local completo", all.length === c.repo.teams().length && all.length > 600, all.length);
+    const search = await c.teams.list("real");
+    check("busca local (LIKE) preservada", search.length === c.repo.teams("real").length && search.length > 0, search.length);
+    c.db.close();
+  },
+
+  /** Fluxo remoto: script de migração, leitura autenticada, busca ilike, prova de origem remota. */
+  async s11() {
+    console.log("S11 — teams: migrate:teams + leitura remota + busca:");
+    const c = ctx("s11");
+    const localCount = c.repo.teams().length;
+
+    const script = path.join(PROJ, "scripts", "migrate-teams-to-supabase.mjs");
+    const out = execFileSync("node", [script, c.file], { encoding: "utf8", env: process.env });
+    check("script migrou o catálogo inteiro preservando ids", out.includes(`${localCount} migrado(s)/atualizado(s), 0 falha(s)`), out.split("\n").find((l) => l.includes("Resultado")));
+    check("script imprimiu setval de public.teams", out.includes("pg_get_serial_sequence('public.teams'"));
+
+    const state = await mockState();
+    check("Supabase recebeu as equipes", state.teams.length === localCount && state.teams.some((t) => t.id === 1), state.teams.length);
+
+    const remote = await c.teams.list();
+    check("list() devolve o catálogo remoto", remote.length === localCount);
+    check("conteúdo remoto == local (ordem por nome)",
+      JSON.stringify(remote.map((t) => t.id)) === JSON.stringify(c.repo.teams().map((t) => t.id)));
+
+    const search = await c.teams.list("real");
+    check("busca remota (ilike) equivalente ao LIKE local",
+      search.length === c.repo.teams("real").length && search.length > 0, search.length);
+    const none = await c.teams.list("zzz-inexistente-xyz");
+    check("busca remota sem resultados -> lista vazia", none.length === 0);
+
+    // Prova de que a leitura vem do REMOTO: apaga um time do catálogo local.
+    const victim = remote[0];
+    c.db.prepare("DELETE FROM teams WHERE id=?").run(victim.id);
+    const still = await c.teams.list();
+    check("list() não depende do espelho local quando online", still.some((t) => t.id === victim.id));
+
+    const out2 = execFileSync("node", [script, c.file], { encoding: "utf8", env: process.env });
+    check("reexecução do script é idempotente", out2.includes("0 falha(s)"));
+    c.db.close();
+  },
+
+  /** Offline (URL morta): leitura cai para o catálogo local, sem travar. */
+  async s12() {
+    console.log("S12 — teams offline: fallback para o catálogo local:");
+    const c = ctx("s12");
+    const listed = await c.teams.list();
+    check("list() cai para o catálogo local", listed.length === c.repo.teams().length && listed.length > 600, listed.length);
+    check("busca também cai para o local", (await c.teams.list("real")).length === c.repo.teams("real").length);
+    c.db.close();
+  },
+
+  /** Configurado, mas sem conta de serviço: leitura via catálogo local (RLS bloqueia anon). */
+  async s13() {
+    console.log("S13 — teams sem conta de serviço: fallback local:");
+    const c = ctx("s13");
+    const listed = await c.teams.list();
+    check("list() usa catálogo local (anon não lê teams por RLS)", listed.length === c.repo.teams().length && listed.length > 600, listed.length);
+    c.db.close();
+  },
+
   /** Compatibilidade Etapa 1: sem conta de serviço, probe anon + espelho/bloqueio. */
   async s9() {
     console.log("S9 — Compatibilidade Etapa 1 (URL+anon, sem conta de serviço):");
@@ -291,3 +363,4 @@ scenario()
     console.error(`Cenário ${name}: erro inesperado ->`, err);
     process.exit(1);
   });
+  

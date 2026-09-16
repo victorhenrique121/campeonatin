@@ -19,9 +19,10 @@ const USER_PASSWORD = process.env.MOCK_USER_PASSWORD || "senha-mock-123";
 const ACCESS_TOKEN = "mock-access-token";
 
 let players = [];
+let teams = [];
 let matches = [];
 let fixtures = [];
-let nextIds = { players: 1, matches: 1, fixtures: 1 };
+let nextIds = { players: 1, teams: 1, matches: 1, fixtures: 1 };
 let authCalls = 0;
 let tableMissing = false;
 
@@ -92,19 +93,27 @@ function parseEq(searchParams, column) {
   return match ? Number(match[1]) : null;
 }
 
-function parseOrPairs(searchParams) {
-  // ex.: or=(player1_id.eq.3,player2_id.eq.3)
+function parseOrFilters(searchParams) {
+  // Exemplos: or=(player1_id.eq.3,player2_id.eq.3)
+  //           or=(name.ilike.*real*,league.ilike.*real*,country.ilike.*real*)
   const value = searchParams.get("or");
   if (!value) return null;
-  const ids = [...value.matchAll(/(\w+)\.eq\.(\d+)/g)].map((m) => Number(m[2]));
-  return ids.length ? ids : null;
-}
-
-function matchesOrFilters(row, orIds) {
-  if (!orIds) return true;
-  return orIds.some(
-    (id) => Number(row.player1_id) === id || Number(row.player2_id) === id,
-  );
+  const inner = value.startsWith("(") && value.endsWith(")") ? value.slice(1, -1) : value;
+  const conditions = inner
+    .split(",")
+    .map((token) => {
+      const m = /^(\w+)\.(eq|ilike)\.(.*)$/.exec(token.trim());
+      if (!m) return null;
+      const [, column, op, raw] = m;
+      if (op === "eq") {
+        const target = Number(raw);
+        return (row) => Number(row[column]) === target;
+      }
+      const needle = raw.replace(/^[*%]+|[*%]+$/g, "").toLowerCase();
+      return (row) => String(row[column] ?? "").toLowerCase().includes(needle);
+    })
+    .filter(Boolean);
+  return conditions.length ? (row) => conditions.some((fn) => fn(row)) : null;
 }
 
 const server = http.createServer(async (req, res) => {
@@ -118,9 +127,10 @@ const server = http.createServer(async (req, res) => {
   // ---- controle do harness -------------------------------------------------
   if (url.pathname === "/__reset" && req.method === "POST") {
     players = [];
+    teams = [];
     matches = [];
     fixtures = [];
-    nextIds = { players: 1, matches: 1, fixtures: 1 };
+    nextIds = { players: 1, teams: 1, matches: 1, fixtures: 1 };
     authCalls = 0;
     tableMissing = false;
     return send(res, 200, { ok: true });
@@ -131,7 +141,7 @@ const server = http.createServer(async (req, res) => {
     return send(res, 200, { ok: true, tableMissing });
   }
   if (url.pathname === "/__state" && req.method === "GET") {
-    return send(res, 200, { players, matches, fixtures, authCalls, tableMissing });
+    return send(res, 200, { players, teams, matches, fixtures, authCalls, tableMissing });
   }
 
   // ---- GoTrue (Auth) --------------------------------------------------------
@@ -174,20 +184,20 @@ const server = http.createServer(async (req, res) => {
     });
   }
 
-  const rowsOf = { players: () => players, matches: () => matches, fixtures: () => fixtures }[table];
+  const rowsOf = { players: () => players, teams: () => teams, matches: () => matches, fixtures: () => fixtures }[table];
   if (!rowsOf) return send(res, 404, { code: "PGRST205", message: `mock: tabela ${table} não modelada` });
 
   const wantsRepresentation = String(req.headers.prefer || "").includes("return=representation");
   const isUpsert = String(req.headers.prefer || "").includes("resolution=merge-duplicates");
   const idFilter = parseEq(url.searchParams, "id");
-  const orIds = parseOrPairs(url.searchParams);
+  const orPredicate = parseOrFilters(url.searchParams);
 
   // RLS simulado: sem sessão 'authenticated' -> SELECT vazio / escrita negada.
   if (req.method === "GET") {
     if (!authed) return send(res, 200, [], { "content-range": "*/0" });
     let rows = rowsOf();
     if (idFilter !== null) rows = rows.filter((r) => Number(r.id) === idFilter);
-    if (orIds) rows = rows.filter((r) => matchesOrFilters(r, orIds));
+    if (orPredicate) rows = rows.filter(orPredicate);
     const order = url.searchParams.get("order"); // ex.: "name.asc" / "id.asc"
     if (order) {
       const [column, direction] = order.split(".");
@@ -208,40 +218,53 @@ const server = http.createServer(async (req, res) => {
     });
   }
 
-  if (req.method === "POST" && (table === "players")) {
+  if (req.method === "POST" && (table === "players" || table === "teams")) {
+    const uniqueColumn = table === "players" ? "nickname" : "name";
+    const constraint = table === "players" ? "players_nickname_key" : "teams_name_key";
+    const store = table === "players" ? players : teams;
     const body = await readBody(req);
     const incoming = Array.isArray(body) ? body : [body];
     const out = [];
     for (const row of incoming) {
-      const id = row.id != null ? Number(row.id) : nextIds.players;
-      if (nicknameConflict(row.nickname, id)) {
+      const id = row.id != null ? Number(row.id) : nextIds[table];
+      const uniqueConflict = store.some(
+        (r) => r[uniqueColumn] === row[uniqueColumn] && Number(r.id) !== id,
+      );
+      if (uniqueConflict) {
         return send(res, 409, {
           code: "23505",
-          message: 'duplicate key value violates unique constraint "players_nickname_key"',
-          details: `Key (nickname)=(${row.nickname}) already exists.`,
+          message: `duplicate key value violates unique constraint "${constraint}"`,
+          details: `Key (${uniqueColumn})=(${row[uniqueColumn]}) already exists.`,
           hint: null,
         });
       }
-      const existingIndex = players.findIndex((p) => Number(p.id) === id);
-      const merged = {
-        id,
-        name: row.name,
-        nickname: row.nickname,
-        avatar: row.avatar ?? null,
-        created_at: row.created_at || (existingIndex >= 0 ? players[existingIndex].created_at : new Date().toISOString()),
-        updated_at: new Date().toISOString(),
-        user_id: null,
-      };
-      if (existingIndex >= 0 && isUpsert) players[existingIndex] = merged;
+      const existingIndex = store.findIndex((r) => Number(r.id) === id);
+      let merged;
+      if (table === "players") {
+        merged = {
+          id,
+          name: row.name,
+          nickname: row.nickname,
+          avatar: row.avatar ?? null,
+          created_at:
+            row.created_at ||
+            (existingIndex >= 0 ? store[existingIndex].created_at : new Date().toISOString()),
+          updated_at: new Date().toISOString(),
+          user_id: null,
+        };
+      } else {
+        merged = { id, name: row.name, league: row.league, country: row.country };
+      }
+      if (existingIndex >= 0 && isUpsert) store[existingIndex] = merged;
       else if (existingIndex >= 0) {
         return send(res, 409, {
           code: "23505",
-          message: 'duplicate key value violates unique constraint "players_pkey"',
+          message: `duplicate key value violates unique constraint "${table}_pkey"`,
           details: `Key (id)=(${id}) already exists.`,
           hint: null,
         });
-      } else players.push(merged);
-      bumpId("players", id);
+      } else store.push(merged);
+      bumpId(table, id);
       out.push(merged);
     }
     // PostgREST real SEMPRE responde array com return=representation.
@@ -271,11 +294,12 @@ const server = http.createServer(async (req, res) => {
     const keep = store.filter((row) => {
       const hit =
         (idFilter !== null && Number(row.id) === idFilter) ||
-        (orIds && matchesOrFilters(row, orIds));
+        (orPredicate && orPredicate(row));
       if (hit) removed.push(row);
       return !hit;
     });
     if (table === "players") players = keep;
+    else if (table === "teams") teams = keep;
     else if (table === "matches") matches = keep;
     else fixtures = keep;
     return send(res, 200, wantsRepresentation ? removed : null);

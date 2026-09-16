@@ -43,6 +43,11 @@ const scenarios = [
   { name: "s7", env: configuredEnv },
   { name: "s8", env: configuredEnv },
   { name: "s9", env: { ...configuredEnv, SUPABASE_APP_EMAIL: undefined, SUPABASE_APP_PASSWORD: undefined } },
+  // Etapa 3 — teams
+  { name: "s10", env: legacyEnv },
+  { name: "s11", env: configuredEnv },
+  { name: "s12", env: { ...configuredEnv, SUPABASE_URL: "http://127.0.0.1:54399" } },
+  { name: "s13", env: { ...configuredEnv, SUPABASE_APP_EMAIL: undefined, SUPABASE_APP_PASSWORD: undefined } },
 ];
 // Remove chaves explicitamente undefined (s9 simula ausência de conta de serviço).
 for (const scenario of scenarios) {

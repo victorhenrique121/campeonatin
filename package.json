@@ -14,6 +14,7 @@
     "build": "tsc -p tsconfig.electron.json && vite build && electron-builder --publish never",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.electron.json --noEmit",
     "migrate:players": "node scripts/migrate-players-to-supabase.mjs",
+    "migrate:teams": "node scripts/migrate-teams-to-supabase.mjs",
     "test:stage2": "node scripts/dev-tests/run-stage2-tests.cjs"
   },
   "dependencies": {
@@ -21,7 +22,6 @@
     "@vitejs/plugin-react": "6.0.4",
     "better-sqlite3": "13.0.1",
     "csv-parser": "^3.2.1",
-    "dotenv": "^17.4.2",
     "lucide-react": "1.26.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",

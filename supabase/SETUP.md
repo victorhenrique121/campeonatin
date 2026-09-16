@@ -77,7 +77,36 @@ select setval(
 );
 ```
 
-## 6. Validar
+## 6. (Etapa 3) Migrar o catálogo de times para o Supabase
+
+A tabela remota `public.teams` nasce **vazia** (a migration não semeia dados)
+e o aplicativo **nunca escreve nela automaticamente** — o catálogo é global e
+estático, sob controle manual. Depois de promover a conta de serviço a admin
+(passo 3), rode:
+
+```bash
+npm run migrate:teams
+# ou apontando o banco explicitamente:
+npm run migrate:teams -- "C:/caminho/para/fc-arena.sqlite"
+```
+
+O script faz upsert do catálogo local (os ~660 clubes do seed) **preservando
+os ids** — essencial para as FKs `matches.team1_id/team2_id`, que continuam no
+SQLite. É idempotente: rode de novo sempre que o `clubRows.ts` for atualizado
+(novos patches do jogo). Ao final, execute no **SQL Editor** o comando
+impresso pelo script:
+
+```sql
+select setval(
+  pg_get_serial_sequence('public.teams', 'id'),
+  (select coalesce(max(id), 1) from public.teams)
+);
+```
+
+Nenhuma policy nova é necessária: o RLS existente já dá leitura a qualquer
+sessão `authenticated` e escrita a `admin` (a conta de serviço da Etapa 2).
+
+## 7. Validar
 
 ```bash
 npm run dev
@@ -102,6 +131,7 @@ No console do processo main você deve ver, nesta ordem:
 | `unreachable` | Sem internet / `SUPABASE_URL` errada | Verificar rede e URL |
 | `Permissão negada (RLS)` ao salvar players | Profile da conta não é `admin` | Passo 3 |
 | `Já existe um jogador com esse apelido` | UNIQUE em `nickname` | Usar outro apelido |
+| `teams:list` vazio/desatualizado quando online | Catálogo remoto não povoado (o app nunca escreve em `public.teams`) | Passo 6 (`npm run migrate:teams` + `setval`) |
 
 ## Segurança (resumo)
 
@@ -110,3 +140,5 @@ No console do processo main você deve ver, nesta ordem:
   `userData/supabase-session.json` na máquina do usuário.
 - `SUPABASE_SERVICE_ROLE_KEY` **nunca** é lida/usada; se estiver no ambiente,
   o app apenas alerta para removê-la.
+- Etapa 3: o aplicativo **só lê** `public.teams` — nenhuma escrita automática
+  no remoto; o catálogo é povoado/atualizado apenas via `npm run migrate:teams`.
