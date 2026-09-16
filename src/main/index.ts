@@ -1,6 +1,8 @@
 import { app, BrowserWindow, dialog, ipcMain } from "electron";
 import path from "node:path";
 import { createDatabase, repository } from "./repository";
+import { createPlayersService } from "./players-service";
+import { initSupabase, testSupabaseConnection } from "./supabase";
 import { updateChampionshipName } from "./championship-service";
 import "../supabase";
 
@@ -35,10 +37,17 @@ app.whenReady().then(() => {
   const db = createDatabase(dbPath());
   const repo = repository(db);
 
+  // ETAPA 2: "players" passa a usar o Supabase como fonte de verdade, com
+  // espelho local no SQLite (mesmos ids) para manter as FKs/JOINs de matches,
+  // fixtures, ranking e dashboard 100% intactos. Sem .env configurado, o
+  // serviço delega tudo ao repository (modo legado, idêntico ao anterior).
+  // As assinaturas dos canais IPC NÃO mudam — o renderer segue intacto.
+  const players = createPlayersService(db, repo);
+
   ipcMain.handle("dashboard", () => repo.dashboard());
-  ipcMain.handle("players:list", () => repo.players());
-  ipcMain.handle("players:save", (_, p) => repo.savePlayer(p));
-  ipcMain.handle("players:delete", (_, id) => repo.deletePlayer(id));
+  ipcMain.handle("players:list", () => players.list());
+  ipcMain.handle("players:save", (_, p) => players.save(p));
+  ipcMain.handle("players:delete", (_, id) => players.remove(id));
   ipcMain.handle("teams:list", (_, q) => repo.teams(q));
   ipcMain.handle("matches:list", () => repo.matches());
   ipcMain.handle("matches:save", (_, m) => repo.saveMatch(m));
@@ -74,6 +83,32 @@ app.whenReady().then(() => {
   });
   ipcMain.handle("game-rules:get", () => repo.gameRules());
   ipcMain.handle("game-rules:save", (_, settings) => repo.saveGameRules(settings));
+
+  // -------------------------------------------------------------------------
+  // Supabase (Etapas 1-2): conexão PARALELA ao SQLite (que segue como banco
+  // principal de teams/matches/championships/fixtures/ranking/dashboard).
+  // Inicialização não bloqueante: qualquer falha ou ausência de configuração
+  // é apenas logada no console do processo main e NÃO afeta o aplicativo.
+  // A sessão da conta de serviço persiste em userData/supabase-session.json.
+  // -------------------------------------------------------------------------
+  initSupabase({
+    rootDir: app.getAppPath(),
+    sessionStoragePath: path.join(app.getPath("userData"), "supabase-session.json"),
+  });
+  void testSupabaseConnection()
+    .then((status) => {
+      const log = status.ok ? console.info : console.warn;
+      log(`[supabase] Teste de conexão (${status.reason}): ${status.message}`);
+      // Com conexão OK, mantém o espelho local de players atualizado (boot).
+      if (status.ok && status.authenticated) {
+        void players.syncMirror().catch((err) => {
+          console.warn("[players] falha na sincronização do espelho local:", err);
+        });
+      }
+    })
+    .catch((err) => {
+      console.error("[supabase] Erro inesperado no teste de conexão:", err);
+    });
 
   createWindow();
 

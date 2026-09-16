@@ -12,7 +12,9 @@
     "dev": "concurrently -k \"vite\" \"npm:dev:electron\"",
     "dev:electron": "wait-on tcp:5173 && electron .",
     "build": "tsc -p tsconfig.electron.json && vite build && electron-builder --publish never",
-    "typecheck": "tsc --noEmit && tsc -p tsconfig.electron.json --noEmit"
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.electron.json --noEmit",
+    "migrate:players": "node scripts/migrate-players-to-supabase.mjs",
+    "test:stage2": "node scripts/dev-tests/run-stage2-tests.cjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.116.0",
