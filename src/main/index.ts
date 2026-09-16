@@ -18,6 +18,9 @@ function createWindow() {
     minHeight: 560,
     backgroundColor: "#0b1020",
     title: "FC Arena",
+
+    icon: path.join(__dirname, "../../src/midia/fcarena.png"),
+
     webPreferences: {
       preload: path.join(__dirname, "../preload/index.js"),
       contextIsolation: true,
@@ -76,17 +79,23 @@ app.whenReady().then(() => {
   ipcMain.handle("arena:reset", () => repo.resetArena());
   ipcMain.handle("ranking", () => repo.ranking());
   ipcMain.handle("championships:list", () => repo.championships());
-  ipcMain.handle("championships:detail", (_, id) => repo.championshipDetail(id));
+  ipcMain.handle("championships:detail", (_, id) =>
+    repo.championshipDetail(id),
+  );
   ipcMain.handle("championships:save", (_, c) => repo.saveChampionship(c));
   ipcMain.handle("championships:update", (_, id, name) => {
     updateChampionshipName(db, id, name);
     return repo.championshipDetail(id).championship;
   });
-  ipcMain.handle("championships:delete", (_, id) => repo.deleteChampionship(id));
+  ipcMain.handle("championships:delete", (_, id) =>
+    repo.deleteChampionship(id),
+  );
   ipcMain.handle("arena:export", () => repo.exportArena());
   ipcMain.handle("arena:import", (_, data) => repo.importArena(data));
   ipcMain.handle("backup", async () => {
-    const dest = await dialog.showSaveDialog({ defaultPath: "fc-arena-backup.sqlite" });
+    const dest = await dialog.showSaveDialog({
+      defaultPath: "fc-arena-backup.sqlite",
+    });
     if (dest.canceled || !dest.filePath) return "";
     return repo.backup(dest.filePath);
   });
@@ -101,7 +110,9 @@ app.whenReady().then(() => {
     app.exit(0);
   });
   ipcMain.handle("game-rules:get", () => repo.gameRules());
-  ipcMain.handle("game-rules:save", (_, settings) => repo.saveGameRules(settings));
+  ipcMain.handle("game-rules:save", (_, settings) =>
+    repo.saveGameRules(settings),
+  );
 
   // -------------------------------------------------------------------------
   // Supabase (Etapas 1-2): conexão PARALELA ao SQLite (que segue como banco
@@ -112,7 +123,10 @@ app.whenReady().then(() => {
   // -------------------------------------------------------------------------
   initSupabase({
     rootDir: app.getAppPath(),
-    sessionStoragePath: path.join(app.getPath("userData"), "supabase-session.json"),
+    sessionStoragePath: path.join(
+      app.getPath("userData"),
+      "supabase-session.json",
+    ),
   });
   void testSupabaseConnection()
     .then((status) => {
@@ -126,7 +140,10 @@ app.whenReady().then(() => {
           .syncMirror()
           .then(() => matches.syncMirror())
           .catch((err) => {
-            console.warn("[supabase] falha na sincronização dos espelhos locais:", err);
+            console.warn(
+              "[supabase] falha na sincronização dos espelhos locais:",
+              err,
+            );
           });
       }
     })

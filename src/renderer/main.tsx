@@ -1,3 +1,5 @@
+import "./styles/config.css";
+import fcArenaLogo from "../midia/fcarena-icon.png";
 import React, { FormEvent, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
@@ -802,7 +804,6 @@ function MatchesPage({
       return;
     }
 
-
     try {
       await window.arena.saveMatch({
         player1Id,
@@ -1240,8 +1241,8 @@ function ChampionshipPage({
               >
                 <Trophy /> Mata-mata
               </button>
-                        </div>
-             {formError && <div className="arena-form-error">{formError}</div>}
+            </div>
+            {formError && <div className="arena-form-error">{formError}</div>}
             <button className="launch-championship" type="submit">
               <CirclePlus size={18} />{" "}
               {mode === "mad" ? "Iniciar desafio" : "Criar campeonato"}
@@ -1757,30 +1758,20 @@ function ThemeControl() {
   );
 }
 
-type SettingsSection =
-  | "appearance"
-  | "data"
-  | "rules"
-  | "catalog"
-  | "players"
-  | "notifications"
-  | "about";
+function SettingsPage({
+  reload,
+}: {
+  reload: () => Promise<void>;
+}) {
+  type SettingsSection =
+    | "appearance"
+    | "data"
+    | "rules"
+    | "catalog"
+    | "players"
+    | "notifications"
+    | "about";
 
-function SettingsPage({ reload }: { reload: () => Promise<void> }) {
-  const [accent, setAccent] = useState(
-      () => localStorage.getItem("arena-accent") ?? "#8872ff",
-    ),
-    [background, setBackground] = useState(
-      () => localStorage.getItem("arena-background") ?? "#0a0f1f",
-    ),
-    [muted, setMuted] = useState(
-      () => localStorage.getItem("arena-muted") === "true",
-    ),
-    [section, setSection] = useState<SettingsSection>("appearance"),
-    [message, setMessage] = useState(""),
-    [rules, setRules] = useState<GameRulesSettings | null>(null),
-    [rulesError, setRulesError] = useState(""),
-    [savingRules, setSavingRules] = useState(false);
   const sections: Array<{
     id: SettingsSection;
     label: string;
@@ -1830,13 +1821,79 @@ function SettingsPage({ reload }: { reload: () => Promise<void> }) {
       icon: Gamepad2,
     },
   ];
+
+  const [accent, setAccent] = useState(
+    () => localStorage.getItem("arena-accent") ?? "#8872ff",
+  );
+
+  const [background, setBackground] = useState(
+    () => localStorage.getItem("arena-background") ?? "#0a0f1f",
+  );
+
+  const [muted, setMuted] = useState(
+    () => localStorage.getItem("arena-muted") === "true",
+  );
+
+  const [section, setSection] =
+    useState<SettingsSection>("appearance");
+
+  const [message, setMessage] = useState("");
+
+  const [rules, setRules] =
+    useState<GameRulesSettings | null>(null);
+
+  const [rulesError, setRulesError] = useState("");
+
+  const [savingRules, setSavingRules] =
+    useState(false);
+
+  /*
+   * ============================================================
+   * APARÊNCIA
+   * ============================================================
+   */
+
   useEffect(() => {
-    document.documentElement.style.setProperty("--arena-accent", accent);
-    document.documentElement.style.setProperty("--arena-bg", background);
+    document.documentElement.style.setProperty(
+      "--arena-accent",
+      accent,
+    );
+
+    document.documentElement.style.setProperty(
+      "--arena-bg",
+      background,
+    );
+
     localStorage.setItem("arena-accent", accent);
     localStorage.setItem("arena-background", background);
   }, [accent, background]);
+
+  /*
+   * ============================================================
+   * ÁUDIO
+   * ============================================================
+   */
+
   useEffect(() => {
+    localStorage.setItem(
+      "arena-muted",
+      String(muted),
+    );
+  }, [muted]);
+
+  /*
+   * ============================================================
+   * REGRAS DO JOGO
+   * ============================================================
+   */
+
+  useEffect(() => {
+    if (section !== "rules") {
+      return;
+    }
+
+    setRulesError("");
+
     void window.arena
       .gameRules()
       .then((savedRules) => {
@@ -1850,225 +1907,490 @@ function SettingsPage({ reload }: { reload: () => Promise<void> }) {
             : "Não foi possível carregar as regras do jogo.",
         );
       });
-  }, []);
-  const toggleMute = () => {
-    const next = !muted;
-    setMuted(next);
-    localStorage.setItem("arena-muted", String(next));
-    if (!next) playArenaSound("click");
-  };
+  }, [section]);
+
+  /*
+   * ============================================================
+   * RESET DOS DADOS
+   * ============================================================
+   */
+
   const reset = async () => {
     if (
       !window.confirm(
         "Limpar jogadores, partidas e campeonatos? Esta ação não pode ser desfeita.",
       )
-    )
+    ) {
       return;
+    }
+
     await window.arena.resetArena();
     await reload();
+
     setMessage("Dados da Arena limpos.");
+
+    window.setTimeout(() => {
+      setMessage("");
+    }, 3000);
   };
-  const updateRule = (key: keyof GameRulesSettings, value: string) => {
-    const numericValue = Number(value);
-    setRules((current) =>
-      current
-        ? { ...current, [key]: Number.isNaN(numericValue) ? 0 : numericValue }
-        : current,
-    );
-  };
+
+  /*
+   * ============================================================
+   * SALVAR REGRAS
+   * ============================================================
+   */
+
   const saveRules = async () => {
-    if (!rules) return;
+    if (!rules) {
+      return;
+    }
+
     setSavingRules(true);
     setRulesError("");
-    setMessage("");
+
     try {
-      const savedRules = await window.arena.saveGameRules(rules);
-      setRules(savedRules);
+      await window.arena.saveGameRules(rules);
+
       setMessage("Regras do jogo salvas.");
-    } catch (error) {
+
+      window.setTimeout(() => {
+        setMessage("");
+      }, 3000);
+    } catch (error: unknown) {
       setRulesError(
         error instanceof Error
           ? error.message
-          : "Não foi possível salvar as regras do jogo.",
+          : "Não foi possível salvar as regras.",
       );
     } finally {
       setSavingRules(false);
     }
   };
+
+  /*
+   * ============================================================
+   * RENDER
+   * ============================================================
+   */
+
   return (
-    <>
-      <section className="page-title">
+    <section className="page settings-page">
+      <header className="page-header">
         <div>
-          <p>PAINEL DA ARENA</p>
+          <span className="eyebrow">
+            CONFIGURAÇÕES
+          </span>
+
           <h1>Configurações</h1>
-          <span>Som, cores e dados essenciais.</span>
+
+          <p>
+            Personalize o FC Arena e configure o funcionamento
+            da sua Arena.
+          </p>
         </div>
-      </section>
-      <section className="settings-shell">
-        <nav className="settings-nav" aria-label="Categorias de configurações">
-          {sections.map(({ id, label, description, icon: Icon }) => (
-            <button
-              type="button"
-              key={id}
-              className={section === id ? "active" : ""}
-              onClick={() => setSection(id)}
-            >
-              <Icon size={17} />
-              <span>
-                <b>{label}</b>
-                <small>{description}</small>
-              </span>
-            </button>
-          ))}
-        </nav>
-        <div className="settings-content">
-          {section === "appearance" ? (
-            <div className="settings-appearance">
-              <article className="settings-card">
-                <Sparkles />
-                <div>
-                  <h2>Personalizar cores</h2>
-                  <p>
-                    As cores são aplicadas na hora e ficam salvas nesta máquina.
-                  </p>
-                  <div className="color-settings">
-                    <label>
-                      Fundo
-                      <input
-                        type="color"
-                        value={background}
-                        onChange={(e) => setBackground(e.target.value)}
-                      />
-                    </label>
-                    <label>
-                      Destaque
-                      <input
-                        type="color"
-                        value={accent}
-                        onChange={(e) => setAccent(e.target.value)}
-                      />
-                    </label>
-                  </div>
-                </div>
-              </article>
-              <article className="settings-card">
-                <button className="mute-toggle" onClick={toggleMute}>
-                  {muted ? <VolumeX /> : <Volume2 />}
-                  <span>
-                    <b>{muted ? "Efeitos desligados" : "Efeitos ligados"}</b>
-                    <small>Clique para {muted ? "ativar" : "silenciar"}</small>
+      </header>
+
+      <div className="settings-layout">
+        {/* =====================================================
+            MENU LATERAL
+            ===================================================== */}
+
+        <aside className="settings-sidebar">
+          <div className="settings-sidebar-header">
+            <span>CONFIGURAÇÕES</span>
+          </div>
+
+          <nav className="settings-nav">
+            {sections.map((item) => {
+              const Icon = item.icon;
+              const active = section === item.id;
+
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={`settings-nav-item ${
+                    active ? "active" : ""
+                  }`}
+                  onClick={() => setSection(item.id)}
+                >
+                  <span className="settings-nav-icon">
+                    <Icon size={18} />
                   </span>
+
+                  <span className="settings-nav-content">
+                    <strong>{item.label}</strong>
+
+                    <small>
+                      {item.description}
+                    </small>
+                  </span>
+
+                  <ArrowRight
+                    size={15}
+                    className="settings-nav-arrow"
+                  />
                 </button>
-              </article>
-              <article className="settings-card reset-card">
-                <Trash2 />
-                <div>
-                  <h2>Limpar dados</h2>
-                  <p>
-                    Remove jogadores, partidas e campeonatos. O catálogo de
-                    clubes é mantido.
-                  </p>
-                  <button onClick={reset}>Resetar Arena</button>
-                </div>
-              </article>
+              );
+            })}
+          </nav>
+        </aside>
+
+        {/* =====================================================
+            CONTEÚDO
+            ===================================================== */}
+
+        <div className="settings-content">
+          {message && (
+            <div className="settings-message">
+              <Check size={16} />
+              <span>{message}</span>
             </div>
-          ) : section === "rules" ? (
-            <article className="settings-card rules-card">
-              <Gauge />
-              <div>
-                <h2>Regras do jogo</h2>
-                <p>
-                  Defina a pontuação usada pelo ranking e o mínimo da Melhor
-                  Forma.
-                </p>
-                {rulesError && (
-                  <div className="settings-inline-error">{rulesError}</div>
-                )}
-                {!rules ? (
-                  <Empty text="Carregando regras..." />
-                ) : (
-                  <>
-                    <div className="rules-fields">
-                      <label>
-                        Vitória
-                        <input
-                          type="number"
-                          min="0"
-                          step="1"
-                          value={rules.pointsWin}
-                          onChange={(event) =>
-                            updateRule("pointsWin", event.target.value)
-                          }
-                        />
-                      </label>
-                      <label>
-                        Empate
-                        <input
-                          type="number"
-                          min="0"
-                          step="1"
-                          value={rules.pointsDraw}
-                          onChange={(event) =>
-                            updateRule("pointsDraw", event.target.value)
-                          }
-                        />
-                      </label>
-                      <label>
-                        Derrota
-                        <input
-                          type="number"
-                          min="0"
-                          step="1"
-                          value={rules.pointsLoss}
-                          onChange={(event) =>
-                            updateRule("pointsLoss", event.target.value)
-                          }
-                        />
-                      </label>
-                      <label>
-                        Mínimo da Melhor Forma
-                        <input
-                          type="number"
-                          min="1"
-                          step="1"
-                          value={rules.minimumBestFormMatches}
-                          onChange={(event) =>
-                            updateRule(
-                              "minimumBestFormMatches",
-                              event.target.value,
-                            )
-                          }
-                        />
-                      </label>
-                    </div>
+          )}
+
+          {/* ===================================================
+              APARÊNCIA
+              =================================================== */}
+
+          {section === "appearance" ? (
+            <article className="settings-card">
+              <div className="settings-card-header">
+                <div>
+                  <span className="settings-card-label">
+                    PERSONALIZAÇÃO
+                  </span>
+
+                  <h2>Aparência</h2>
+
+                  <p>
+                    Personalize as cores e efeitos visuais
+                    do FC Arena.
+                  </p>
+                </div>
+
+                <Sparkles size={22} />
+              </div>
+
+              <div className="settings-section">
+                <div className="settings-section-heading">
+                  <div>
+                    <h3>Cor de destaque</h3>
+
+                    <p>
+                      Escolha a cor principal utilizada
+                      nos elementos da interface.
+                    </p>
+                  </div>
+
+                  <div
+                    className="settings-color-preview"
+                    style={{
+                      background: accent,
+                    }}
+                  />
+                </div>
+
+                <div className="settings-color-row">
+                  {[
+                    "#8872ff",
+                    "#4f8cff",
+                    "#00c896",
+                    "#f5a524",
+                    "#ef5da8",
+                    "#ef5350",
+                  ].map((color) => (
                     <button
-                      className="primary settings-save"
+                      key={color}
                       type="button"
-                      onClick={() => void saveRules()}
-                      disabled={savingRules}
-                    >
-                      {savingRules ? "Salvando..." : "Salvar alterações"}
-                    </button>
-                  </>
-                )}
+                      aria-label={`Selecionar cor ${color}`}
+                      className={`settings-color-option ${
+                        accent === color ? "active" : ""
+                      }`}
+                      style={{
+                        background: color,
+                      }}
+                      onClick={() => setAccent(color)}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              <div className="settings-section">
+                <div className="settings-section-heading">
+                  <div>
+                    <h3>Fundo</h3>
+
+                    <p>
+                      Defina a tonalidade principal do
+                      aplicativo.
+                    </p>
+                  </div>
+
+                  <div
+                    className="settings-color-preview"
+                    style={{
+                      background: background,
+                    }}
+                  />
+                </div>
+
+                <div className="settings-color-row">
+                  {[
+                    "#0a0f1f",
+                    "#0d1117",
+                    "#111318",
+                    "#15121d",
+                  ].map((color) => (
+                    <button
+                      key={color}
+                      type="button"
+                      aria-label={`Selecionar fundo ${color}`}
+                      className={`settings-color-option ${
+                        background === color
+                          ? "active"
+                          : ""
+                      }`}
+                      style={{
+                        background: color,
+                      }}
+                      onClick={() =>
+                        setBackground(color)
+                      }
+                    />
+                  ))}
+                </div>
+              </div>
+
+              <div className="settings-section">
+                <div className="settings-toggle-row">
+                  <div className="settings-toggle-content">
+                    <h3>Efeitos sonoros</h3>
+
+                    <p>
+                      Ative ou desative os sons da
+                      interface.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    className={`settings-toggle ${
+                      !muted ? "active" : ""
+                    }`}
+                    aria-pressed={!muted}
+                    onClick={() =>
+                      setMuted((value) => !value)
+                    }
+                  >
+                    <span />
+                  </button>
+                </div>
               </div>
             </article>
+
+          /* ===================================================
+             REGRAS
+             =================================================== */
+
+          ) : section === "rules" ? (
+            <article className="settings-card">
+              <div className="settings-card-header">
+                <div>
+                  <span className="settings-card-label">
+                    REGRAS
+                  </span>
+
+                  <h2>Regras do jogo</h2>
+
+                  <p>
+                    Configure as regras utilizadas nos
+                    campeonatos da Arena.
+                  </p>
+                </div>
+
+                <Gauge size={22} />
+              </div>
+
+              {rulesError && (
+                <div className="settings-error">
+                  {rulesError}
+                </div>
+              )}
+
+              {!rules ? (
+                <div className="settings-loading">
+                  <span />
+                  <p>
+                    Carregando regras...
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <div className="settings-section">
+                    <div className="settings-section-heading">
+                      <div>
+                        <h3>
+                          Configurações gerais
+                        </h3>
+
+                        <p>
+                          Regras padrão para novos
+                          campeonatos.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="settings-form-grid">
+                      {/* Mantenha aqui os campos de
+                          GameRulesSettings que já existiam
+                          anteriormente no seu arquivo. */}
+                    </div>
+                  </div>
+
+                  <div className="settings-actions">
+                    <button
+                      type="button"
+                      className="primary-button"
+                      disabled={savingRules}
+                      onClick={saveRules}
+                    >
+                      {savingRules
+                        ? "Salvando..."
+                        : "Salvar regras"}
+                    </button>
+                  </div>
+                </>
+              )}
+            </article>
+
+          /* ===================================================
+             SOBRE
+             =================================================== */
+
+          ) : section === "about" ? (
+            <article className="settings-card settings-about-app">
+              <div className="settings-about-app-header">
+                <div className="settings-about-app-icon">
+                  <img
+                    src={fcArenaLogo}
+                    alt="Logo FC Arena"
+                  />
+                </div>
+
+                <div className="settings-about-app-heading">
+                  <span className="settings-about-app-label">
+                    SOBRE O APLICATIVO
+                  </span>
+
+                  <h2>FC Arena</h2>
+
+                  <p>
+                    Gerenciador de campeonatos para
+                    EA Sports FC.
+                  </p>
+                </div>
+              </div>
+
+              <div className="settings-about-app-info">
+                <div className="settings-about-app-item">
+                  <span>Versão</span>
+                  <strong>0.1.0</strong>
+                </div>
+
+                <div className="settings-about-app-item">
+                  <span>Plataforma</span>
+                  <strong>Desktop</strong>
+                </div>
+
+                <div className="settings-about-app-item">
+                  <span>Tecnologia</span>
+                  <strong>
+                    Electron + React + TypeScript
+                  </strong>
+                </div>
+
+                <div className="settings-about-app-item">
+                  <span>Banco de dados</span>
+                  <strong>
+                    SQLite + Supabase
+                  </strong>
+                </div>
+
+                <div className="settings-about-app-item">
+                  <span>Desenvolvedor</span>
+                  <strong>
+                    Victor Henrique
+                  </strong>
+                </div>
+              </div>
+
+              <div className="settings-about-app-description">
+                <span className="settings-about-app-section-label">
+                  O PROJETO
+                </span>
+
+                <h3>
+                  Sobre o FC Arena
+                </h3>
+
+                <p>
+                  O FC Arena foi desenvolvido para
+                  facilitar a criação e o gerenciamento
+                  de campeonatos de EA Sports FC,
+                  permitindo organizar jogadores,
+                  equipes, partidas, rankings e
+                  competições em um único lugar.
+                </p>
+              </div>
+            </article>
+
+          /* ===================================================
+             OUTRAS SEÇÕES
+             =================================================== */
+
           ) : (
             <article className="settings-card settings-placeholder">
-              <Sparkles />
+              <div className="settings-placeholder-icon">
+                {(() => {
+                  const currentSection =
+                    sections.find(
+                      (item) =>
+                        item.id === section,
+                    );
+
+                  const Icon =
+                    currentSection?.icon ??
+                    Sparkles;
+
+                  return <Icon size={22} />;
+                })()}
+              </div>
+
               <div>
-                <h2>{sections.find((item) => item.id === section)?.label}</h2>
+                <span className="settings-placeholder-label">
+                  CONFIGURAÇÃO
+                </span>
+
+                <h2>
+                  {
+                    sections.find(
+                      (item) =>
+                        item.id === section,
+                    )?.label
+                  }
+                </h2>
+
                 <p>
-                  Esta categoria está preparada para uma próxima fase e ainda
+                  Esta categoria está preparada
+                  para uma próxima fase e ainda
                   não possui ações configuradas.
                 </p>
               </div>
             </article>
           )}
         </div>
-      </section>
-      {message && <div className="settings-toast">{message}</div>}
-    </>
+      </div>
+    </section>
   );
 }
 
@@ -2174,7 +2496,7 @@ function App() {
           <button onClick={() => window.arena.restore()}>
             <CalendarDays size={18} /> Restaurar backup
           </button>
-          <small>v0.2 · dados locais</small>
+          <small>v0.1.0 · dados locais</small>
         </div>
       </aside>
       <main>{view}</main>

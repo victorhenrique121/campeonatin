@@ -1021,130 +1021,853 @@ body {
     white-space: nowrap;
 }
 
+/* =========================================================
+   LAYOUT
+   ========================================================= */
+
 .settings-layout {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr) minmax(240px, .8fr);
-    gap: 15px;
-    align-items: start;
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
 }
 
-.settings-card,
-.activity-feed {
-    padding: 18px;
-    border: 1px solid #2d3955;
-    border-radius: 15px;
-    background: linear-gradient(140deg, #17213a, #0f172a);
+.settings-sidebar {
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.025);
 }
 
-.settings-card>svg {
-    color: var(--arena-accent);
-    margin-bottom: 13px;
+.settings-sidebar-header {
+  padding: 10px 11px 9px;
 }
 
-.settings-card h2,
-.activity-feed h2 {
-    margin: 0;
-    color: #f0f4ff;
-    font-size: 16px;
+.settings-sidebar-header span {
+  color: rgba(255, 255, 255, 0.34);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
 }
 
-.settings-card p {
-    min-height: 54px;
-    color: #94a2ba;
-    font-size: 11px;
-    line-height: 1.5;
+.settings-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.settings-nav-item {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px;
+  border: 1px solid transparent;
+  border-radius: 11px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.55);
+  text-align: left;
+  cursor: pointer;
+
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease,
+    color 0.18s ease;
+}
+
+.settings-nav-item:hover {
+  background: rgba(255, 255, 255, 0.035);
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.settings-nav-item.active {
+  background: rgba(136, 114, 255, 0.09);
+  border-color: rgba(136, 114, 255, 0.17);
+  color: rgba(255, 255, 255, 0.94);
+}
+
+.settings-nav-icon {
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.035);
+  color: rgba(255, 255, 255, 0.43);
+}
+
+.settings-nav-item.active .settings-nav-icon {
+  background: rgba(136, 114, 255, 0.13);
+  color: var(--arena-accent);
+}
+
+.settings-nav-content {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.settings-nav-content strong {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.settings-nav-content small {
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.32);
+  font-size: 9px;
+  line-height: 1.3;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.settings-nav-arrow {
+  flex-shrink: 0;
+  color: rgba(255, 255, 255, 0.2);
+}
+
+.settings-nav-item.active .settings-nav-arrow {
+  color: var(--arena-accent);
+}
+
+/* =========================================================
+   CONTEÚDO
+   ========================================================= */
+
+.settings-content {
+  min-width: 0;
+}
+
+.settings-card {
+  position: relative;
+  min-width: 0;
+  padding: 26px;
+  overflow: hidden;
+
+  border: 1px solid rgba(255, 255, 255, 0.065);
+  border-radius: 16px;
+
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.settings-card::after {
+  content: "";
+  position: absolute;
+  width: 220px;
+  height: 220px;
+  top: -130px;
+  right: -90px;
+
+  border-radius: 50%;
+  background: var(--arena-accent);
+  opacity: 0.045;
+  filter: blur(55px);
+
+  pointer-events: none;
+}
+
+/* =========================================================
+   CABEÇALHO
+   ========================================================= */
+
+.settings-card-header {
+  position: relative;
+  z-index: 1;
+
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+
+  padding-bottom: 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.055);
+}
+
+.settings-card-header > svg {
+  flex-shrink: 0;
+  color: var(--arena-accent);
+}
+
+.settings-card-label {
+  display: block;
+  margin-bottom: 5px;
+
+  color: var(--arena-accent);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.13em;
+}
+
+.settings-card-header h2 {
+  margin: 0;
+
+  color: rgba(255, 255, 255, 0.94);
+  font-size: 21px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.settings-card-header p {
+  max-width: 650px;
+  margin: 6px 0 0;
+
+  color: rgba(255, 255, 255, 0.42);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+/* =========================================================
+   SEÇÕES
+   ========================================================= */
+
+.settings-section {
+  position: relative;
+  z-index: 1;
+
+  padding: 22px 0;
+
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.settings-section:last-child {
+  border-bottom: 0;
+}
+
+.settings-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+
+  margin-bottom: 16px;
+}
+
+.settings-section-heading h3 {
+  margin: 0;
+
+  color: rgba(255, 255, 255, 0.86);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.settings-section-heading p {
+  margin: 4px 0 0;
+
+  color: rgba(255, 255, 255, 0.38);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+/* =========================================================
+   CORES
+   ========================================================= */
+
+.settings-color-preview {
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
+
+  border: 2px solid rgba(255, 255, 255, 0.12);
+  border-radius: 9px;
+
+  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.2);
+}
+
+.settings-color-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.settings-color-option {
+  width: 33px;
+  height: 33px;
+
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 9px;
+
+  cursor: pointer;
+
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease,
+    border-color 0.18s ease;
+}
+
+.settings-color-option:hover {
+  transform: translateY(-1px);
+}
+
+.settings-color-option.active {
+  border-color: rgba(255, 255, 255, 0.9);
+
+  box-shadow:
+    0 0 0 2px var(--arena-accent),
+    0 5px 14px rgba(0, 0, 0, 0.2);
+}
+
+/* =========================================================
+   TOGGLE
+   ========================================================= */
+
+.settings-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.settings-toggle-content h3 {
+  margin: 0;
+
+  color: rgba(255, 255, 255, 0.86);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.settings-toggle-content p {
+  margin: 4px 0 0;
+
+  color: rgba(255, 255, 255, 0.38);
+  font-size: 11px;
+}
+
+.settings-toggle {
+  width: 44px;
+  height: 24px;
+
+  padding: 3px;
+  border: 0;
+  border-radius: 999px;
+
+  background: rgba(255, 255, 255, 0.09);
+
+  cursor: pointer;
+}
+
+.settings-toggle span {
+  display: block;
+
+  width: 18px;
+  height: 18px;
+
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.55);
+
+  transition: transform 0.18s ease;
+}
+
+.settings-toggle.active {
+  background: var(--arena-accent);
+}
+
+.settings-toggle.active span {
+  transform: translateX(20px);
+  background: white;
+}
+
+/* =========================================================
+   REGRAS
+   ========================================================= */
+
+.settings-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.settings-form-grid > * {
+  min-width: 0;
 }
 
 .settings-actions {
-    display: flex;
-    gap: 8px;
+  display: flex;
+  justify-content: flex-end;
+
+  padding-top: 20px;
 }
 
-.settings-card button,
-.settings-card label {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 9px 10px;
-    color: #d9d3ff;
-    border: 1px solid #6354ad;
-    border-radius: 8px;
-    background: #7661dc20;
-    font-size: 10px;
-    font-weight: 800;
-    cursor: pointer;
+.settings-actions .primary-button {
+  min-height: 39px;
+
+  padding: 0 17px;
+
+  border: 0;
+  border-radius: 9px;
+
+  background: var(--arena-accent);
+  color: white;
+
+  font-size: 12px;
+  font-weight: 600;
+
+  cursor: pointer;
+
+  transition:
+    opacity 0.18s ease,
+    transform 0.18s ease;
 }
 
-.settings-card label input {
-    display: none;
+.settings-actions .primary-button:hover:not(:disabled) {
+  transform: translateY(-1px);
 }
 
-.blind-draw {
-    background: radial-gradient(circle at top left, #7f387145, transparent 62%), linear-gradient(140deg, #271b37, #13182c);
+.settings-actions .primary-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
-.blind-draw button {
-    color: #ffd9ed;
-    border-color: #a5567d;
-    background: #a7396929;
+/* =========================================================
+   MENSAGEM
+   ========================================================= */
+
+.settings-message {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  margin-bottom: 12px;
+  padding: 10px 13px;
+
+  border: 1px solid rgba(136, 114, 255, 0.18);
+  border-radius: 9px;
+
+  background: rgba(136, 114, 255, 0.055);
+
+  color: rgba(255, 255, 255, 0.72);
+
+  font-size: 11px;
 }
 
-.activity-feed>.eyebrow {
-    color: #7fe0d2;
+.settings-message svg {
+  color: var(--arena-accent);
 }
 
-.activity-feed h2 {
-    margin: 6px 0 14px;
+/* =========================================================
+   ERRO
+   ========================================================= */
+
+.settings-error {
+  margin-top: 16px;
+  padding: 11px 13px;
+
+  border: 1px solid rgba(239, 83, 80, 0.18);
+  border-radius: 9px;
+
+  background: rgba(239, 83, 80, 0.055);
+
+  color: rgba(255, 180, 180, 0.9);
+
+  font-size: 11px;
+  line-height: 1.5;
 }
 
-.activity-feed>div {
-    display: flex;
-    gap: 9px;
-    padding: 9px 0;
-    border-top: 1px solid #ffffff0d;
+/* =========================================================
+   LOADING
+   ========================================================= */
+
+.settings-loading {
+  min-height: 170px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+
+  color: rgba(255, 255, 255, 0.38);
 }
 
-.activity-feed i {
+.settings-loading span {
+  width: 15px;
+  height: 15px;
+
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-top-color: var(--arena-accent);
+  border-radius: 50%;
+
+  animation: settings-spin 0.8s linear infinite;
+}
+
+.settings-loading p {
+  margin: 0;
+  font-size: 11px;
+}
+
+@keyframes settings-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* =========================================================
+   SOBRE
+   ========================================================= */
+
+.settings-about-app {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.settings-about-app-header {
+  position: relative;
+  z-index: 1;
+
+  display: flex;
+  align-items: center;
+  gap: 17px;
+}
+
+.settings-about-app-icon {
+  width: 68px;
+  height: 68px;
+  min-width: 68px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  overflow: hidden;
+
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 17px;
+
+  background: rgba(255, 255, 255, 0.03);
+
+  box-shadow:
+    0 10px 25px rgba(0, 0, 0, 0.18);
+}
+
+.settings-about-app-icon img {
+  display: block;
+
+  width: 100%;
+  height: 100%;
+
+  object-fit: contain;
+}
+
+.settings-about-app-heading {
+  min-width: 0;
+}
+
+.settings-about-app-label {
+  display: block;
+
+  margin-bottom: 4px;
+
+  color: var(--arena-accent);
+
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.13em;
+}
+
+.settings-about-app-heading h2 {
+  margin: 0;
+
+  color: rgba(255, 255, 255, 0.95);
+
+  font-size: 25px;
+  font-weight: 650;
+  letter-spacing: -0.025em;
+}
+
+.settings-about-app-heading p {
+  margin: 5px 0 0;
+
+  color: rgba(255, 255, 255, 0.42);
+
+  font-size: 12px;
+}
+
+/* =========================================================
+   DADOS DO APLICATIVO
+   ========================================================= */
+
+.settings-about-app-info {
+  position: relative;
+  z-index: 1;
+
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.settings-about-app-item {
+  min-width: 0;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 15px;
+
+  padding: 12px 14px;
+
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 10px;
+
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.settings-about-app-item span {
+  flex-shrink: 0;
+
+  color: rgba(255, 255, 255, 0.36);
+
+  font-size: 10px;
+}
+
+.settings-about-app-item strong {
+  min-width: 0;
+
+  color: rgba(255, 255, 255, 0.8);
+
+  font-size: 10px;
+  font-weight: 600;
+
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+/* =========================================================
+   DESCRIÇÃO DO PROJETO
+   ========================================================= */
+
+.settings-about-app-description {
+  position: relative;
+  z-index: 1;
+
+  padding-top: 21px;
+
+  border-top: 1px solid rgba(255, 255, 255, 0.055);
+}
+
+.settings-about-app-section-label {
+  display: block;
+
+  margin-bottom: 5px;
+
+  color: var(--arena-accent);
+
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.11em;
+}
+
+.settings-about-app-description h3 {
+  margin: 0 0 7px;
+
+  color: rgba(255, 255, 255, 0.86);
+
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.settings-about-app-description p {
+  max-width: 720px;
+
+  margin: 0;
+
+  color: rgba(255, 255, 255, 0.43);
+
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+/* =========================================================
+   PLACEHOLDER
+   ========================================================= */
+
+.settings-placeholder {
+  min-height: 150px;
+
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.settings-placeholder-icon {
+  width: 48px;
+  height: 48px;
+  min-width: 48px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  border: 1px solid rgba(136, 114, 255, 0.16);
+  border-radius: 13px;
+
+  background: rgba(136, 114, 255, 0.07);
+
+  color: var(--arena-accent);
+}
+
+.settings-placeholder-label {
+  display: block;
+
+  margin-bottom: 4px;
+
+  color: var(--arena-accent);
+
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+
+.settings-placeholder h2 {
+  margin: 0;
+
+  color: rgba(255, 255, 255, 0.9);
+
+  font-size: 18px;
+  font-weight: 650;
+}
+
+.settings-placeholder p {
+  max-width: 580px;
+
+  margin: 6px 0 0;
+
+  color: rgba(255, 255, 255, 0.4);
+
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+/* =========================================================
+   FC ARENA — BARRAS DE ROLAGEM GLOBAIS
+   ========================================================= */
+
+* {
+    scrollbar-width: thin;
+    scrollbar-color: #384565 transparent;
+}
+
+/* Chrome / Electron */
+
+*::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+    background: #35415f;
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+    background: #4b5980;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-thumb:active {
+    background: var(--arena-accent);
+}
+
+*::-webkit-scrollbar-corner {
+    background: transparent;
+}
+
+/* =========================================================
+   RESPONSIVO
+   ========================================================= */
+
+@media (max-width: 900px) {
+  .settings-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-sidebar {
+    position: static;
+  }
+
+  .settings-nav {
     display: grid;
-    place-items: center;
-    width: 25px;
-    height: 25px;
-    color: #77e6d6;
-    border-radius: 8px;
-    background: #2ee0c218;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .settings-form-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
-.activity-feed p {
-    display: grid;
-    gap: 3px;
-    margin: 0;
-    font-size: 10px;
+@media (max-width: 650px) {
+  .settings-nav {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-card {
+    padding: 20px;
+    border-radius: 14px;
+  }
+
+  .settings-about-app-info {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-about-app-header {
+    align-items: flex-start;
+  }
+
+  .settings-about-app-icon {
+    width: 58px;
+    height: 58px;
+    min-width: 58px;
+    border-radius: 14px;
+  }
+
+  .settings-about-app-heading h2 {
+    font-size: 21px;
+  }
+
+  .settings-placeholder {
+    align-items: flex-start;
+    padding: 20px;
+  }
 }
 
-.activity-feed p b {
-    color: #cfd9ed;
-}
+@media (max-width: 480px) {
+  .settings-card {
+    padding: 17px;
+  }
 
-.activity-feed p span,
-.feed-empty {
-    color: #75839d;
-    font-size: 9px;
-}
+  .settings-about-app {
+    gap: 20px;
+  }
 
-.settings-toast {
-    position: fixed;
-    bottom: 28px;
-    left: 50%;
-    z-index: 2000;
-    padding: 11px 15px;
-    color: #eafffa;
-    border: 1px solid #3aa998;
-    border-radius: 9px;
-    background: #123c3b;
-    box-shadow: 0 12px 30px #0008;
-    font-size: 12px;
-    font-weight: 700;
-    transform: translateX(-50%);
+  .settings-about-app-item {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .settings-about-app-item strong {
+    text-align: left;
+  }
+
+  .settings-toggle-row {
+    align-items: flex-start;
+  }
 }
 
 @media (max-width:1050px) {
@@ -2210,161 +2933,6 @@ nav .active {
     font-size: 12px;
 }
 
-.settings-shell {
-    display: grid;
-    grid-template-columns: 220px minmax(0, 1fr);
-    gap: 18px;
-    align-items: start;
-    min-width: 0;
-}
-
-.settings-nav {
-    display: grid;
-    gap: 6px;
-    min-width: 0;
-    padding: 10px;
-    border: 1px solid #2d3955;
-    border-radius: 15px;
-    background: #111a30;
-}
-
-.settings-nav button {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    min-width: 0;
-    padding: 11px 10px;
-    color: #8e9ab5;
-    border: 1px solid transparent;
-    border-radius: 9px;
-    background: transparent;
-    text-align: left;
-}
-
-.settings-nav button:hover,
-.settings-nav button.active {
-    color: #f2f4ff;
-    border-color: #3b4770;
-    background: #20294a;
-}
-
-.settings-nav button>svg {
-    flex: 0 0 auto;
-    color: var(--arena-accent);
-}
-
-.settings-nav button>span {
-    display: grid;
-    gap: 3px;
-    min-width: 0;
-}
-
-.settings-nav button b,
-.settings-nav button small {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.settings-nav button b {
-    font-size: 11px;
-}
-
-.settings-nav button small {
-    color: #75829b;
-    font-size: 9px;
-}
-
-.settings-content {
-    min-width: 0;
-}
-
-.settings-appearance {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 15px;
-    min-width: 0;
-}
-
-.settings-appearance .reset-card {
-    display: flex;
-    grid-column: 1 / -1;
-    gap: 15px;
-    align-items: flex-start;
-}
-
-.settings-placeholder {
-    display: flex;
-    gap: 15px;
-    align-items: flex-start;
-    min-height: 150px;
-}
-
-.settings-placeholder>svg {
-    flex: 0 0 auto;
-}
-
-.rules-card {
-    display: flex;
-    gap: 15px;
-    align-items: flex-start;
-}
-
-.rules-card>svg {
-    flex: 0 0 auto;
-}
-
-.rules-card>div {
-    width: 100%;
-    min-width: 0;
-}
-
-.rules-fields {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 12px;
-    margin: 18px 0;
-}
-
-.rules-fields label {
-    display: grid;
-    gap: 7px;
-    min-width: 0;
-    color: #9ca9c0;
-    font-size: 11px;
-    font-weight: 700;
-}
-
-.rules-fields input {
-    width: 100%;
-    min-width: 0;
-    padding: 10px;
-    border: 1px solid #293653;
-    border-radius: 7px;
-    background: #0b1224;
-    color: #f0f2f9;
-    font: inherit;
-    outline: none;
-}
-
-.rules-fields input:focus {
-    border-color: var(--arena-accent);
-}
-
-.settings-save {
-    justify-content: center;
-}
-
-.settings-inline-error {
-    margin-top: 12px;
-    padding: 10px 12px;
-    border: 1px solid #693f49;
-    border-radius: 8px;
-    background: #25151b;
-    color: #f0a7b1;
-    font-size: 12px;
-}
-
 
 /* ==========================================
    7. PAINÉIS, GRID E TABELAS
@@ -3022,32 +3590,4 @@ nav .active {
         width: 100%;
     }
 
-}
-
-@media (max-width:1050px) {
-    .settings-shell {
-        grid-template-columns: 190px minmax(0, 1fr);
-    }
-}
-
-@media (max-width:600px) {
-    .settings-shell {
-        grid-template-columns: 1fr;
-    }
-
-    .settings-nav {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    .settings-appearance {
-        grid-template-columns: 1fr;
-    }
-
-    .settings-appearance .reset-card {
-        grid-column: auto;
-    }
-
-    .rules-fields {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
 }

@@ -49,7 +49,7 @@
     ],
     "win": {
       "target": "nsis",
-      "icon": "src/midia/fcarena.ico"
+      "icon": "src/midia/fcarena.png"
     },
     "mac": {
       "target": "dmg",
@@ -57,7 +57,7 @@
     },
     "linux": {
       "target": "AppImage",
-      "icon": "src/midia/fcarena.png"
+      "icon": "src/midia/fcarena-icon.png"
     }
   }
 }
