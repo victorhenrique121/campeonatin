@@ -1,6 +1,6 @@
 import "./styles/config.css";
 import fcArenaLogo from "../midia/fcarena-icon.png";
-import React, { FormEvent, useEffect, useState } from "react";
+import React, { FormEvent, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   ArrowRight,
@@ -16,9 +16,11 @@ import {
   Gauge,
   Goal,
   LayoutDashboard,
+  Search,
   Shuffle,
   Shield,
   Sparkles,
+  SquarePen,
   Trash2,
   Trophy,
   Users,
@@ -75,11 +77,34 @@ const copyMatchSummary = async (match: Match) => {
     `⚽ *FC Arena*\n${match.player1} ${match.score1} × ${match.score2} ${match.player2}\n🏟️ ${match.team1} vs ${match.team2}${match.championship ? `\n🏆 ${match.championship}` : ""}`,
   );
   playArenaSound("whistle");
-  alert("Resumo copiado para o WhatsApp.");
 };
 const Empty = ({ text }: { text: string }) => (
   <div className="empty">{text}</div>
 );
+
+/**
+ * Toast discreto (substitui os alert() nativos, que no Electron são
+ * síncronos/bloqueantes). Renderizado pelas páginas que disparam ações
+ * com feedback rápido (ex.: copiar resumo para o WhatsApp).
+ */
+const Toast = ({ message }: { message: string }) =>
+  message ? (
+    <div className="arena-toast" role="status">
+      <Check size={14} /> {message}
+    </div>
+  ) : null;
+
+function useToast() {
+  const [toast, setToast] = useState("");
+  const timer = useRef<number | undefined>(undefined);
+  const showToast = (message: string) => {
+    setToast(message);
+    window.clearTimeout(timer.current);
+    timer.current = window.setTimeout(() => setToast(""), 2200);
+  };
+  useEffect(() => () => window.clearTimeout(timer.current), []);
+  return { toast, showToast };
+}
 function Ranking({ rows }: { rows: Standing[] }) {
   return (
     <div className="table">
@@ -137,7 +162,6 @@ function EditMatchModal({
     if (!Number.isInteger(newScore1) || newScore1 < 0) {
       setError("O placar do primeiro jogador é inválido.");
       return;
-      
     }
 
     if (!Number.isInteger(newScore2) || newScore2 < 0) {
@@ -326,11 +350,14 @@ function Game({
 function DashboardPage({
   data,
   go,
+  reload,
 }: {
   data: Dashboard;
   go: (page: Page) => void;
+  reload: () => Promise<void>;
 }) {
   const [editingMatch, setEditingMatch] = useState<Match | null>(null);
+  const { toast, showToast } = useToast();
   const stats = data.statistics;
   const metrics = [
     ["PARTIDAS", data.matches],
@@ -485,7 +512,10 @@ function DashboardPage({
                   key={m.id}
                   match={m}
                   onEdit={setEditingMatch}
-                  onShare={copyMatchSummary}
+                  onShare={async (match) => {
+                    await copyMatchSummary(match);
+                    showToast("Resumo copiado para o WhatsApp.");
+                  }}
                 />
               ))}
             </div>
@@ -500,10 +530,13 @@ function DashboardPage({
           onClose={() => setEditingMatch(null)}
           onSaved={async () => {
             setEditingMatch(null);
-            window.location.reload();
+            // P0-2: sem window.location.reload() — o App passa o reload de
+            // estado (dashboard/players/teams) e a janela permanece intacta.
+            await reload();
           }}
         />
       )}
+      <Toast message={toast} />
     </>
   );
 }
@@ -589,6 +622,114 @@ function PlayersPage({
     </>
   );
 }
+/**
+ * Seletor de time com busca (P1-2): substitui o fluxo antigo de "ativar o
+ * campo para depois escolher". Cada jogador tem seu slot sempre visível, com
+ * indicação clara de quem ainda está sem time (âmbar + "!") e confirmação
+ * verde quando preenchido. Reutilizado no formulário avulso e no modal de
+ * resultado de confronto do campeonato.
+ * Comportamentos preservados do picker anterior: busca por nome/liga/país,
+ * edição da busca invalida a seleção atual, clique fora fecha a lista.
+ */
+function TeamPicker({
+  label,
+  teams,
+  value,
+  onChange,
+}: {
+  label: string;
+  teams: Team[];
+  value: Team | null;
+  onChange: (team: Team | null) => void;
+}) {
+  const [search, setSearch] = useState(value?.name ?? "");
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const onDocumentClick = (event: MouseEvent) => {
+      if (rootRef.current && !rootRef.current.contains(event.target as Node))
+        setOpen(false);
+    };
+    document.addEventListener("click", onDocumentClick);
+    return () => document.removeEventListener("click", onDocumentClick);
+  }, []);
+
+  const query = search.toLowerCase();
+  const filtered = teams.filter(
+    (t) =>
+      t.name.toLowerCase().includes(query) ||
+      t.league.toLowerCase().includes(query) ||
+      t.country.toLowerCase().includes(query),
+  );
+
+  return (
+    <div
+      className="team-picker"
+      ref={rootRef}
+      onClick={(event) => event.stopPropagation()}
+    >
+      <span className="team-picker-label">{label}</span>
+      <div className={`team-picker-slot ${value ? "filled" : "pending"}`}>
+        <input
+          type="text"
+          placeholder="Buscar time..."
+          value={search}
+          autoComplete="off"
+          aria-label={label}
+          onChange={(event) => {
+            setSearch(event.target.value);
+            // Ao editar a busca, o time selecionado deixa de ser válido.
+            if (value) onChange(null);
+          }}
+          onFocus={() => setOpen(true)}
+        />
+        <span
+          className={`team-picker-status ${value ? "ok" : "missing"}`}
+          aria-hidden
+        >
+          {value ? <Check size={13} /> : "!"}
+        </span>
+      </div>
+      {value && (
+        <small className="team-picker-picked">
+          <Shield size={12} /> {value.name} · {value.league}
+        </small>
+      )}
+      {open && (
+        <div className="team-picker-results team-results">
+          {filtered.map((team) => (
+            <button
+              type="button"
+              key={team.id}
+              className={value?.id === team.id ? "picked" : ""}
+              onClick={() => {
+                onChange(team);
+                setSearch(team.name);
+                setOpen(false);
+              }}
+            >
+              <span>
+                <Shield size={14} />
+              </span>
+              <div>
+                <b>{team.name}</b>
+                <small>
+                  {team.league} · {team.country}
+                </small>
+              </div>
+              {value?.id === team.id && <Check size={13} />}
+            </button>
+          ))}
+          {!filtered.length && (
+            <p className="team-picker-empty">Nenhum time encontrado</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function MatchesPage({
   players,
   teams,
@@ -602,13 +743,13 @@ function MatchesPage({
   const [editingMatch, setEditingMatch] = useState<Match | null>(null);
   const [showClearModal, setShowClearModal] = useState(false);
   const [deletingMatch, setDeletingMatch] = useState<Match | null>(null);
-  const [championships, setChampionships] = useState<Championship[]>([]);
-  const [teamSearch1, setTeamSearch1] = useState("");
-  const [teamSearch2, setTeamSearch2] = useState("");
-  const [showTeamList1, setShowTeamList1] = useState(false);
-  const [showTeamList2, setShowTeamList2] = useState(false);
+  const [formError, setFormError] = useState("");
+  const [pickerEpoch, setPickerEpoch] = useState(0);
+  const { toast, showToast } = useToast();
+  // P1-1: formulário 100% avulso. Resultados de campeonato são registrados
+  // na tela de detalhes da temporada (confronto pendente → "Registrar
+  // resultado"), com jogadores já definidos pela fixture.
   const [form, setForm] = useState({
-    championshipId: "",
     player1Id: "",
     team1Id: "",
     score1: "0",
@@ -617,33 +758,12 @@ function MatchesPage({
     team2Id: "",
   });
 
-  const filteredTeams1 = teams.filter(
-    (t) =>
-      t.name.toLowerCase().includes(teamSearch1.toLowerCase()) ||
-      t.league.toLowerCase().includes(teamSearch1.toLowerCase()) ||
-      t.country.toLowerCase().includes(teamSearch1.toLowerCase()),
-  );
-
-  const filteredTeams2 = teams.filter(
-    (t) =>
-      t.name.toLowerCase().includes(teamSearch2.toLowerCase()) ||
-      t.league.toLowerCase().includes(teamSearch2.toLowerCase()) ||
-      t.country.toLowerCase().includes(teamSearch2.toLowerCase()),
-  );
-
   useEffect(() => {
-    Promise.all([window.arena.matches(), window.arena.championships()]).then(
-      ([m, c]) => {
-        setMatches(m);
-        setChampionships(c);
-      },
-    );
+    window.arena.matches().then(setMatches);
   }, []);
 
-  useEffect(() => {
-    document.addEventListener("click", handleClickOutside);
-    return () => document.removeEventListener("click", handleClickOutside);
-  }, []);
+  const team1 = teams.find((t) => String(t.id) === form.team1Id) ?? null;
+  const team2 = teams.find((t) => String(t.id) === form.team2Id) ?? null;
   const select = (
     key: keyof typeof form,
     label: string,
@@ -667,141 +787,27 @@ function MatchesPage({
     </label>
   );
 
-  const selectTeam = (
-    key: "team1Id" | "team2Id",
-    label: string,
-    search: string,
-    setSearch: (v: string) => void,
-    showList: boolean,
-    setShowList: (v: boolean) => void,
-    filtered: Team[],
-  ) => (
-    <div style={{ position: "relative" }} onClick={(e) => e.stopPropagation()}>
-      <label style={{ display: "block", marginBottom: "7px" }}>
-        {label}
-        <input
-          type="text"
-          placeholder="Buscar time..."
-          value={search}
-          onChange={(e) => {
-            const value = e.target.value;
-            setSearch(value);
-            // Ao editar a busca, o time selecionado deixa de ser válido.
-            if (form[key]) {
-              setForm({ ...form, [key]: "" });
-            }
-          }}
-          onFocus={() => setShowList(true)}
-          onMouseDown={(e) => e.stopPropagation()}
-          required
-          style={{
-            background: "#0b1224",
-            border: "1px solid #293653",
-            color: "#f0f2f9",
-            padding: "11px",
-            borderRadius: "7px",
-            font: "inherit",
-            width: "100%",
-            outline: "none",
-          }}
-        />
-      </label>
-      {showList && (
-        <div
-          className="team-results"
-          style={{
-            position: "absolute",
-            top: "100%",
-            left: 0,
-            right: 0,
-            background: "#0b1224",
-            border: "1px solid #293653",
-            borderRadius: "7px",
-            zIndex: 1000,
-            marginTop: "-20px",
-          }}
-          onMouseDown={(e) => e.stopPropagation()}
-        >
-          {filtered.map((team) => (
-            <div
-              key={team.id}
-              onClick={() => {
-                setForm({ ...form, [key]: String(team.id) });
-                setSearch(team.name);
-                setShowList(false);
-              }}
-              onMouseDown={(e) => e.stopPropagation()}
-              style={{
-                padding: "10px 11px",
-                cursor: "pointer",
-                borderBottom: "1px solid #202942",
-                fontSize: "14px",
-                backgroundColor:
-                  form[key] === String(team.id) ? "#17213a" : "transparent",
-              }}
-              onMouseEnter={(e) => {
-                if (form[key] !== String(team.id)) {
-                  (e.target as HTMLElement).style.background = "#17213a";
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (form[key] !== String(team.id)) {
-                  (e.target as HTMLElement).style.background = "transparent";
-                }
-              }}
-            >
-              <div style={{ fontWeight: 500 }}>{team.name}</div>
-              <div
-                style={{ fontSize: "12px", color: "#9ca9c0", marginTop: "4px" }}
-              >
-                {team.league} · {team.country}
-              </div>
-            </div>
-          ))}
-          {!filtered.length && (
-            <div
-              style={{
-                padding: "15px",
-                textAlign: "center",
-                color: "#9ca9c0",
-                fontSize: "14px",
-              }}
-            >
-              Nenhum time encontrado
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-
-  const handleClickOutside = () => {
-    setShowTeamList1(false);
-    setShowTeamList2(false);
-  };
   const submit = async (e: FormEvent) => {
     e.preventDefault();
+    setFormError("");
 
     const player1Id = Number(form.player1Id);
     const player2Id = Number(form.player2Id);
     const team1Id = Number(form.team1Id);
     const team2Id = Number(form.team2Id);
-    const championshipId = form.championshipId
-      ? Number(form.championshipId)
-      : undefined;
 
     if (!player1Id || !player2Id || !team1Id || !team2Id) {
-      alert("Selecione os dois jogadores e os dois times.");
+      setFormError("Selecione os dois jogadores e os dois times.");
       return;
     }
 
     if (player1Id === player2Id) {
-      alert("Escolha jogadores diferentes.");
+      setFormError("Escolha jogadores diferentes.");
       return;
     }
 
     if (team1Id === team2Id) {
-      alert("Escolha times diferentes.");
+      setFormError("Escolha times diferentes.");
       return;
     }
 
@@ -813,13 +819,11 @@ function MatchesPage({
         team2Id,
         score1: Number(form.score1),
         score2: Number(form.score2),
-        championshipId,
       });
       playArenaSound("whistle");
 
       setMatches(await window.arena.matches());
       setForm({
-        championshipId: "",
         player1Id: "",
         team1Id: "",
         score1: "0",
@@ -827,11 +831,11 @@ function MatchesPage({
         player2Id: "",
         team2Id: "",
       });
-      setTeamSearch1("");
-      setTeamSearch2("");
+      // Remonta os TeamPickers zerando a busca interna.
+      setPickerEpoch((epoch) => epoch + 1);
       await reload();
     } catch (error) {
-      alert(
+      setFormError(
         error instanceof Error
           ? error.message
           : "Não foi possível registrar a partida.",
@@ -874,55 +878,76 @@ function MatchesPage({
           <p>CENTRO DE JOGOS</p>
           <h1>Registrar partida</h1>
           <span>
-            Em mata-mata, o empate é bloqueado e o vencedor avança
-            automaticamente.
+            Partida avulsa: o resultado entra direto no histórico e no
+            ranking. Resultados de campeonato são registrados na tela de
+            detalhes da temporada, junto ao confronto pendente.
           </span>
         </div>
       </section>
       <section className="grid">
         <article className="panel">
-          <form className="form" onSubmit={submit}>
-            {select("championshipId", "Campeonato", championships, true)}
-            {select("player1Id", "Jogador 1", players)}
-            {form.player1Id && form.player2Id && (
-              <div className="head-to-head">
-                <span className="eyebrow">CONFRONTO DIRETO</span>
-                <b>
-                  {players.find((p) => p.id === Number(form.player1Id))?.name}{" "}
-                  <em>{playerOneWins}V</em> · {headToHead.length} jogos ·{" "}
-                  <em>{playerTwoWins}V</em>{" "}
-                  {players.find((p) => p.id === Number(form.player2Id))?.name}
-                </b>
-                <small>
-                  Saldo de gols: {goalBalance > 0 ? "+" : ""}
-                  {goalBalance}
-                </small>
+          <form className="form match-form" onSubmit={submit}>
+            <div className="match-lanes">
+              <div className="match-lane">
+                {select("player1Id", "Jogador 1", players)}
+                <TeamPicker
+                  key={`team1-${pickerEpoch}`}
+                  label="Time do jogador 1"
+                  teams={teams}
+                  value={team1}
+                  onChange={(picked) =>
+                    setForm((current) => ({
+                      ...current,
+                      team1Id: picked ? String(picked.id) : "",
+                    }))
+                  }
+                />
               </div>
-            )}
-            {selectTeam(
-              "team1Id",
-              "Time do jogador 1",
-              teamSearch1,
-              setTeamSearch1,
-              showTeamList1,
-              setShowTeamList1,
-              filteredTeams1,
-            )}
-            <div className="score">
-              {select("score1", "Gols", scores)}
-              <strong>×</strong>
-              {select("score2", "Gols", scores)}
+              <div className="match-center">
+                <div className="score">
+                  {select("score1", "Gols", scores)}
+                  <strong>×</strong>
+                  {select("score2", "Gols", scores)}
+                </div>
+                {form.player1Id && form.player2Id && (
+                  <div className="head-to-head">
+                    <span className="eyebrow">CONFRONTO DIRETO</span>
+                    <b>
+                      {
+                        players.find((p) => p.id === Number(form.player1Id))
+                          ?.name
+                      }{" "}
+                      <em>{playerOneWins}V</em> · {headToHead.length} jogos ·{" "}
+                      <em>{playerTwoWins}V</em>{" "}
+                      {
+                        players.find((p) => p.id === Number(form.player2Id))
+                          ?.name
+                      }
+                    </b>
+                    <small>
+                      Saldo de gols: {goalBalance > 0 ? "+" : ""}
+                      {goalBalance}
+                    </small>
+                  </div>
+                )}
+              </div>
+              <div className="match-lane">
+                {select("player2Id", "Jogador 2", players)}
+                <TeamPicker
+                  key={`team2-${pickerEpoch}`}
+                  label="Time do jogador 2"
+                  teams={teams}
+                  value={team2}
+                  onChange={(picked) =>
+                    setForm((current) => ({
+                      ...current,
+                      team2Id: picked ? String(picked.id) : "",
+                    }))
+                  }
+                />
+              </div>
             </div>
-            {select("player2Id", "Jogador 2", players)}
-            {selectTeam(
-              "team2Id",
-              "Time do jogador 2",
-              teamSearch2,
-              setTeamSearch2,
-              showTeamList2,
-              setShowTeamList2,
-              filteredTeams2,
-            )}
+            {formError && <div className="arena-form-error">{formError}</div>}
             <button className="primary">Salvar resultado</button>
           </form>
         </article>
@@ -940,7 +965,10 @@ function MatchesPage({
                 match={m}
                 onEdit={setEditingMatch}
                 onDelete={setDeletingMatch}
-                onShare={copyMatchSummary}
+                onShare={async (match) => {
+                  await copyMatchSummary(match);
+                  showToast("Resumo copiado para o WhatsApp.");
+                }}
               />
             ))}
             {!matches.length && <Empty text="As partidas aparecerão aqui." />}
@@ -988,6 +1016,7 @@ function MatchesPage({
           }}
         />
       )}
+      <Toast message={toast} />
     </>
   );
 }
@@ -1049,7 +1078,10 @@ function ChampionshipPage({
     [formError, setFormError] = useState(""),
     [deletingChampionship, setDeletingChampionship] =
       useState<Championship | null>(null),
-    [assignments, setAssignments] = useState<Record<number, Team>>({});
+    [assignments, setAssignments] = useState<Record<number, Team>>({}),
+    [renaming, setRenaming] = useState<Championship | null>(null),
+    [teamQuery, setTeamQuery] = useState(""),
+    [searchedTeams, setSearchedTeams] = useState<Team[] | null>(null);
   useEffect(() => {
     if (!team && teams[0]) setTeam(teams[0]);
   }, [teams, team]);
@@ -1064,12 +1096,34 @@ function ChampionshipPage({
   useEffect(() => {
     if (selected) window.arena.championshipDetail(selected).then(setDetail);
   }, [selected, items.length]);
+  // P2-1: busca de clubes reaproveitando o canal teams:list (query opcional —
+  // o teams-service da Etapa 3 faz ilike remoto ou LIKE local), com debounce.
+  useEffect(() => {
+    const query = teamQuery.trim();
+    if (!query) {
+      setSearchedTeams(null);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      window.arena
+        .teams(query)
+        .then((result) => setSearchedTeams(result))
+        .catch(() => setSearchedTeams(null));
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [teamQuery]);
+  const selectorTeams = searchedTeams ?? teams;
   const save = async (e: FormEvent) => {
     e.preventDefault();
     try {
       const champ = await window.arena.saveChampionship({
         name,
         format,
+        // P2-2: o modo (clássico/dupla/maluco) e o desafio sorteado passam a
+        // ser persistidos para a diferenciação visual na galeria e no detalhe.
+        mode,
+        mutator:
+          mode === "mad" && mutator !== null ? MUTATORS[mutator].title : null,
         startsAt: new Date().toISOString(),
         status: "active",
         participantIds: participants,
@@ -1109,7 +1163,9 @@ function ChampionshipPage({
   };
   const drawTeam = () => {
     playArenaSound("draw");
-    if (teams.length) setTeam(teams[Math.floor(Math.random() * teams.length)]);
+    // Com busca ativa, o sorteio considera a lista filtrada (decisão 5).
+    const pool = selectorTeams.length ? selectorTeams : teams;
+    if (pool.length) setTeam(pool[Math.floor(Math.random() * pool.length)]);
   };
   const pairPlayers = () => {
     playArenaSound("draw");
@@ -1262,6 +1318,25 @@ function ChampionshipPage({
               <Shuffle size={14} /> Sortear aleatório
             </button>
           </div>
+          <div className="team-search">
+            <Search size={14} />
+            <input
+              type="text"
+              placeholder="Buscar clube por nome, liga ou país..."
+              value={teamQuery}
+              onChange={(event) => setTeamQuery(event.target.value)}
+              aria-label="Buscar clube no catálogo"
+            />
+            {teamQuery.trim() && (
+              <button
+                type="button"
+                onClick={() => setTeamQuery("")}
+                aria-label="Limpar busca"
+              >
+                ×
+              </button>
+            )}
+          </div>
           <div className="drawn-team">
             <Shield size={22} />
             <span>
@@ -1272,29 +1347,38 @@ function ChampionshipPage({
               </em>
             </span>
           </div>
-          <div className="nation-grid">
-            {teams.slice(0, 9).map((option, index) => (
-              <button
-                type="button"
-                key={option.id}
-                onClick={() => setTeam(option)}
-                className={team?.id === option.id ? "picked" : ""}
-                style={
-                  {
-                    "--team-tone": CARD_TONES[index % CARD_TONES.length],
-                  } as React.CSSProperties
-                }
-              >
-                <span>
-                  <Shield size={18} />
-                </span>
-                <b>{option.name}</b>
-                <i>
-                  <Check size={12} />
-                </i>
-              </button>
-            ))}
-          </div>
+          {selectorTeams.length ? (
+            <div className="nation-grid">
+              {selectorTeams
+                .slice(0, teamQuery.trim() ? 12 : 9)
+                .map((option, index) => (
+                  <button
+                    type="button"
+                    key={option.id}
+                    onClick={() => setTeam(option)}
+                    className={team?.id === option.id ? "picked" : ""}
+                    style={
+                      {
+                        "--team-tone": CARD_TONES[index % CARD_TONES.length],
+                      } as React.CSSProperties
+                    }
+                  >
+                    <span>
+                      <Shield size={18} />
+                    </span>
+                    <b>{option.name}</b>
+                    <i>
+                      <Check size={12} />
+                    </i>
+                  </button>
+                ))}
+            </div>
+          ) : (
+            <p className="selector-hint">
+              <Search size={14} /> Nenhum clube encontrado para "
+              {teamQuery.trim()}".
+            </p>
+          )}
           <p className="selector-hint">
             <Flag size={14} /> Catálogo real da Arena · disponível em todos os
             modos.
@@ -1414,7 +1498,7 @@ function ChampionshipPage({
                       const player = players.find((p) => p.id === id);
                       return (
                         player && (
-                          <span className="duo-member" key={id}>
+                                                <span className="duo-member" key={id}>
                             <i>{player.name[0]}</i>
                             {player.name}
                           </span>
@@ -1446,9 +1530,17 @@ function ChampionshipPage({
         </div>
         <div className="championship-cards">
           {items.map((c, index) => (
-            <button
+            <article
               className={`season-card ${selected === c.id ? "selected" : ""}`}
               onClick={() => setSelected(c.id)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  setSelected(c.id);
+                }
+              }}
+              tabIndex={0}
+              aria-label={`Temporada ${c.name}`}
               key={c.id}
             >
               <div
@@ -1472,6 +1564,7 @@ function ChampionshipPage({
                   {c.format === "knockout" ? "MATA-MATA" : "PONTOS CORRIDOS"}
                 </span>
                 <h3>{c.name}</h3>
+                <ModeBadge championship={c} />
               </div>
               <footer>
                 <span>
@@ -1480,8 +1573,32 @@ function ChampionshipPage({
                 <span>
                   Ver arena <ArrowRight size={15} />
                 </span>
+                {/* P0-1/P0-2: ações migradas do appearance.ts (DOM injetado)
+                    para a árvore React — sem confirm()/alert()/reload(). */}
+                <div
+                  className="season-card-actions"
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  <button
+                    type="button"
+                    title="Editar nome"
+                    aria-label={`Editar nome de ${c.name}`}
+                    onClick={() => setRenaming(c)}
+                  >
+                    <SquarePen size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    className="danger"
+                    title="Excluir campeonato"
+                    aria-label={`Excluir ${c.name}`}
+                    onClick={() => setDeletingChampionship(c)}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
               </footer>
-            </button>
+            </article>
           ))}
         </div>
         {!items.length && <Empty text="Sua primeira temporada começa aqui." />}
@@ -1489,13 +1606,12 @@ function ChampionshipPage({
       {detail && (
         <ChampionshipDetailView
           detail={detail}
-          onDelete={() => {
-            if (
-              window.confirm(
-                `Apagar definitivamente o campeonato “${detail.championship.name}”?`,
-              )
-            )
-              setDeletingChampionship(detail.championship);
+          teams={teams}
+          onDelete={() => setDeletingChampionship(detail.championship)}
+          onRegistered={async () => {
+            await load();
+            if (selected)
+              setDetail(await window.arena.championshipDetail(selected));
           }}
         />
       )}
@@ -1525,16 +1641,32 @@ function ChampionshipPage({
           }}
         />
       )}
+      {renaming && (
+        <ChampionshipNameModal
+          championship={renaming}
+          onClose={() => setRenaming(null)}
+          onSaved={async () => {
+            await load();
+            if (selected === renaming.id)
+              setDetail(await window.arena.championshipDetail(selected));
+          }}
+        />
+      )}
     </>
   );
 }
 function ChampionshipDetailView({
   detail,
+  teams,
   onDelete,
+  onRegistered,
 }: {
   detail: ChampionshipDetail;
+  teams: Team[];
   onDelete: () => void;
+  onRegistered: () => Promise<void>;
 }) {
+  const [registering, setRegistering] = useState<Fixture | null>(null);
   const grouped = detail.fixtures.reduce<Record<string, Fixture[]>>(
     (all, fixture) => {
       const group =
@@ -1548,11 +1680,14 @@ function ChampionshipDetailView({
     <section className="grid championship-detail">
       <article className="panel">
         <div className="panel-head">
-          <h2>
-            {detail.championship.format === "league"
-              ? "Tabela"
-              : "Participantes"}
-          </h2>
+          <div className="panel-head-group">
+            <h2>
+              {detail.championship.format === "league"
+                ? "Tabela"
+                : "Participantes"}
+            </h2>
+            <ModeBadge championship={detail.championship} />
+          </div>
           <button
             type="button"
             className="delete-championship-btn"
@@ -1577,7 +1712,19 @@ function ChampionshipDetailView({
                 <div className="fixture" key={f.id}>
                   <small>{stage}</small>
                   <span>{f.player1}</span>
-                  <b>{f.matchId ? `${f.score1} × ${f.score2}` : "vs"}</b>
+                  {f.matchId ? (
+                    <b>
+                      {f.score1} × {f.score2}
+                    </b>
+                  ) : (
+                    <button
+                      type="button"
+                      className="fixture-register"
+                      onClick={() => setRegistering(f)}
+                    >
+                      vs · Registrar
+                    </button>
+                  )}
                   <span>{f.player2}</span>
                 </div>
               ))}
@@ -1585,9 +1732,337 @@ function ChampionshipDetailView({
           ))}
         </div>
       </article>
+      {registering && (
+        <FixtureResultModal
+          fixture={registering}
+          championship={detail.championship}
+          teams={teams}
+          onClose={() => setRegistering(null)}
+          onSaved={onRegistered}
+        />
+      )}
     </section>
   );
 }
+
+/* ============================================================================
+   P2-2 — identidade visual dos modos de campeonato (clássico/dupla/maluco),
+   P0-2 — renomeação migrada do appearance.ts para o React (sem reload) e
+   P1-1 — registro de resultado direto do confronto pendente (fixture).
+   ============================================================================ */
+
+type ChampionshipMode = NonNullable<Championship["mode"]>;
+
+const MODE_META: Record<
+  ChampionshipMode,
+  { label: string; icon: React.ElementType; tone: string }
+> = {
+  classic: { label: "Clássico", icon: Trophy, tone: "mode-classic" },
+  duo: { label: "Dupla · 2v2", icon: UsersRound, tone: "mode-duo" },
+  mad: { label: "Maluco", icon: Dices, tone: "mode-mad" },
+};
+
+function ModeBadge({ championship }: { championship: Championship }) {
+  const meta = MODE_META[championship.mode ?? "classic"];
+  const Icon = meta.icon;
+  return (
+    <span className={`mode-badge ${meta.tone}`}>
+      <Icon size={12} />
+      {meta.label}
+      {championship.mode === "mad" && championship.mutator ? (
+        <em title="Desafio sorteado no modo maluco">
+          · {championship.mutator}
+        </em>
+      ) : null}
+    </span>
+  );
+}
+
+function ChampionshipNameModal({
+  championship,
+  onClose,
+  onSaved,
+}: {
+  championship: Championship;
+  onClose: () => void;
+  onSaved: () => Promise<void>;
+}) {
+  const [name, setName] = useState(championship.name);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  async function save() {
+    const nextName = name.trim();
+    if (!nextName) {
+      setError("Informe um nome para o campeonato.");
+      return;
+    }
+    setSaving(true);
+    setError("");
+    try {
+      await window.arena.updateChampionship(championship.id, nextName);
+      await onSaved();
+      onClose();
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Não foi possível salvar o campeonato.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="championship-edit-backdrop" onMouseDown={onClose}>
+      <div
+        className="championship-edit-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="championship-edit-title"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <div className="championship-edit-head">
+          <div>
+            <span className="eyebrow">EDITAR CAMPEONATO</span>
+            <h2 id="championship-edit-title">Nome da temporada</h2>
+          </div>
+          <button
+            type="button"
+            className="championship-edit-close"
+            onClick={onClose}
+            disabled={saving}
+            aria-label="Fechar"
+          >
+            ×
+          </button>
+        </div>
+        <label className="championship-edit-field">
+          <span>Nome</span>
+          <input
+            type="text"
+            maxLength={80}
+            value={name}
+            autoComplete="off"
+            autoFocus
+            disabled={saving}
+            onChange={(event) => setName(event.target.value)}
+            onFocus={(event) => event.currentTarget.select()}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                void save();
+              }
+              if (event.key === "Escape") onClose();
+            }}
+          />
+        </label>
+        {error && (
+          <p className="championship-edit-error" role="alert">
+            {error}
+          </p>
+        )}
+        <div className="championship-edit-actions">
+          <button
+            type="button"
+            className="championship-edit-cancel"
+            onClick={onClose}
+            disabled={saving}
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            className="championship-edit-save"
+            onClick={() => void save()}
+            disabled={saving}
+          >
+            {saving ? "Salvando..." : "Salvar alterações"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FixtureResultModal({
+  fixture,
+  championship,
+  teams,
+  onClose,
+  onSaved,
+}: {
+  fixture: Fixture;
+  championship: Championship;
+  teams: Team[];
+  onClose: () => void;
+  onSaved: () => Promise<void>;
+}) {
+  const [team1, setTeam1] = useState<Team | null>(null);
+  const [team2, setTeam2] = useState<Team | null>(null);
+  const [score1, setScore1] = useState("0");
+  const [score2, setScore2] = useState("0");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const knockout = fixture.stage !== "league";
+  const stageLabel = knockout ? fixture.stage : `Rodada ${fixture.round}`;
+
+  async function submit() {
+    const goals1 = Number(score1);
+    const goals2 = Number(score2);
+    if (
+      !Number.isInteger(goals1) ||
+      goals1 < 0 ||
+      !Number.isInteger(goals2) ||
+      goals2 < 0
+    ) {
+      setError("Informe um placar válido (inteiros maiores ou iguais a zero).");
+      return;
+    }
+    if (!team1 || !team2) {
+      setError("Selecione os dois times.");
+      return;
+    }
+    if (team1.id === team2.id) {
+      setError("Escolha times diferentes.");
+      return;
+    }
+    setSaving(true);
+    setError("");
+    try {
+      // O repository encontra o confronto pendente pelo par de jogadores,
+      // vincula a fixture e avança o mata-mata — comportamento intacto.
+      await window.arena.saveMatch({
+        player1Id: fixture.player1Id,
+        player2Id: fixture.player2Id,
+        team1Id: team1.id,
+        team2Id: team2.id,
+        score1: goals1,
+        score2: goals2,
+        championshipId: championship.id,
+      });
+      playArenaSound("whistle");
+      await onSaved();
+      onClose();
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Não foi possível registrar a partida.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="edit-modal-backdrop" onMouseDown={onClose}>
+      <div
+        className="edit-modal"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <div className="edit-modal-header">
+          <div>
+            <span>REGISTRAR RESULTADO · {championship.name}</span>
+            <h2>
+              {fixture.player1} vs {fixture.player2}
+            </h2>
+          </div>
+          <button
+            type="button"
+            className="edit-modal-close"
+            onClick={onClose}
+            disabled={saving}
+            aria-label="Fechar"
+          >
+            ×
+          </button>
+        </div>
+
+        <div className="edit-match-info">
+          <small>
+            {stageLabel}
+            {knockout
+              ? " · empate não permitido — o vencedor avança automaticamente"
+              : ""}
+          </small>
+        </div>
+
+        <div className="edit-scoreboard">
+          <div className="edit-player">
+            <strong>{fixture.player1}</strong>
+            <span>{team1?.name ?? "Sem time"}</span>
+          </div>
+
+          <div className="edit-score">
+            <input
+              type="number"
+              min="0"
+              value={score1}
+              onChange={(event) => setScore1(event.target.value)}
+              disabled={saving}
+              autoFocus
+            />
+
+            <span>×</span>
+
+            <input
+              type="number"
+              min="0"
+              value={score2}
+              onChange={(event) => setScore2(event.target.value)}
+              disabled={saving}
+            />
+          </div>
+
+          <div className="edit-player edit-player-right">
+            <strong>{fixture.player2}</strong>
+            <span>{team2?.name ?? "Sem time"}</span>
+          </div>
+        </div>
+
+        <div className="fixture-teams">
+          <TeamPicker
+            label={`Time de ${fixture.player1}`}
+            teams={teams}
+            value={team1}
+            onChange={setTeam1}
+          />
+          <TeamPicker
+            label={`Time de ${fixture.player2}`}
+            teams={teams}
+            value={team2}
+            onChange={setTeam2}
+          />
+        </div>
+
+        {error && <div className="edit-error">{error}</div>}
+
+        <div className="edit-modal-actions">
+          <button
+            type="button"
+            className="edit-cancel"
+            onClick={onClose}
+            disabled={saving}
+          >
+            Cancelar
+          </button>
+
+          <button
+            type="button"
+            className="edit-save"
+            onClick={() => void submit()}
+            disabled={saving}
+          >
+            {saving ? "Salvando..." : "Salvar resultado"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function TeamsPage({ teams }: { teams: Team[] }) {
   return (
     <>
@@ -1848,6 +2323,9 @@ function SettingsPage({
   const [savingRules, setSavingRules] =
     useState(false);
 
+  const [confirmingReset, setConfirmingReset] =
+    useState(false);
+
   /*
    * ============================================================
    * APARÊNCIA
@@ -1916,15 +2394,10 @@ function SettingsPage({
    * ============================================================
    */
 
+  // Reset dos dados. Nota: na UI atual esta função não possui botão de
+  // disparo (a seção "Dados" renderiza um placeholder) — fica pronta e
+  // refactorada para o AppModal do projeto, sem window.confirm nativo.
   const reset = async () => {
-    if (
-      !window.confirm(
-        "Limpar jogadores, partidas e campeonatos? Esta ação não pode ser desfeita.",
-      )
-    ) {
-      return;
-    }
-
     await window.arena.resetArena();
     await reload();
 
@@ -2391,6 +2864,17 @@ function SettingsPage({
           )}
         </div>
       </div>
+
+      {confirmingReset && (
+        <AppModal
+          title="Limpar dados da Arena?"
+          message="Limpar jogadores, partidas e campeonatos? Esta ação não pode ser desfeita."
+          confirmText="Limpar tudo"
+          danger
+          onClose={() => setConfirmingReset(false)}
+          onConfirm={reset}
+        />
+      )}
     </section>
   );
 }
@@ -2445,7 +2929,7 @@ function App() {
   ];
   const view =
     page === "dashboard" ? (
-      <DashboardPage data={data} go={setPage} />
+      <DashboardPage data={data} go={setPage} reload={reload} />
     ) : page === "players" ? (
       <PlayersPage players={players} reload={reload} />
     ) : page === "matches" ? (

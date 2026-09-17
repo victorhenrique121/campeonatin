@@ -844,6 +844,25 @@ npm run migrate:matches
 
 ---
 
+# 21. (UX) Colunas `mode`/`mutator` em `public.championships` — opcional
+
+A diferenciação visual dos modos de campeonato (Clássico / Dupla 2v2 /
+Maluco + desafio sorteado) passou a persistir `mode` e `mutator` no
+**SQLite**. A migração local é automática e guardada no boot
+(`PRAGMA table_info` + `ALTER TABLE ... ADD COLUMN`, default
+`'classic'`) — não há nada a fazer localmente, nem em bancos antigos.
+
+No **Supabase**, `public.championships` continua sem uso pelo aplicativo
+(a migração de championships é a próxima etapa, conforme a seção 19).
+Para manter o schema remoto alinhado com o local desde já, aplique no
+**SQL Editor** a migration
+`supabase/migrations/20260917120000_add_championship_mode.sql`
+(idempotente; inofensiva com a tabela vazia; não altera RLS). Se
+preferir, aplique junto da etapa de championships — o app não lê nem
+escreve championships remotamente nesta fase.
+
+---
+
 ## Regra principal deste README
 
 A migração é **incremental**.

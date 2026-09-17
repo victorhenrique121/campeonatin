@@ -34,7 +34,7 @@ export function createDatabase(file: string) {
   db.exec(`
     CREATE TABLE IF NOT EXISTS players (id INTEGER PRIMARY KEY, name TEXT NOT NULL, nickname TEXT NOT NULL UNIQUE, avatar TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
     CREATE TABLE IF NOT EXISTS teams (id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE, league TEXT NOT NULL, country TEXT NOT NULL);
-    CREATE TABLE IF NOT EXISTS championships (id INTEGER PRIMARY KEY, name TEXT NOT NULL, format TEXT NOT NULL CHECK(format IN ('league','knockout','groups_knockout')), starts_at TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'draft');
+    CREATE TABLE IF NOT EXISTS championships (id INTEGER PRIMARY KEY, name TEXT NOT NULL, format TEXT NOT NULL CHECK(format IN ('league','knockout','groups_knockout')), mode TEXT NOT NULL DEFAULT 'classic' CHECK(mode IN ('classic','duo','mad')), mutator TEXT, starts_at TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'draft');
     CREATE TABLE IF NOT EXISTS championship_participants (championship_id INTEGER NOT NULL REFERENCES championships(id) ON DELETE CASCADE, player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE RESTRICT, PRIMARY KEY(championship_id, player_id));
     CREATE TABLE IF NOT EXISTS fixtures (id INTEGER PRIMARY KEY, championship_id INTEGER NOT NULL REFERENCES championships(id) ON DELETE CASCADE, round_number INTEGER NOT NULL, stage TEXT NOT NULL DEFAULT 'league', player1_id INTEGER NOT NULL REFERENCES players(id) ON DELETE RESTRICT, player2_id INTEGER NOT NULL REFERENCES players(id) ON DELETE RESTRICT, match_id INTEGER UNIQUE REFERENCES matches(id) ON DELETE SET NULL, UNIQUE(championship_id, player1_id, player2_id));
     CREATE TABLE IF NOT EXISTS matches (id INTEGER PRIMARY KEY, player1_id INTEGER NOT NULL REFERENCES players(id) ON DELETE RESTRICT, player2_id INTEGER NOT NULL REFERENCES players(id) ON DELETE RESTRICT, team1_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE RESTRICT, team2_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE RESTRICT, score1 INTEGER NOT NULL CHECK(score1 >= 0), score2 INTEGER NOT NULL CHECK(score2 >= 0), championship_id INTEGER REFERENCES championships(id) ON DELETE SET NULL, played_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, CHECK(player1_id <> player2_id));
@@ -67,6 +67,24 @@ export function createDatabase(file: string) {
       ALTER TABLE teams_backup RENAME TO teams;
     `);
   }
+
+  // Migração (UX pós-Etapa 4): championships ganha "mode" (classic/duo/mad) e
+  // "mutator" (título do desafio do modo maluco). Bancos antigos recebem as
+  // colunas via ALTER com default 'classic' — os campeonatos existentes
+  // nasceram antes da distinção de modos. O CHECK de mode vale para bancos
+  // novos (CREATE acima); em bancos migrados a validação acontece no
+  // saveChampionship.
+  const championshipColumns = db
+    .prepare("PRAGMA table_info(championships)")
+    .all() as {
+    name: string;
+  }[];
+  if (!championshipColumns.some((column) => column.name === "mode"))
+    db.exec(
+      "ALTER TABLE championships ADD COLUMN mode TEXT NOT NULL DEFAULT 'classic'",
+    );
+  if (!championshipColumns.some((column) => column.name === "mutator"))
+    db.exec("ALTER TABLE championships ADD COLUMN mutator TEXT");
 
   db.exec(
     "CREATE INDEX IF NOT EXISTS idx_fixtures_championship_round ON fixtures(championship_id, round_number)",
@@ -824,13 +842,13 @@ export function repository(db: Database.Database) {
     championships: () =>
       db
         .prepare(
-          `SELECT c.id,c.name,c.format,c.starts_at startsAt,c.status,COUNT(cp.player_id) participants FROM championships c LEFT JOIN championship_participants cp ON cp.championship_id=c.id GROUP BY c.id ORDER BY c.starts_at DESC`,
+          `SELECT c.id,c.name,c.format,c.mode,c.mutator,c.starts_at startsAt,c.status,COUNT(cp.player_id) participants FROM championships c LEFT JOIN championship_participants cp ON cp.championship_id=c.id GROUP BY c.id ORDER BY c.starts_at DESC`,
         )
         .all() as Championship[],
     championshipDetail: (id: number) => {
       const championship = db
         .prepare(
-          `SELECT c.id,c.name,c.format,c.starts_at startsAt,c.status,COUNT(cp.player_id) participants FROM championships c LEFT JOIN championship_participants cp ON cp.championship_id=c.id WHERE c.id=? GROUP BY c.id`,
+          `SELECT c.id,c.name,c.format,c.mode,c.mutator,c.starts_at startsAt,c.status,COUNT(cp.player_id) participants FROM championships c LEFT JOIN championship_participants cp ON cp.championship_id=c.id WHERE c.id=? GROUP BY c.id`,
         )
         .get(id) as Championship | undefined;
       if (!championship) throw new Error("Campeonato não encontrado.");
@@ -860,13 +878,19 @@ export function repository(db: Database.Database) {
         ![2, 4, 8, 16, 32].includes(c.participantIds.length)
       )
         throw new Error("O mata-mata exige 2, 4, 8, 16 ou 32 participantes.");
+      const mode = c.mode === "duo" || c.mode === "mad" ? c.mode : "classic";
+      const mutator =
+        mode === "mad" && typeof c.mutator === "string" && c.mutator.trim()
+          ? c.mutator.trim().slice(0, 80)
+          : null;
       const tx = db.transaction(() => {
         const id = Number(
           db
             .prepare(
-              "INSERT INTO championships(name,format,starts_at,status) VALUES (?,?,?,?)",
+              "INSERT INTO championships(name,format,mode,mutator,starts_at,status) VALUES (?,?,?,?,?,?)",
             )
-            .run(c.name.trim(), c.format, c.startsAt, "active").lastInsertRowid,
+            .run(c.name.trim(), c.format, mode, mutator, c.startsAt, "active")
+            .lastInsertRowid,
         );
         const add = db.prepare(
           "INSERT INTO championship_participants(championship_id,player_id) VALUES (?,?)",
@@ -897,7 +921,7 @@ export function repository(db: Database.Database) {
       const id = tx();
       return db
         .prepare(
-          `SELECT c.id,c.name,c.format,c.starts_at startsAt,c.status,COUNT(cp.player_id) participants FROM championships c LEFT JOIN championship_participants cp ON cp.championship_id=c.id WHERE c.id=? GROUP BY c.id`,
+          `SELECT c.id,c.name,c.format,c.mode,c.mutator,c.starts_at startsAt,c.status,COUNT(cp.player_id) participants FROM championships c LEFT JOIN championship_participants cp ON cp.championship_id=c.id WHERE c.id=? GROUP BY c.id`,
         )
         .get(id) as Championship;
     },
@@ -946,8 +970,14 @@ export function repository(db: Database.Database) {
           rows("players"),
         );
         insert(
-          "INSERT INTO championships(id,name,format,starts_at,status) VALUES (@id,@name,@format,@starts_at,@status)",
-          rows("championships"),
+          "INSERT INTO championships(id,name,format,starts_at,status,mode,mutator) VALUES (@id,@name,@format,@starts_at,@status,@mode,@mutator)",
+          // Backups antigos não têm mode/mutator: restauram como 'classic'.
+          rows("championships").map((row) => ({
+            ...row,
+            mode:
+              row.mode === "duo" || row.mode === "mad" ? row.mode : "classic",
+            mutator: typeof row.mutator === "string" ? row.mutator : null,
+          })),
         );
         insert(
           "INSERT INTO championship_participants(championship_id,player_id) VALUES (@championship_id,@player_id)",

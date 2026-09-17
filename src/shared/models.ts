@@ -120,6 +120,8 @@ export type Championship = {
   startsAt: string;
   status: "draft" | "active" | "finished";
   participants: number;
+  mode?: "classic" | "duo" | "mad";
+  mutator?: string | null;
 };
 export type Fixture = {
   id: number;

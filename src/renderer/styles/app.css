@@ -1978,6 +1978,7 @@ body {
     border-radius: 15px;
     background: linear-gradient(145deg, #1a233e, #0c1425);
     transition: .25s;
+    cursor: pointer;
 }
 
 .season-card:hover,
@@ -1997,7 +1998,7 @@ body {
     height: 110px;
     right: -70px;
     top: -65px;
-    opacity: .2;
+        opacity: .2;
     filter: blur(28px);
     border-radius: 50%;
 }
@@ -2578,10 +2579,39 @@ nav .active {
     cursor: not-allowed;
 }
 
-.app-modal-icon.danger {
-    border-color: #693f49;
-    background: #351b23;
-    color: #f0a7b1;
+.danger {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: transparent;
+  color: #94a3b8; /* Cor neutra/discreta no estado normal */
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+  outline: none;
+}
+
+/* Ganha o tom de alerta apenas no HOVER */
+.danger:hover {
+  background: rgba(239, 68, 68, 0.12); /* Fundo vermelho translúcido */
+  color: #f87171;                      /* Vermelho suave moderno */
+  border-color: rgba(239, 68, 68, 0.25);
+}
+
+/* Efeito tátil ao clicar */
+.danger:active {
+  transform: scale(0.96);
+  background: rgba(239, 68, 68, 0.22);
+}
+
+/* Foco de acessibilidade via teclado */
+.danger:focus-visible {
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.4);
 }
 
 .app-modal-error {
@@ -3329,6 +3359,24 @@ nav .active {
     border-top: 0;
 }
 
+/* Ganha o tom de alerta apenas no HOVER */
+.danger:hover {
+  background: rgba(239, 68, 68, 0.12); /* Fundo vermelho translúcido */
+  color: #f87171;                      /* Vermelho suave moderno */
+  border-color: rgba(239, 68, 68, 0.25);
+}
+
+/* Efeito tátil ao clicar */
+.danger:active {
+  transform: scale(0.96);
+  background: rgba(239, 68, 68, 0.22);
+}
+
+/* Foco de acessibilidade via teclado */
+.danger:focus-visible {
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.4);
+}
+
 .champ svg {
     color: #a99fff;
 }
@@ -3359,10 +3407,20 @@ nav .active {
 }
 
 .danger {
-    margin-left: auto;
-    background: transparent;
-    color: #f18b98;
-    font-size: 11px;
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: transparent;
+  color: #94a3b8; /* Cor neutra/discreta no estado normal */
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+  outline: none;
 }
 
 .count {
@@ -3590,4 +3648,417 @@ nav .active {
         width: 100%;
     }
 
+}
+
+/* ============================================================
+   UX pós-Etapa 4 — raias do formulário de partida, seleção de
+   times com status, toast, badges de modo, busca de clubes e
+   times do modal de resultado de confronto.
+   ============================================================ */
+
+.match-form .match-lanes {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    gap: 18px;
+    align-items: start;
+}
+
+.match-lane {
+    display: grid;
+    gap: 12px;
+    min-width: 0;
+}
+
+.match-center {
+    display: grid;
+    gap: 12px;
+    justify-items: stretch;
+    min-width: 230px;
+}
+
+.match-center .score {
+    width: 100%;
+}
+
+.match-center .head-to-head {
+    width: 100%;
+}
+
+@media (max-width: 900px) {
+    .match-form .match-lanes {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .match-center {
+        min-width: 0;
+    }
+}
+
+/* --- TeamPicker: slot com status visual (pendente vs escolhido) --- */
+
+.team-picker {
+    position: relative;
+    display: grid;
+    gap: 6px;
+    min-width: 0;
+}
+
+.team-picker-label {
+    color: #93a0b9;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+}
+
+.team-picker-slot {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.team-picker-slot input {
+    width: 100%;
+    padding: 11px 40px 11px 11px;
+    color: #f0f2f9;
+    border: 1px solid #293653;
+    border-radius: 7px;
+    background: #0b1224;
+    font: inherit;
+    outline: none;
+}
+
+.team-picker-slot input:focus {
+    border-color: #8d7cff;
+}
+
+.team-picker-slot.pending input {
+    border-color: #e4bd5566;
+    background: #14101f;
+}
+
+.team-picker-status {
+    position: absolute;
+    right: 10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    font-size: 11px;
+    font-weight: 800;
+    pointer-events: none;
+}
+
+.team-picker-status.ok {
+    color: #06251f;
+    background: #35d2bf;
+}
+
+.team-picker-status.missing {
+    color: #1a1405;
+    background: #e4bd55;
+}
+
+.team-picker-picked {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    color: #9ca9c0;
+    font-size: 11px;
+}
+
+.team-picker-results {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    z-index: 60;
+    margin-top: 4px;
+    border: 1px solid #293653;
+    border-radius: 8px;
+    background: #0b1224;
+    box-shadow: 0 18px 40px rgba(0, 0, 0, .45);
+}
+
+.team-picker-results button {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    width: 100%;
+    padding: 9px 11px;
+    border: 0;
+    border-bottom: 1px solid #202942;
+    background: transparent;
+    color: #f0f2f9;
+    font: inherit;
+    font-size: 13px;
+    text-align: left;
+    cursor: pointer;
+}
+
+.team-picker-results button:last-child {
+    border-bottom: 0;
+}
+
+.team-picker-results button:hover,
+.team-picker-results button.picked {
+    background: #17213a;
+}
+
+.team-picker-results button>span {
+    display: inline-flex;
+    color: #8d7cff;
+}
+
+.team-picker-results button>div {
+    display: grid;
+    gap: 2px;
+    flex: 1;
+    min-width: 0;
+}
+
+.team-picker-results button b {
+    font-weight: 600;
+}
+
+.team-picker-results button small {
+    color: #9ca9c0;
+    font-size: 11px;
+}
+
+.team-picker-results button>svg:last-child {
+    margin-left: auto;
+    color: #35d2bf;
+}
+
+.team-picker-empty {
+    margin: 0;
+    padding: 14px;
+    color: #9ca9c0;
+    font-size: 13px;
+    text-align: center;
+}
+
+/* --- Toast (substituto dos alert() nativos) --- */
+
+.arena-toast {
+    position: fixed;
+    left: 50%;
+    bottom: 26px;
+    transform: translateX(-50%);
+    z-index: 1300;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    border: 1px solid #293653;
+    border-radius: 999px;
+    background: rgba(10, 15, 31, .97);
+    box-shadow: 0 16px 40px rgba(0, 0, 0, .45);
+    color: #f0f2f9;
+    font-size: 13px;
+    font-weight: 600;
+    animation: arena-toast-in .18s ease;
+}
+
+.arena-toast svg {
+    color: #35d2bf;
+}
+
+@keyframes arena-toast-in {
+    from {
+        opacity: 0;
+        transform: translate(-50%, 8px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translate(-50%, 0);
+    }
+}
+
+/* --- Badges de modo (clássico/dupla/maluco) --- */
+
+.mode-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    margin-top: 7px;
+    padding: 3px 9px;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+}
+
+.mode-badge em {
+    font-style: normal;
+    font-weight: 600;
+    letter-spacing: 0;
+    text-transform: none;
+    opacity: .85;
+}
+
+.mode-badge.mode-classic {
+    color: #b5a5ff;
+    border-color: #826eff4d;
+    background: #826eff1f;
+}
+
+.mode-badge.mode-duo {
+    color: #54ecd7;
+    border-color: #35d2bf4d;
+    background: #24d9be17;
+}
+
+.mode-badge.mode-mad {
+    color: #ff8db8;
+    border-color: #ff5e9b4d;
+    background: #ff4e981a;
+}
+
+.panel-head-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+}
+
+.panel-head-group .mode-badge {
+    margin-top: 0;
+}
+
+/* --- Busca de clubes no seletor de equipes do campeonato --- */
+
+.team-search {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 10px 0 14px;
+    padding: 0 12px;
+    border: 1px solid #293653;
+    border-radius: 9px;
+    background: #0b1224;
+}
+
+.team-search>svg {
+    flex: none;
+    color: #93a0b9;
+}
+
+.team-search input {
+    flex: 1;
+    min-width: 0;
+    padding: 11px 0;
+    border: 0;
+    background: transparent;
+    color: #f0f2f9;
+    font: inherit;
+    outline: none;
+}
+
+.team-search button {
+    padding: 2px 7px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: #9ca9c0;
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.team-search button:hover {
+    color: #fff;
+    background: #17213a;
+}
+
+/* --- Times lado a lado no modal de resultado do confronto --- */
+
+.fixture-teams {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    margin: 14px 24px 0;
+}
+
+@media (max-width: 640px) {
+    .fixture-teams {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+/* --- Tema claro: novos componentes --- */
+
+body.arena-light .team-picker-label {
+    color: #647089;
+}
+
+body.arena-light .team-picker-slot input {
+    border-color: #dbe2ee;
+    background: #f6f8fc;
+    color: #182033;
+}
+
+body.arena-light .team-picker-slot.pending input {
+    border-color: #d9a52066;
+    background: #fdf8ec;
+}
+
+body.arena-light .team-picker-picked,
+body.arena-light .team-picker-empty {
+    color: #647089;
+}
+
+body.arena-light .team-picker-results {
+    border-color: #dbe2ee;
+    background: #fff;
+    box-shadow: 0 18px 40px rgba(31, 43, 68, .18);
+}
+
+body.arena-light .team-picker-results button {
+    border-bottom-color: #eef1f8;
+    color: #182033;
+}
+
+body.arena-light .team-picker-results button:hover,
+body.arena-light .team-picker-results button.picked {
+    background: #eef1f8;
+}
+
+body.arena-light .team-picker-results button small {
+    color: #647089;
+}
+
+body.arena-light .arena-toast {
+    border-color: #dbe2ee;
+    background: #fff;
+    box-shadow: 0 16px 40px rgba(31, 43, 68, .18);
+    color: #182033;
+}
+
+body.arena-light .team-search {
+    border-color: #dbe2ee;
+    background: #f6f8fc;
+}
+
+body.arena-light .team-search>svg {
+    color: #647089;
+}
+
+body.arena-light .team-search input {
+    color: #182033;
+}
+
+body.arena-light .team-search button {
+    color: #647089;
+}
+
+body.arena-light .team-search button:hover {
+    color: #182033;
+    background: #eef1f8;
 }
