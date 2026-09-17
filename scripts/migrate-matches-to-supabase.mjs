@@ -4,7 +4,7 @@
  * ETAPA 4 — Migração manual do histórico: matches (SQLite local -> Supabase)
  * ============================================================================
  * Uso:
- *   npm run migrate:matches                        # usa o banco padrão do app
+ *   npm run migrate:matches                     # usa o banco padrão do app
  *   npm run migrate:matches -- caminho/fc-arena.sqlite
  *
  * Por que rodar (decisões aprovadas da Etapa 4):
@@ -126,6 +126,7 @@ if (authError) {
   console.error("Verifique SUPABASE_APP_EMAIL/SUPABASE_APP_PASSWORD e se o usuário tem e-mail confirmado.");
   process.exit(1);
 }
+
 const createdBy = authData?.user?.id || authData?.session?.user?.id;
 if (!createdBy) {
   console.error("ERRO: login OK, mas o Supabase não retornou o uuid do usuário (created_by).");
@@ -203,4 +204,4 @@ realignear histórico/sequência. A conta de serviço precisa ter profile com
 papel 'admin' (veja supabase/SETUP.md). Nada neste script cria tabelas.
 ────────────────────────────────────────────────────────────────────────────`);
 
-process.exit(failures.length > 0 ? 2 : 0);
+process.exitCode = failures.length > 0 ? 2 : 0;

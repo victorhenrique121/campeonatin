@@ -29,9 +29,8 @@ delete configuredEnv.SUPABASE_SERVICE_ROLE_KEY;
 
 const legacyEnv = { ...baseEnv };
 for (const key of ["SUPABASE_URL", "SUPABASE_ANON_KEY", "SUPABASE_APP_EMAIL", "SUPABASE_APP_PASSWORD"]) {
-  delete legacyEnv[key];
+  legacyEnv[key] = ""; // string vazia: "já definida" para o Node, não recarrega do .env real
 }
-
 const scenarios = [
   { name: "s1", env: legacyEnv, reset: false },
   { name: "s2", env: configuredEnv },
@@ -42,7 +41,7 @@ const scenarios = [
   { name: "s6", env: configuredEnv },
   { name: "s7", env: configuredEnv },
   { name: "s8", env: configuredEnv },
-  { name: "s9", env: { ...configuredEnv, SUPABASE_APP_EMAIL: undefined, SUPABASE_APP_PASSWORD: undefined } },
+  { name: "s9", env: { ...configuredEnv, SUPABASE_APP_EMAIL: "", SUPABASE_APP_PASSWORD: "" } },
   // Etapa 3 — teams
   { name: "s10", env: legacyEnv },
   { name: "s11", env: configuredEnv },
@@ -88,11 +87,17 @@ async function main() {
   const tsc = spawnSync(
     process.platform === "win32" ? "npx.cmd" : "npx",
     ["tsc", "-p", "tsconfig.electron.json"],
-    { cwd: PROJ, stdio: "inherit" },
+    { cwd: PROJ, stdio: "inherit", shell: process.platform === "win32" },
   );
+  if (tsc.error) {
+    console.error("Não foi possível iniciar o tsc:", tsc.error.message);
+    process.exitCode = 1;
+return;;
+  }
   if (tsc.status !== 0) {
     console.error("Compilação falhou — abortando testes.");
-    process.exit(1);
+    process.exitCode = 1;
+return;;
   }
 
   const mock = spawn(

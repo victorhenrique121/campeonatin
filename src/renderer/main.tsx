@@ -137,6 +137,7 @@ function EditMatchModal({
     if (!Number.isInteger(newScore1) || newScore1 < 0) {
       setError("O placar do primeiro jogador é inválido.");
       return;
+      
     }
 
     if (!Number.isInteger(newScore2) || newScore2 < 0) {
@@ -369,7 +370,7 @@ function DashboardPage({
             <small>
               {label === "LÍDER" && data.leader
                 ? `${data.leader.points} pontos`
-                : "Dados locais"}
+                : "No servidor"}
             </small>
           </article>
         ))}

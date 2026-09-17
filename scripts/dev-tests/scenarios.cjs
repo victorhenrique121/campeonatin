@@ -589,18 +589,21 @@ const name = process.argv[2];
 const scenario = scenarios[name];
 if (!scenario) {
   console.error(`Cenário desconhecido: ${name}`);
-  process.exit(1);
+  process.exitCode = 1;
+return;;
 }
 
 scenario()
   .then(() => {
     if (failures > 0) {
       console.error(`Cenário ${name}: ${failures} falha(s).`);
-      process.exit(1);
+      process.exitCode = 1;
+return;;
     }
     console.log(`Cenário ${name}: OK`);
   })
   .catch((err) => {
     console.error(`Cenário ${name}: erro inesperado ->`, err);
-    process.exit(1);
+    process.exitCode = 1;
+return;;
   });
