@@ -1,0 +1,408 @@
+/* ============================================================
+   Confronto direto (H2H) — card que preenche o espaço que sobra
+   no painel do formulário "Registrar partida".
+
+   Sem números mágicos de altura: o grid da tela (.grid) já estica
+   os dois painéis para a mesma altura (align-items: stretch, o
+   padrão). Aqui o painel vira flex column e o card usa flex: 1,
+   então ele cresce/encolhe naturalmente conforme a altura do
+   Histórico ao lado. Quando o grid colapsa para 1 coluna (<=950px)
+   não sobra espaço extra e o card assume a altura do conteúdo.
+   ============================================================ */
+
+.match-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+}
+
+.match-panel>.match-form {
+    flex: none;
+}
+
+.h2h-card {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 14px;
+    min-width: 0;
+    min-height: 0;
+    padding: 16px;
+    border: 1px solid #2b3a58;
+    border-radius: 12px;
+    background:
+        linear-gradient(180deg, #131d36, #0e1729);
+}
+
+.h2h-head {
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.h2h-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: #8d7cff;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: .12em;
+}
+
+.h2h-eyebrow svg {
+    color: #b5a5ff;
+}
+
+.h2h-scope {
+    padding: 3px 8px;
+    border: 1px solid #2f3f60;
+    border-radius: 999px;
+    color: #8492ab;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+/* Corpo centralizado no espaço que sobra: evita aquele vazio grande
+   no fim do card quando o Histórico ao lado é alto. */
+.h2h-body {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    justify-content: center;
+    gap: 14px;
+    min-width: 0;
+}
+
+.h2h-score {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: center;
+    gap: 12px;
+}
+
+.h2h-side {
+    display: grid;
+    gap: 3px;
+    min-width: 0;
+}
+
+.h2h-side.is-right {
+    text-align: right;
+}
+
+.h2h-side strong {
+    overflow: hidden;
+    color: #eef2fb;
+    font-size: 13px;
+    font-weight: 700;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.h2h-side span {
+    color: #7f8da6;
+    font-size: 10px;
+    font-weight: 600;
+}
+
+.h2h-mid {
+    display: grid;
+    gap: 3px;
+    justify-items: center;
+    padding: 0 4px;
+}
+
+.h2h-mid b {
+    color: #f4f7ff;
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: -.02em;
+    line-height: 1;
+}
+
+.h2h-mid i {
+    margin: 0 5px;
+    color: #5d6b87;
+    font-size: 16px;
+    font-style: normal;
+}
+
+.h2h-mid small {
+    color: #7f8da6;
+    font-size: 10px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.h2h-facts {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin: 0;
+}
+
+.h2h-facts>div {
+    min-width: 0;
+    padding: 10px 11px;
+    border: 1px solid #263350;
+    border-radius: 9px;
+    background: #0d1629;
+}
+
+.h2h-facts dt {
+    color: #7f8da6;
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+}
+
+.h2h-facts dd {
+    margin: 5px 0 0;
+    overflow: hidden;
+    color: #dfe6f5;
+    font-size: 12px;
+    font-weight: 600;
+    text-overflow: ellipsis;
+}
+
+.h2h-facts dd b {
+    color: #fff;
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 13px;
+}
+
+.h2h-facts dd small {
+    display: block;
+    margin-top: 3px;
+    overflow: hidden;
+    color: #74829c;
+    font-size: 10px;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.h2h-streak {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    padding: 10px 12px;
+    border: 1px solid #6b3d1f;
+    border-radius: 9px;
+    background: #2a1a10;
+    color: #ffcf8b;
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+.h2h-streak svg {
+    flex: none;
+    color: #ff9d4d;
+}
+
+.h2h-streak b {
+    color: #ffe0b0;
+    font-weight: 800;
+}
+
+/* Estados neutros (sem 2 jogadores, jogadores iguais, sem histórico). */
+.h2h-hint,
+.h2h-empty p {
+    margin: auto 0;
+    color: #8492ab;
+    font-size: 12px;
+    line-height: 1.6;
+    text-align: center;
+}
+
+.h2h-empty {
+    display: grid;
+    flex: 1;
+    align-content: center;
+    gap: 6px;
+    min-width: 0;
+}
+
+.h2h-empty p {
+    margin: 0;
+}
+
+.h2h-empty b {
+    color: #cfd8ea;
+    font-weight: 700;
+}
+
+.h2h-empty small {
+    color: #6d7a94;
+    font-size: 10px;
+    text-align: center;
+}
+
+/* Loading: skeleton discreto, sem spinner barulhento. */
+.h2h-loading {
+    display: grid;
+    flex: 1;
+    align-content: center;
+    gap: 9px;
+}
+
+.h2h-loading small {
+    color: #74829c;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .06em;
+    text-align: center;
+    text-transform: uppercase;
+}
+
+.h2h-skeleton {
+    height: 11px;
+    border-radius: 6px;
+    background: linear-gradient(90deg, #1a2540, #24314f, #1a2540);
+    background-size: 220% 100%;
+    animation: h2h-shimmer 1.15s ease-in-out infinite;
+}
+
+.h2h-skeleton-title {
+    height: 22px;
+    width: 58%;
+    margin: 0 auto;
+}
+
+.h2h-skeleton-short {
+    width: 42%;
+    margin: 0 auto;
+}
+
+@keyframes h2h-shimmer {
+    from {
+        background-position: 120% 0;
+    }
+
+    to {
+        background-position: -120% 0;
+    }
+}
+
+/* --- Responsivo: em 1 coluna o card volta a ter altura natural --- */
+@media (max-width: 950px) {
+    .match-panel {
+        gap: 18px;
+    }
+
+    .h2h-card {
+        flex: none;
+    }
+}
+
+@media (max-width: 600px) {
+    .h2h-card {
+        padding: 14px;
+    }
+
+    .h2h-score {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 10px;
+        justify-items: center;
+    }
+
+    .h2h-side,
+    .h2h-side.is-right {
+        justify-items: center;
+        text-align: center;
+    }
+
+    .h2h-facts {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+/* --- Tema claro --- */
+body.arena-light .h2h-card {
+    border-color: #dbe2ee;
+    background: linear-gradient(180deg, #ffffff, #f6f8fc);
+}
+
+body.arena-light .h2h-eyebrow {
+    color: #6b57e8;
+}
+
+body.arena-light .h2h-eyebrow svg {
+    color: #7d6bff;
+}
+
+body.arena-light .h2h-scope {
+    border-color: #dbe2ee;
+    color: #647089;
+}
+
+body.arena-light .h2h-side strong,
+body.arena-light .h2h-mid b,
+body.arena-light .h2h-facts dd b {
+    color: #182033;
+}
+
+body.arena-light .h2h-side span,
+body.arena-light .h2h-mid small,
+body.arena-light .h2h-facts dt {
+    color: #647089;
+}
+
+body.arena-light .h2h-mid i {
+    color: #9aa6bd;
+}
+
+body.arena-light .h2h-facts>div {
+    border-color: #e3e9f4;
+    background: #f6f8fc;
+}
+
+body.arena-light .h2h-facts dd {
+    color: #2b3548;
+}
+
+body.arena-light .h2h-facts dd small {
+    color: #7b869c;
+}
+
+body.arena-light .h2h-streak {
+    border-color: #f0d3ab;
+    background: #fff6e9;
+    color: #8a5a17;
+}
+
+body.arena-light .h2h-streak svg {
+    color: #d98324;
+}
+
+body.arena-light .h2h-streak b {
+    color: #6f4410;
+}
+
+body.arena-light .h2h-hint,
+body.arena-light .h2h-empty p {
+    color: #647089;
+}
+
+body.arena-light .h2h-empty b {
+    color: #2b3548;
+}
+
+body.arena-light .h2h-empty small,
+body.arena-light .h2h-loading small {
+    color: #7b869c;
+}
+
+body.arena-light .h2h-skeleton {
+    background: linear-gradient(90deg, #eef1f8, #e2e8f3, #eef1f8);
+    background-size: 220% 100%;
+}

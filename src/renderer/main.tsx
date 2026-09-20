@@ -9,24 +9,37 @@ import {
   Check,
   Clipboard,
   CirclePlus,
+  CircleHelp,
   Dices,
   EyeOff,
   Flag,
+  Footprints,
   Gamepad2,
   Gauge,
   Goal,
+  Hand,
+  Heart,
+  Flame,
+  Laugh,
   LayoutDashboard,
+  MessageCircle,
+  Mic,
+  Ban,
+  RotateCcw,
   Search,
   Shuffle,
   Shield,
+  Snowflake,
   Sparkles,
   SquarePen,
+  Timer,
   Trash2,
   Trophy,
   Users,
   UsersRound,
   Volume2,
   VolumeX,
+  Zap,
 } from "lucide-react";
 import type {
   Championship,
@@ -39,8 +52,10 @@ import type {
   Standing,
   Team,
 } from "../shared/models";
+import { HeadToHeadCard } from "./HeadToHeadCard";
 import "./styles/app.css";
 import "./styles/fixtures.css";
+import "./styles/HeadToHeadCard.css";
 
 type Page =
   | "dashboard"
@@ -565,9 +580,9 @@ function PlayersPage({
           <h1>Jogadores</h1>
         </div>
       </section>
-      <section className="grid players-layout">
-        <article className="panel">
-          <form className="form" onSubmit={save}>
+        <section className="grid">
+        <article className="panel match-panel">
+          <form className="form match-form" onSubmit={save}>
             <label>
               Nome
               <input
@@ -740,6 +755,7 @@ function MatchesPage({
   reload: () => Promise<void>;
 }) {
   const [matches, setMatches] = useState<Match[]>([]);
+  const [matchesLoaded, setMatchesLoaded] = useState(false);
   const [editingMatch, setEditingMatch] = useState<Match | null>(null);
   const [showClearModal, setShowClearModal] = useState(false);
   const [deletingMatch, setDeletingMatch] = useState<Match | null>(null);
@@ -758,8 +774,14 @@ function MatchesPage({
     team2Id: "",
   });
 
-  useEffect(() => {
-    window.arena.matches().then(setMatches);
+   useEffect(() => {
+    // Se a leitura do histórico falhar, o card de confronto direto volta ao
+    // estado neutro silenciosamente — o formulário nunca trava por causa disso.
+    window.arena
+      .matches()
+      .then(setMatches)
+      .catch(() => setMatches([]))
+      .finally(() => setMatchesLoaded(true));
   }, []);
 
   const team1 = teams.find((t) => String(t.id) === form.team1Id) ?? null;
@@ -786,6 +808,11 @@ function MatchesPage({
       </select>
     </label>
   );
+
+  const scores = Array.from({ length: 21 }, (_, id) => ({
+    id,
+    name: String(id),
+  }));
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -842,35 +869,9 @@ function MatchesPage({
       );
     }
   };
-  const scores = Array.from({ length: 21 }, (_, id) => ({
-    id,
-    name: String(id),
-  }));
-  const headToHead = matches.filter(
-    (match) =>
-      (match.player1Id === Number(form.player1Id) &&
-        match.player2Id === Number(form.player2Id)) ||
-      (match.player1Id === Number(form.player2Id) &&
-        match.player2Id === Number(form.player1Id)),
-  );
-  const playerOneWins = headToHead.filter((match) =>
-    match.player1Id === Number(form.player1Id)
-      ? match.score1 > match.score2
-      : match.score2 > match.score1,
-  ).length;
-  const playerTwoWins = headToHead.filter((match) =>
-    match.player1Id === Number(form.player2Id)
-      ? match.score1 > match.score2
-      : match.score2 > match.score1,
-  ).length;
-  const goalBalance = headToHead.reduce(
-    (sum, match) =>
-      sum +
-      (match.player1Id === Number(form.player1Id)
-        ? match.score1 - match.score2
-        : match.score2 - match.score1),
-    0,
-  );
+    // O confronto direto (antes calculado aqui e mostrado na raia central) virou
+  // o card <HeadToHeadCard /> no rodapé deste painel: mesmas entradas, mais
+  // informação (empates, último duelo e sequência de vitórias).
   return (
     <>
       <section className="page-title">
@@ -878,9 +879,9 @@ function MatchesPage({
           <p>CENTRO DE JOGOS</p>
           <h1>Registrar partida</h1>
           <span>
-            Partida avulsa: o resultado entra direto no histórico e no
-            ranking. Resultados de campeonato são registrados na tela de
-            detalhes da temporada, junto ao confronto pendente.
+            Partida avulsa: o resultado entra direto no histórico e no ranking.
+            Resultados de campeonato são registrados na tela de detalhes da
+            temporada, junto ao confronto pendente.
           </span>
         </div>
       </section>
@@ -909,27 +910,6 @@ function MatchesPage({
                   <strong>×</strong>
                   {select("score2", "Gols", scores)}
                 </div>
-                {form.player1Id && form.player2Id && (
-                  <div className="head-to-head">
-                    <span className="eyebrow">CONFRONTO DIRETO</span>
-                    <b>
-                      {
-                        players.find((p) => p.id === Number(form.player1Id))
-                          ?.name
-                      }{" "}
-                      <em>{playerOneWins}V</em> · {headToHead.length} jogos ·{" "}
-                      <em>{playerTwoWins}V</em>{" "}
-                      {
-                        players.find((p) => p.id === Number(form.player2Id))
-                          ?.name
-                      }
-                    </b>
-                    <small>
-                      Saldo de gols: {goalBalance > 0 ? "+" : ""}
-                      {goalBalance}
-                    </small>
-                  </div>
-                )}
               </div>
               <div className="match-lane">
                 {select("player2Id", "Jogador 2", players)}
@@ -950,6 +930,17 @@ function MatchesPage({
             {formError && <div className="arena-form-error">{formError}</div>}
             <button className="primary">Salvar resultado</button>
           </form>
+          {/* Preenche o espaço que sobra neste painel: o grid já estica os dois
+              cards para a mesma altura, e o flex:1 do card ocupa o resto sem
+              nenhum height fixo. Reage ao mesmo estado de jogadores que
+              alimenta os TeamPickers (não espera pelos times). */}
+          <HeadToHeadCard
+            matches={matches}
+            players={players}
+            player1Id={form.player1Id}
+            player2Id={form.player2Id}
+            loading={!matchesLoaded}
+          />
         </article>
         <article className="panel wide">
           <div className="panel-head">
@@ -1030,31 +1021,541 @@ const CARD_TONES = [
   "#ef7b4d",
 ];
 
+type MutatorRarity = "comum" | "incomum" | "raro" | "epico" | "lendario";
+
 const MUTATORS = [
+  // ELENCO E FORMAÇÃO
   {
     icon: UsersRound,
     title: "10 em Campo",
-    text: "Jogue com um a menos até o apito final.",
+    text: "Jogue com um a menos até o apito final. Antes do jogo, escolha um jogador titular para deixar no banco.",
     tag: "ELENCO",
+    rarity: "comum",
   },
   {
-    icon: EyeOff,
-    title: "Visão Turva",
-    text: "Sem minimapa ou HUD durante 10 minutos.",
-    tag: "FOCO",
+    icon: Shield,
+    title: "Defesa de Papel",
+    text: "Durante os primeiros 10 minutos, não pode trocar manualmente para os zagueiros. Deixe a defesa se virar!",
+    tag: "DEFESA",
+    rarity: "incomum",
+  },
+  {
+    icon: Shuffle,
+    title: "Improviso Tático",
+    text: "Antes do início, escolha uma formação diferente da sua habitual e mantenha-a durante toda a partida.",
+    tag: "TÁTICA",
+    rarity: "comum",
   },
   {
     icon: Goal,
     title: "Pé Ruim",
-    text: "Finalizações só valem com o pé não dominante.",
+    text: "Durante 5 minutos, tente finalizar apenas com o pé não dominante. Se marcar com o pé dominante, o adversário ganha um escanteio.",
     tag: "TÉCNICA",
+    rarity: "epic",
+  },
+
+  // CONTROLES E TÉCNICA
+  {
+    icon: EyeOff,
+    title: "Visão Turva",
+    text: "Jogue sem minimapa e sem HUD durante os primeiros 10 minutos. Vale confiar apenas nos próprios olhos!",
+    tag: "FOCO",
+    rarity: "raro",
   },
   {
     icon: Gauge,
     title: "Goleiro Linha",
-    text: "A cada ataque, seu goleiro deve cruzar o meio-campo.",
+    text: "Uma vez por tempo, avance o goleiro até perto do meio-campo durante um ataque. Se perder a bola, não vale reclamar!",
     tag: "CAOS",
+    rarity: "incomum",
   },
+  {
+    icon: Footprints,
+    title: "Proibido Correr",
+    text: "Durante os próximos 3 minutos, está proibido usar o botão de corrida. Só vale conduzir a bola normalmente.",
+    tag: "TÉCNICA",
+    rarity: "comum",
+  },
+  {
+    icon: Ban,
+    title: "Drible é Luxo",
+    text: "Durante 5 minutos, não pode usar dribles com comandos especiais. Só vale condução normal e passes.",
+    tag: "TÉCNICA",
+    rarity: "incomum",
+  },
+  {
+    icon: Timer,
+    title: "Relógio Maldito",
+    text: "Durante 5 minutos, você precisa tentar finalizar em até 10 segundos após entrar no campo de ataque.",
+    tag: "PRESSÃO",
+    rarity: "raro",
+  },
+  {
+    icon: Shield,
+    title: "Ônibus Estacionado",
+    text: "Durante 5 minutos, não pode pressionar manualmente com mais de 3 jogadores no campo de ataque.",
+    tag: "DEFESA",
+    rarity: "incomum",
+  },
+  {
+    icon: Zap,
+    title: "Chute de Desespero",
+    text: "Durante 3 minutos, todo chute de fora da área precisa ser de primeira, sem dominar a bola antes.",
+    tag: "ATAQUE",
+    rarity: "raro",
+  },
+  {
+    icon: CircleHelp,
+    title: "Sem Repeteco",
+    text: "Depois de usar uma jogada ensaiada ou escanteio curto, você não pode repetir a mesma jogada na próxima oportunidade.",
+    tag: "ESTRATÉGIA",
+    rarity: "incomum",
+  },
+
+  // PRESSÃO E CAOS
+  {
+    icon: Flame,
+    title: "Modo Fúria",
+    text: "Se sofrer um gol, você tem 2 minutos para tentar marcar. Durante esse período, não pode recuar a bola para o goleiro.",
+    tag: "CAOS",
+    rarity: "epic",
+  },
+  {
+    icon: Snowflake,
+    title: "Pés Congelados",
+    text: "Durante os próximos 3 minutos, não pode finalizar de primeira: precisa dominar a bola antes do chute.",
+    tag: "TÉCNICA",
+    rarity: "incomum",
+  },
+  {
+    icon: RotateCcw,
+    title: "Revanche Imediata",
+    text: "Se sofrer um gol, na saída de bola precisa tentar um ataque rápido antes de trocar mais de 5 passes.",
+    tag: "CAOS",
+    rarity: "raro",
+  },
+
+  // RESENHA LOCAL
+  {
+    icon: MessageCircle,
+    title: "Narrador de Rádio",
+    text: "Durante os próximos 3 minutos, narre suas próprias jogadas como se estivesse transmitindo uma final de Copa do Mundo.",
+    tag: "RESENHA",
+    rarity: "comum",
+  },
+  {
+    icon: Mic,
+    title: "Coletiva de Imprensa",
+    text: "Antes da partida, faça uma declaração de até 15 segundos prometendo a vitória. Se perder, dê uma entrevista explicando o vexame.",
+    tag: "RESENHA",
+    rarity: "incomum",
+  },
+  {
+    icon: Laugh,
+    title: "Riso Proibido",
+    text: "Durante os próximos 2 minutos, você não pode rir. Se rir, precisa elogiar sinceramente uma jogada do adversário.",
+    tag: "MENTAL",
+    rarity: "incomum",
+  },
+  {
+    icon: Volume2,
+    title: "Comentarista do Caos",
+    text: "Durante 3 minutos, comente em voz alta tudo o que seu próprio time fizer, inclusive os erros.",
+    tag: "RESENHA",
+    rarity: "comum",
+  },
+  {
+    icon: Hand,
+    title: "Mãos de Alface",
+    text: "Na próxima chance clara de gol que perder, levante e faça uma comemoração dramática de derrota.",
+    tag: "PUNIÇÃO",
+    rarity: "raro",
+  },
+  {
+    icon: Trophy,
+    title: "Marra Antecipada",
+    text: "Antes do jogo, faça uma comemoração como se já tivesse vencido. Se perder, repita a comemoração com cara de tristeza.",
+    tag: "RESENHA",
+    rarity: "incomum",
+  },
+  {
+    icon: Heart,
+    title: "Fair Play Forçado",
+    text: "Na próxima falta que cometer, peça desculpas ao adversário com a maior formalidade possível.",
+    tag: "RESENHA",
+    rarity: "comum",
+  },
+  {
+    icon: CircleHelp,
+    title: "Confiança Suspeita",
+    text: "Antes do apito inicial, declare quantos gols vai marcar. Se fizer menos, reconheça que exagerou na confiança.",
+    tag: "MENTAL",
+    rarity: "incomum",
+  },
+  {
+    icon: Timer,
+    title: "Silêncio no Estádio",
+    text: "Durante os próximos 2 minutos, é proibido reclamar, provocar ou comentar o jogo. Só pode falar em caso de pausa ou bola fora.",
+    tag: "MENTAL",
+    rarity: "raro",
+  },
+  {
+    icon: Shuffle,
+    title: "Apelido de Craque",
+    text: "Durante os próximos 5 minutos, o adversário só pode chamar você pelo apelido de um jogador famoso escolhido antes da partida.",
+    tag: "RESENHA",
+    rarity: "comum",
+  },
+  {
+    icon: Flame,
+    title: "Promessa de Craque",
+    text: "Escolha um jogador do seu time e declare que ele vai decidir a partida. Se ele marcar, comemore como se tivesse previsto o futuro.",
+    tag: "RESENHA",
+    rarity: "incomum",
+  },
+  {
+    icon: MessageCircle,
+    title: "Pedido de VAR",
+    text: "Na próxima reclamação sobre uma jogada, apresente um argumento convincente como se estivesse diante de um árbitro de vídeo.",
+    tag: "RESENHA",
+    rarity: "comum",
+  },
+  {
+  icon: Footprints,
+  title: "Caranguejo FC",
+  text: "Durante os próximos 3 minutos, você só pode atacar pelas laterais. Se entrar pelo centro, precisa devolver a bola para trás.",
+  tag: "TÁTICA",
+  rarity: "incomum",
+},
+{
+  icon: Zap,
+  title: "Chutou, Rezou",
+  text: "Durante 3 minutos, toda vez que entrar na área adversária, você precisa tentar finalizar antes de fazer mais de 3 passes.",
+  tag: "ATAQUE",
+  rarity: "raro",
+},
+{
+  icon: Shield,
+  title: "Defesa em Pânico",
+  text: "Durante os próximos 2 minutos, você não pode recuar voluntariamente a bola para o seu campo de defesa.",
+  tag: "DEFESA",
+  rarity: "raro",
+},
+{
+  icon: Shuffle,
+  title: "Futebol de Primeira",
+  text: "Durante 3 minutos, você não pode dar mais de 2 toques consecutivos com o mesmo jogador antes de passar ou finalizar.",
+  tag: "TÉCNICA",
+  rarity: "epic",
+},
+{
+  icon: Timer,
+  title: "Ataque Relâmpago",
+  text: "Durante 3 minutos, depois de recuperar a bola, você tem 15 segundos para tentar uma finalização.",
+  tag: "PRESSÃO",
+  rarity: "raro",
+},
+{
+  icon: MessageCircle,
+  title: "Advogado do Diabo",
+  text: "Durante os próximos 3 minutos, você precisa defender verbalmente todas as decisões controversas do árbitro, mesmo quando elas prejudicarem você.",
+  tag: "RESENHA",
+  rarity: "incomum",
+},
+{
+  icon: Mic,
+  title: "Comentarista Imparcial",
+  text: "Durante 2 minutos, você precisa narrar as jogadas dos dois jogadores como um comentarista profissional, sem demonstrar preferência.",
+  tag: "RESENHA",
+  rarity: "comum",
+},
+{
+  icon: Laugh,
+  title: "Cara de Enterro",
+  text: "Durante os próximos 3 minutos, você não pode comemorar, sorrir ou demonstrar empolgação quando marcar um gol.",
+  tag: "MENTAL",
+  rarity: "incomum",
+},
+{
+  icon: Heart,
+  title: "Elogio Obrigatório",
+  text: "Na próxima jogada bonita do adversário, você precisa elogiá-lo sinceramente antes de voltar a jogar.",
+  tag: "RESENHA",
+  rarity: "comum",
+},
+{
+  icon: Trophy,
+  title: "Cerimônia de Campeão",
+  text: "Se marcar o próximo gol, faça uma comemoração como se tivesse acabado de conquistar um título mundial.",
+  tag: "RESENHA",
+  rarity: "incomum",
+},
+{
+  icon: Ban,
+  title: "Proibido Recuar",
+  text: "Durante os próximos 3 minutos, você não pode fazer passes voluntários para trás no campo de ataque.",
+  tag: "TÁTICA",
+  rarity: "epic",
+},
+{
+  icon: Zap,
+  title: "Só Vale Golaço",
+  text: "Durante 3 minutos, você só pode tentar finalizar de fora da área. Gols de dentro da área não contam para o desafio.",
+  tag: "ATAQUE",
+  rarity: "epic",
+},
+{
+  icon: Snowflake,
+  title: "Congelamento Total",
+  text: "Durante os próximos 2 minutos, você não pode usar comandos especiais de drible nem corrida. Precisa construir as jogadas com passes e movimentação.",
+  tag: "TÉCNICA",
+  rarity: "raro",
+},
+{
+  icon: RotateCcw,
+  title: "Virada ou Vergonha",
+  text: "Se estiver perdendo, você precisa tentar marcar nos próximos 3 minutos. Se estiver empatando ou vencendo, precisa marcar mais um gol nesse período.",
+  tag: "PRESSÃO",
+  rarity: "lendario",
+},
+{
+  icon: Flame,
+  title: "Tudo ou Nada",
+  text: "Durante os próximos 3 minutos, você precisa jogar buscando o gol. Não pode manter a posse apenas para gastar tempo.",
+  tag: "CAOS",
+  rarity: "lendario",
+},
+{
+  icon: Footprints,
+  title: "Agachamento do Gol",
+  text: "Sempre que sofrer um gol, faça 5 agachamentos na próxima pausa.",
+  tag: "Físico",
+  rarity: "comum",
+},
+{
+  icon: Flame,
+  title: "Polichinelos da Derrota",
+  text: "Se estiver perdendo por 2 gols ou mais, faça 10 polichinelos na próxima pausa.",
+  tag: "Resistência",
+  rarity: "incomum",
+},
+{
+  icon: Shield,
+  title: "Flexão do Sofrimento",
+  text: "Ao sofrer 3 gols, faça 5 flexões na próxima pausa. Você pode adaptar o exercício ao seu condicionamento.",
+  tag: "Força",
+  rarity: "raro",
+},
+{
+  icon: Gauge,
+  title: "Corrida no Lugar",
+  text: "Se sofrer 2 gols consecutivos, corra no lugar por 10 segundos durante a próxima pausa.",
+  tag: "Cardio",
+  rarity: "incomum",
+},
+{
+  icon: Trophy,
+  title: "Pose de Craque",
+  text: "Ao marcar um gol, imite a pose de comemoração de um jogador por 5 segundos. Seu adversário precisa adivinhar quem é.",
+  tag: "Comédia",
+  rarity: "comum",
+},
+{
+  icon: Snowflake,
+  title: "Modo Estátua",
+  text: "Quando sofrer um gol, fique imóvel por 5 segundos antes de retomar a partida. Faça isso somente com a bola fora de jogo.",
+  tag: "Comédia",
+  rarity: "comum",
+},
+{
+  icon: Zap,
+  title: "Aquecimento do Craque",
+  text: "Antes da partida, faça 5 agachamentos, 5 polichinelos e 5 elevações de joelho.",
+  tag: "Aquecimento",
+  rarity: "comum",
+},
+{
+  icon: Timer,
+  title: "Prancha da Concentração",
+  text: "Na primeira pausa depois de sofrer um gol, faça uma prancha de 15 segundos.",
+  tag: "Força",
+  rarity: "raro",
+},
+{
+  icon: RotateCcw,
+  title: "Caminhada da Vergonha",
+  text: "Se terminar o primeiro tempo perdendo, dê uma volta caminhando ao redor da cadeira antes do segundo tempo.",
+  tag: "Comédia",
+  rarity: "incomum",
+},
+{
+  icon: UsersRound,
+  title: "Duelo de Resistência",
+  text: "Durante uma pausa, os dois jogadores ficam em posição de agachamento isométrico por até 15 segundos. Quem desistir primeiro perde o desafio.",
+  tag: "Duelo",
+  rarity: "epic",
+},
+{
+  icon: Flame,
+  title: "Sobrevivente",
+  text: "Ao sofrer 4 gols, faça 10 polichinelos durante a próxima pausa.",
+  tag: "Resistência",
+  rarity: "epic",
+},
+{
+  icon: Goal,
+  title: "Gol de Ouro, Pernas de Aço",
+  text: "Quando marcar o gol que coloca você na frente pela primeira vez, faça 5 agachamentos comemorativos na próxima pausa.",
+  tag: "Força",
+  rarity: "raro",
+},
+{
+  icon: Footprints,
+  title: "Pé de Pano",
+  text: "Durante uma pausa, dê 10 passos curtos tentando manter o equilíbrio, sem correr.",
+  tag: "Coordenação",
+  rarity: "incomum",
+},
+{
+  icon: Zap,
+  title: "A Última Esperança",
+  text: "Se estiver perdendo por 3 gols ou mais, faça 10 segundos de corrida no lugar durante a próxima pausa.",
+  tag: "Cardio",
+  rarity: "epic",
+},
+{
+  icon: Trophy,
+  title: "Tudo nas Pernas",
+  text: "Antes da partida, os dois jogadores fazem 10 agachamentos. Se alguém não conseguir, pode adaptar o exercício para uma versão mais leve.",
+  tag: "Desafio",
+  rarity: "lendario",
+},
+{
+  icon: Shield,
+  title: "Muralha Humana",
+  text: "Seu objetivo é terminar a partida sofrendo no máximo 1 gol. Se conseguir, complete o desafio. Se sofrer mais, o mutador falha.",
+  tag: "Desafio pessoal",
+  rarity: "raro",
+},
+{
+  icon: Goal,
+  title: "Artilheiro Solitário",
+  text: "Você precisa marcar pelo menos 3 gols com o mesmo jogador. Se conseguir até o apito final, vence o desafio.",
+  tag: "Objetivo",
+  rarity: "epic",
+},
+{
+  icon: Trophy,
+  title: "Vitória por Convicção",
+  text: "Você precisa vencer por pelo menos 2 gols de diferença. Se vencer por apenas 1, o desafio não será concluído.",
+  tag: "Objetivo",
+  rarity: "raro",
+},
+{
+  icon: Shuffle,
+  title: "Gol Democrático",
+  text: "Tente marcar gols com pelo menos 3 jogadores diferentes. Se conseguir, complete o mutador.",
+  tag: "Objetivo",
+  rarity: "incomum",
+},
+{
+  icon: Zap,
+  title: "Relâmpago",
+  text: "Seu primeiro gol precisa acontecer antes dos 30 minutos do jogo. Se não acontecer, você perde o desafio.",
+  tag: "Velocidade",
+  rarity: "raro",
+},
+{
+  icon: Ban,
+  title: "Proibido Repetir",
+  text: "Não marque dois gols consecutivos com o mesmo jogador. Se fizer isso, o mutador será considerado falho.",
+  tag: "Regra especial",
+  rarity: "epic",
+},
+{
+  icon: Footprints,
+  title: "Futebol Raiz",
+  text: "Durante a partida, tente marcar pelo menos um gol de fora da área. O desafio só termina no apito final.",
+  tag: "Habilidade",
+  rarity: "incomum",
+},
+{
+  icon: Dices,
+  title: "Aposta no Escanteio",
+  text: "Você precisa marcar pelo menos um gol após uma cobrança de escanteio. Se não conseguir, o desafio falha.",
+  tag: "Habilidade",
+  rarity: "raro",
+},
+{
+  icon: Heart,
+  title: "Fair Play",
+  text: "Termine a partida sem receber nenhum cartão vermelho. Se nenhum dos jogadores receber vermelho, ambos completam o desafio.",
+  tag: "Fair play",
+  rarity: "incomum",
+},
+{
+  icon: Timer,
+  title: "Pressão Até o Fim",
+  text: "Você precisa marcar pelo menos um gol no segundo tempo. Se terminar sem marcar, não completa o desafio.",
+  tag: "Objetivo",
+  rarity: "incomum",
+},
+{
+  icon: UsersRound,
+  title: "Elenco Participativo",
+  text: "Marque gols com pelo menos 4 jogadores diferentes durante a partida. Se conseguir, complete o desafio.",
+  tag: "Objetivo",
+  rarity: "epic",
+},
+{
+  icon: Sparkles,
+  title: "Gol de Cinema",
+  text: "Marque um gol de voleio, bicicleta ou outro tipo de finalização acrobática. O desafio só pode ser validado se os dois jogadores concordarem que a jogada valeu.",
+  tag: "Habilidade",
+  rarity: "lendario",
+},
+{
+  icon: MessageCircle,
+  title: "Comentarista Oficial",
+  text: "Durante toda a partida, você precisa narrar pelo menos uma jogada importante de cada tempo como se fosse um comentarista profissional.",
+  tag: "Interpretação",
+  rarity: "incomum",
+},
+{
+  icon: Laugh,
+  title: "Personagem do Jogo",
+  text: "Antes da partida começar, escolha uma personalidade: treinador furioso, comentarista dramático ou torcedor fanático. Mantenha o personagem durante o jogo.",
+  tag: "Comédia",
+  rarity: "raro",
+},
+{
+  icon: Hand,
+  title: "Acordo de Cavalheiros",
+  text: "Antes da partida, os dois jogadores escolhem uma comemoração combinada. Sempre que qualquer um marcar, ambos precisam executá-la após o gol.",
+  tag: "Duelo",
+  rarity: "comum",
+},
+{
+  icon: EyeOff,
+  title: "Poker Face",
+  text: "Durante a partida, tente não demonstrar frustração, surpresa ou comemoração exagerada. O adversário pode apontar uma reação evidente, mas os dois precisam concordar para validar.",
+  tag: "Autocontrole",
+  rarity: "raro",
+},
+{
+  icon: Flame,
+  title: "Rivalidade Máxima",
+  text: "Antes do jogo, cada jogador escolhe uma provocação leve e engraçada. Ela só pode ser usada durante a partida, sem ofensas pessoais.",
+  tag: "Rivalidade",
+  rarity: "incomum",
+},
+{
+  icon: CircleHelp,
+  title: "Missão Secreta",
+  text: "Antes do jogo, cada jogador escreve uma missão secreta relacionada à partida. No apito final, revelem as missões e confiram quem conseguiu cumprir a sua.",
+  tag: "Missão secreta",
+  rarity: "epic",
+},
 ];
 
 function ChampionshipPage({
@@ -1073,6 +1574,7 @@ function ChampionshipPage({
     [mode, setMode] = useState<"classic" | "duo" | "mad">("classic"),
     [team, setTeam] = useState<Team | undefined>(),
     [mutator, setMutator] = useState<number | null>(null),
+    [displayedMutators, setDisplayedMutators] = useState<number[]>([]),
     [rolling, setRolling] = useState(false),
     [confirming, setConfirming] = useState(false),
     [formError, setFormError] = useState(""),
@@ -1153,11 +1655,17 @@ function ChampionshipPage({
       return included ? list.filter((item) => item !== id) : [...list, id];
     });
   const drawMutator = () => {
+    if (rolling) return;
+
     playArenaSound("draw");
+
     setRolling(true);
     setMutator(null);
+
     window.setTimeout(() => {
-      setMutator(Math.floor(Math.random() * MUTATORS.length));
+      const shuffled = [...MUTATORS.keys()].sort(() => Math.random() - 0.5);
+
+      setDisplayedMutators(shuffled.slice(0, 5));
       setRolling(false);
     }, 700);
   };
@@ -1399,26 +1907,64 @@ function ChampionshipPage({
             </p>
             <button type="button" onClick={drawMutator} disabled={rolling}>
               <Shuffle size={17} />{" "}
-              {rolling ? "Roleta girando..." : "Sortear desafio obrigatório"}
+              {rolling ? "Roleta girando..." : "Sortear 5 desafios"}
             </button>
           </div>
           <div className={`mutator-cards ${rolling ? "rolling" : ""}`}>
-            {MUTATORS.map((rule, index) => {
+            {displayedMutators.map((index) => {
+              const rule = MUTATORS[index];
               const Icon = rule.icon;
+
+              const rarityColors: Record<string, string> = {
+                comum: "#8b95a7",
+                incomum: "#35c987",
+                raro: "#5aa8ff",
+                epico: "#b875ff",
+                lendario: "#e4bd55",
+              };
+
+              const rarityLabels: Record<string, string> = {
+                comum: "COMUM",
+                incomum: "INCOMUM",
+                raro: "RARO",
+                epico: "ÉPICO",
+                lendario: "LENDÁRIO",
+              };
+
+              const rarityColor =
+                rarityColors[rule.rarity] ?? rarityColors.comum;
+
               return (
                 <button
                   type="button"
                   key={rule.title}
                   onClick={() => setMutator(index)}
-                  className={mutator === index ? "revealed" : ""}
-                  title={rule.text}
-                >
+                  className={`mutator-card ${
+                    mutator === index ? "revealed" : ""
+                  }`}
+                  >
                   <span className="mutator-icon">
                     <Icon size={20} />
                   </span>
-                  <small>{rule.tag}</small>
+
+                  <div className="mutator-card-labels">
+                    <small className="mutator-tag">{rule.tag}</small>
+
+                    <small
+                      className="mutator-rarity"
+                      style={{
+                        color: rarityColor,
+                        borderColor: rarityColor,
+                      }}
+                    >
+                      {rarityLabels[rule.rarity] ?? "COMUM"}
+                    </small>
+                  </div>
+
                   <b>{rule.title}</b>
+
                   <p>{rule.text}</p>
+
                   {mutator === index && (
                     <i>
                       <Check size={15} /> selecionado
@@ -1427,6 +1973,16 @@ function ChampionshipPage({
                 </button>
               );
             })}
+
+            {!displayedMutators.length && (
+              <div className="mutator-empty">
+                <Dices size={24} />
+                <p>
+                  Clique em <b>Sortear desafio obrigatório</b> para revelar
+                  cinco mutators.
+                </p>
+              </div>
+            )}
           </div>
         </section>
       )}
@@ -1498,7 +2054,7 @@ function ChampionshipPage({
                       const player = players.find((p) => p.id === id);
                       return (
                         player && (
-                                                <span className="duo-member" key={id}>
+                          <span className="duo-member" key={id}>
                             <i>{player.name[0]}</i>
                             {player.name}
                           </span>
@@ -2234,11 +2790,7 @@ function ThemeControl() {
   );
 }
 
-function SettingsPage({
-  reload,
-}: {
-  reload: () => Promise<void>;
-}) {
+function SettingsPage({ reload }: { reload: () => Promise<void> }) {
   type SettingsSection =
     | "appearance"
     | "data"
@@ -2310,21 +2862,17 @@ function SettingsPage({
     () => localStorage.getItem("arena-muted") === "true",
   );
 
-  const [section, setSection] =
-    useState<SettingsSection>("appearance");
+  const [section, setSection] = useState<SettingsSection>("appearance");
 
   const [message, setMessage] = useState("");
 
-  const [rules, setRules] =
-    useState<GameRulesSettings | null>(null);
+  const [rules, setRules] = useState<GameRulesSettings | null>(null);
 
   const [rulesError, setRulesError] = useState("");
 
-  const [savingRules, setSavingRules] =
-    useState(false);
+  const [savingRules, setSavingRules] = useState(false);
 
-  const [confirmingReset, setConfirmingReset] =
-    useState(false);
+  const [confirmingReset, setConfirmingReset] = useState(false);
 
   /*
    * ============================================================
@@ -2333,15 +2881,9 @@ function SettingsPage({
    */
 
   useEffect(() => {
-    document.documentElement.style.setProperty(
-      "--arena-accent",
-      accent,
-    );
+    document.documentElement.style.setProperty("--arena-accent", accent);
 
-    document.documentElement.style.setProperty(
-      "--arena-bg",
-      background,
-    );
+    document.documentElement.style.setProperty("--arena-bg", background);
 
     localStorage.setItem("arena-accent", accent);
     localStorage.setItem("arena-background", background);
@@ -2354,10 +2896,7 @@ function SettingsPage({
    */
 
   useEffect(() => {
-    localStorage.setItem(
-      "arena-muted",
-      String(muted),
-    );
+    localStorage.setItem("arena-muted", String(muted));
   }, [muted]);
 
   /*
@@ -2451,15 +2990,12 @@ function SettingsPage({
     <section className="page settings-page">
       <header className="page-header">
         <div>
-          <span className="eyebrow">
-            CONFIGURAÇÕES
-          </span>
+          <span className="eyebrow">CONFIGURAÇÕES</span>
 
           <h1>Configurações</h1>
 
           <p>
-            Personalize o FC Arena e configure o funcionamento
-            da sua Arena.
+            Personalize o FC Arena e configure o funcionamento da sua Arena.
           </p>
         </div>
       </header>
@@ -2483,9 +3019,7 @@ function SettingsPage({
                 <button
                   key={item.id}
                   type="button"
-                  className={`settings-nav-item ${
-                    active ? "active" : ""
-                  }`}
+                  className={`settings-nav-item ${active ? "active" : ""}`}
                   onClick={() => setSection(item.id)}
                 >
                   <span className="settings-nav-icon">
@@ -2495,15 +3029,10 @@ function SettingsPage({
                   <span className="settings-nav-content">
                     <strong>{item.label}</strong>
 
-                    <small>
-                      {item.description}
-                    </small>
+                    <small>{item.description}</small>
                   </span>
 
-                  <ArrowRight
-                    size={15}
-                    className="settings-nav-arrow"
-                  />
+                  <ArrowRight size={15} className="settings-nav-arrow" />
                 </button>
               );
             })}
@@ -2530,16 +3059,11 @@ function SettingsPage({
             <article className="settings-card">
               <div className="settings-card-header">
                 <div>
-                  <span className="settings-card-label">
-                    PERSONALIZAÇÃO
-                  </span>
+                  <span className="settings-card-label">PERSONALIZAÇÃO</span>
 
                   <h2>Aparência</h2>
 
-                  <p>
-                    Personalize as cores e efeitos visuais
-                    do FC Arena.
-                  </p>
+                  <p>Personalize as cores e efeitos visuais do FC Arena.</p>
                 </div>
 
                 <Sparkles size={22} />
@@ -2551,8 +3075,8 @@ function SettingsPage({
                     <h3>Cor de destaque</h3>
 
                     <p>
-                      Escolha a cor principal utilizada
-                      nos elementos da interface.
+                      Escolha a cor principal utilizada nos elementos da
+                      interface.
                     </p>
                   </div>
 
@@ -2594,10 +3118,7 @@ function SettingsPage({
                   <div>
                     <h3>Fundo</h3>
 
-                    <p>
-                      Defina a tonalidade principal do
-                      aplicativo.
-                    </p>
+                    <p>Defina a tonalidade principal do aplicativo.</p>
                   </div>
 
                   <div
@@ -2609,27 +3130,18 @@ function SettingsPage({
                 </div>
 
                 <div className="settings-color-row">
-                  {[
-                    "#0a0f1f",
-                    "#0d1117",
-                    "#111318",
-                    "#15121d",
-                  ].map((color) => (
+                  {["#0a0f1f", "#0d1117", "#111318", "#15121d"].map((color) => (
                     <button
                       key={color}
                       type="button"
                       aria-label={`Selecionar fundo ${color}`}
                       className={`settings-color-option ${
-                        background === color
-                          ? "active"
-                          : ""
+                        background === color ? "active" : ""
                       }`}
                       style={{
                         background: color,
                       }}
-                      onClick={() =>
-                        setBackground(color)
-                      }
+                      onClick={() => setBackground(color)}
                     />
                   ))}
                 </div>
@@ -2640,77 +3152,55 @@ function SettingsPage({
                   <div className="settings-toggle-content">
                     <h3>Efeitos sonoros</h3>
 
-                    <p>
-                      Ative ou desative os sons da
-                      interface.
-                    </p>
+                    <p>Ative ou desative os sons da interface.</p>
                   </div>
 
                   <button
                     type="button"
-                    className={`settings-toggle ${
-                      !muted ? "active" : ""
-                    }`}
+                    className={`settings-toggle ${!muted ? "active" : ""}`}
                     aria-pressed={!muted}
-                    onClick={() =>
-                      setMuted((value) => !value)
-                    }
+                    onClick={() => setMuted((value) => !value)}
                   >
                     <span />
                   </button>
                 </div>
               </div>
             </article>
-
-          /* ===================================================
+          ) : /* ===================================================
              REGRAS
              =================================================== */
 
-          ) : section === "rules" ? (
+          section === "rules" ? (
             <article className="settings-card">
               <div className="settings-card-header">
                 <div>
-                  <span className="settings-card-label">
-                    REGRAS
-                  </span>
+                  <span className="settings-card-label">REGRAS</span>
 
                   <h2>Regras do jogo</h2>
 
                   <p>
-                    Configure as regras utilizadas nos
-                    campeonatos da Arena.
+                    Configure as regras utilizadas nos campeonatos da Arena.
                   </p>
                 </div>
 
                 <Gauge size={22} />
               </div>
 
-              {rulesError && (
-                <div className="settings-error">
-                  {rulesError}
-                </div>
-              )}
+              {rulesError && <div className="settings-error">{rulesError}</div>}
 
               {!rules ? (
                 <div className="settings-loading">
                   <span />
-                  <p>
-                    Carregando regras...
-                  </p>
+                  <p>Carregando regras...</p>
                 </div>
               ) : (
                 <>
                   <div className="settings-section">
                     <div className="settings-section-heading">
                       <div>
-                        <h3>
-                          Configurações gerais
-                        </h3>
+                        <h3>Configurações gerais</h3>
 
-                        <p>
-                          Regras padrão para novos
-                          campeonatos.
-                        </p>
+                        <p>Regras padrão para novos campeonatos.</p>
                       </div>
                     </div>
 
@@ -2728,27 +3218,21 @@ function SettingsPage({
                       disabled={savingRules}
                       onClick={saveRules}
                     >
-                      {savingRules
-                        ? "Salvando..."
-                        : "Salvar regras"}
+                      {savingRules ? "Salvando..." : "Salvar regras"}
                     </button>
                   </div>
                 </>
               )}
             </article>
-
-          /* ===================================================
+          ) : /* ===================================================
              SOBRE
              =================================================== */
 
-          ) : section === "about" ? (
+          section === "about" ? (
             <article className="settings-card settings-about-app">
               <div className="settings-about-app-header">
                 <div className="settings-about-app-icon">
-                  <img
-                    src={fcArenaLogo}
-                    alt="Logo FC Arena"
-                  />
+                  <img src={fcArenaLogo} alt="Logo FC Arena" />
                 </div>
 
                 <div className="settings-about-app-heading">
@@ -2758,10 +3242,7 @@ function SettingsPage({
 
                   <h2>FC Arena</h2>
 
-                  <p>
-                    Gerenciador de campeonatos para
-                    EA Sports FC.
-                  </p>
+                  <p>Gerenciador de campeonatos para EA Sports FC.</p>
                 </div>
               </div>
 
@@ -2778,23 +3259,17 @@ function SettingsPage({
 
                 <div className="settings-about-app-item">
                   <span>Tecnologia</span>
-                  <strong>
-                    Electron + React + TypeScript
-                  </strong>
+                  <strong>Electron + React + TypeScript</strong>
                 </div>
 
                 <div className="settings-about-app-item">
                   <span>Banco de dados</span>
-                  <strong>
-                    SQLite + Supabase
-                  </strong>
+                  <strong>SQLite + Supabase</strong>
                 </div>
 
                 <div className="settings-about-app-item">
                   <span>Desenvolvedor</span>
-                  <strong>
-                    Victor Henrique
-                  </strong>
+                  <strong>Victor Henrique</strong>
                 </div>
               </div>
 
@@ -2803,60 +3278,41 @@ function SettingsPage({
                   O PROJETO
                 </span>
 
-                <h3>
-                  Sobre o FC Arena
-                </h3>
+                <h3>Sobre o FC Arena</h3>
 
                 <p>
-                  O FC Arena foi desenvolvido para
-                  facilitar a criação e o gerenciamento
-                  de campeonatos de EA Sports FC,
-                  permitindo organizar jogadores,
-                  equipes, partidas, rankings e
-                  competições em um único lugar.
+                  O FC Arena foi desenvolvido para facilitar a criação e o
+                  gerenciamento de campeonatos de EA Sports FC, permitindo
+                  organizar jogadores, equipes, partidas, rankings e competições
+                  em um único lugar.
                 </p>
               </div>
             </article>
-
-          /* ===================================================
+          ) : (
+            /* ===================================================
              OUTRAS SEÇÕES
              =================================================== */
 
-          ) : (
             <article className="settings-card settings-placeholder">
               <div className="settings-placeholder-icon">
                 {(() => {
-                  const currentSection =
-                    sections.find(
-                      (item) =>
-                        item.id === section,
-                    );
+                  const currentSection = sections.find(
+                    (item) => item.id === section,
+                  );
 
-                  const Icon =
-                    currentSection?.icon ??
-                    Sparkles;
+                  const Icon = currentSection?.icon ?? Sparkles;
 
                   return <Icon size={22} />;
                 })()}
               </div>
 
               <div>
-                <span className="settings-placeholder-label">
-                  CONFIGURAÇÃO
-                </span>
+                <span className="settings-placeholder-label">CONFIGURAÇÃO</span>
 
-                <h2>
-                  {
-                    sections.find(
-                      (item) =>
-                        item.id === section,
-                    )?.label
-                  }
-                </h2>
+                <h2>{sections.find((item) => item.id === section)?.label}</h2>
 
                 <p>
-                  Esta categoria está preparada
-                  para uma próxima fase e ainda
+                  Esta categoria está preparada para uma próxima fase e ainda
                   não possui ações configuradas.
                 </p>
               </div>

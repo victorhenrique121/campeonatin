@@ -67,3 +67,42 @@
         grid-column: 1 / -1;
     }
 }
+/* Botão de registro de resultado no confronto pendente (P1-1). */
+.fixture-register {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px;
+    border: 1px dashed #4d5d86;
+    border-radius: 999px;
+    background: transparent;
+    color: #c3cde2;
+    font: inherit;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .04em;
+    cursor: pointer;
+    transition: border-color .15s ease, color .15s ease, background .15s ease;
+}
+
+.fixture-register:hover {
+    border-color: #8d7cff;
+    background: #826eff1f;
+    color: #fff;
+}
+
+.fixture-register:focus-visible {
+    outline: 2px solid #8d7cff;
+    outline-offset: 2px;
+}
+
+body.arena-light .fixture-register {
+    border-color: #b7c1d6;
+    color: #34405a;
+}
+
+body.arena-light .fixture-register:hover {
+    border-color: #826eff;
+    background: #826eff14;
+    color: #182033;
+}

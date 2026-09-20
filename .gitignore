@@ -16,3 +16,7 @@ simulate-match.js
 /copilot-instructions.md
 
 .vscode/
+
+out/
+
+forge.config.js

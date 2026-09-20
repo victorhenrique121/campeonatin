@@ -3475,6 +3475,340 @@ nav .active {
     color: #9aa7bf;
 }
 
+/* =========================================================
+   FC ARENA — CARDS DOS MUTADORES
+   ========================================================= */
+
+.mutator-cards {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 14px;
+  align-items: stretch;
+  width: 100%;
+  margin-top: 20px;
+}
+
+/* Card base */
+
+.mutator-card {
+  --rarity-color: #8993a7;
+
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+
+  min-width: 0;
+  min-height: 230px;
+  padding: 18px;
+
+  overflow: hidden;
+  text-align: left;
+
+  color: #e8edf7;
+  background: #121a2a;
+  border: 1px solid #293449;
+  border-radius: 16px;
+
+  cursor: pointer;
+
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    background-color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+/* Pequeno detalhe colorido no topo */
+
+.mutator-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 18px;
+  right: 18px;
+
+  height: 3px;
+  border-radius: 0 0 4px 4px;
+
+  background: var(--rarity-color);
+  opacity: 0.8;
+}
+
+/* Cores discretas por raridade */
+
+.mutator-card.rarity-comum {
+  --rarity-color: #9aa4b5;
+}
+
+.mutator-card.rarity-incomum {
+  --rarity-color: #55c99a;
+}
+
+.mutator-card.rarity-raro {
+  --rarity-color: #69aaff;
+}
+
+.mutator-card.rarity-epic {
+  --rarity-color: #b58aff;
+}
+
+.mutator-card.rarity-lendario {
+  --rarity-color: #e7bd61;
+}
+
+/* Hover */
+
+.mutator-card:hover {
+  transform: translateY(-3px);
+  border-color: var(--rarity-color);
+  background: #172135;
+}
+
+/* Foco acessível pelo teclado */
+
+.mutator-card:focus-visible {
+  outline: 2px solid var(--rarity-color);
+  outline-offset: 3px;
+}
+
+/* Ícone */
+
+.mutator-card .mutator-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  width: 42px;
+  height: 42px;
+  flex-shrink: 0;
+
+  color: var(--rarity-color);
+  background: #1b2639;
+  border: 1px solid #2b3950;
+  border-radius: 12px;
+}
+
+/* Linha de etiquetas */
+
+.mutator-card .mutator-card-labels {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+
+  width: 100%;
+}
+
+/* Tag de categoria */
+
+.mutator-card .mutator-tag {
+  display: inline-flex;
+  align-items: center;
+
+  padding: 5px 8px;
+
+  color: #aebbd0;
+  background: #202b3e;
+  border: 1px solid #303d52;
+  border-radius: 6px;
+
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  line-height: 1;
+}
+
+/* Tag de raridade */
+
+.mutator-card .mutator-rarity {
+  display: inline-flex;
+  align-items: center;
+
+  padding: 5px 8px;
+
+  color: var(--rarity-color);
+  background: #101827;
+  border: 1px solid color-mix(
+    in srgb,
+    var(--rarity-color) 45%,
+    transparent
+  );
+  border-radius: 6px;
+
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  line-height: 1;
+}
+
+/* Título */
+
+.mutator-card > b {
+  display: block;
+  width: 100%;
+
+  color: #f1f5fb;
+  font-size: 15px;
+  font-weight: 750;
+  line-height: 1.35;
+
+  overflow-wrap: anywhere;
+}
+
+/* Descrição */
+
+.mutator-card > p {
+  margin: 0;
+  width: 100%;
+
+  color: #a8b4c8;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.65;
+
+  overflow-wrap: anywhere;
+}
+
+/* Card selecionado */
+
+.mutator-card.revealed {
+  border-color: var(--rarity-color);
+  background: #1a2639;
+
+  box-shadow:
+    0 0 0 1px color-mix(
+      in srgb,
+      var(--rarity-color) 25%,
+      transparent
+    ),
+    0 8px 24px rgb(0 0 0 / 18%);
+}
+
+/* Indicador de seleção */
+
+.mutator-card > i {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+
+  margin-top: auto;
+  padding-top: 8px;
+
+  color: var(--rarity-color);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 750;
+}
+
+/* Estado de sorteio */
+
+.mutator-cards.rolling .mutator-card {
+  pointer-events: none;
+  animation: mutator-card-pulse 450ms ease-in-out infinite alternate;
+}
+
+@keyframes mutator-card-pulse {
+  from {
+    transform: translateY(0);
+    opacity: 0.7;
+  }
+
+  to {
+    transform: translateY(-3px);
+    opacity: 1;
+  }
+}
+
+/* Mensagem antes do sorteio */
+
+.mutator-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+
+  grid-column: 1 / -1;
+  min-height: 180px;
+  padding: 28px;
+
+  color: #8f9db3;
+  text-align: center;
+
+  background: #111a29;
+  border: 1px dashed #344158;
+  border-radius: 16px;
+}
+
+.mutator-empty svg {
+  color: #7185a5;
+}
+
+.mutator-empty p {
+  max-width: 360px;
+  margin: 0;
+
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.mutator-empty b {
+  color: #dce5f3;
+}
+
+/* =========================================================
+   RESPONSIVIDADE
+   ========================================================= */
+
+@media (max-width: 1200px) {
+  .mutator-cards {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .mutator-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .mutator-card {
+    min-height: 220px;
+    padding: 14px;
+    gap: 10px;
+  }
+
+  .mutator-card > b {
+    font-size: 14px;
+  }
+
+  .mutator-card > p {
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 460px) {
+  .mutator-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .mutator-card {
+    min-height: 0;
+  }
+}
+
+/* Respeita a preferência por movimento reduzido */
+
+@media (prefers-reduced-motion: reduce) {
+  .mutator-card,
+  .mutator-cards.rolling .mutator-card {
+    animation: none;
+    transition: none;
+  }
+}
+
 
 /* ==========================================
    11. RESPONSIVIDADE (MEDIA QUERIES)

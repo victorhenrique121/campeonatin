@@ -279,9 +279,9 @@ body.arena-compact-sidebar .side-bottom button {
   padding: 9px 11px;
 }
 
-/* Campeonatos: ações sem alterar a árvore React dos cards. */
+/* Campeonatos: base dos cards da galeria. As ações de editar/excluir vivem na árvore React (main.tsx). */
 
-/* Contêiner da galeria; permite posicionar ações flutuantes sem cortar seu conteúdo. */
+/* Contêiner da galeria. */
 .season-gallery {
   position: relative;
   min-width: 0;
@@ -322,44 +322,61 @@ body.arena-compact-sidebar .side-bottom button {
 }
 
 /*
- * Barra de ações posicionada sobre a interface.
- * O z-index garante que ela fique acima dos cartões, enquanto o blur cria
- * uma superfície legível sem ocupar uma nova área do layout.
+ * Ações de editar/excluir dentro do próprio card (árvore React).
+ * Ficam ancoradas no rodapé e aparecem no hover/foco do card; em telas de
+ * toque (<= 950px) permanecem sempre visíveis. Substituem a antiga barra
+ * flutuante posicionada por JS no appearance.ts.
  */
-.championship-actions-floating {
-  position: fixed;
-  z-index: 1100;
-  display: flex;
-  gap: 6px;
-  padding: 6px;
-  border: 1px solid #293653;
-  border-radius: 10px;
-  background: rgba(10, 15, 31, .96);
-  box-shadow: 0 14px 34px rgba(0, 0, 0, .28);
-  backdrop-filter: blur(10px);
+.season-card footer {
+  position: relative;
 }
 
-/* Botões transparentes que herdam a tipografia e destacam apenas no hover. */
-.championship-actions-floating button {
+.season-card-actions {
+  position: absolute;
+  right: 0;
+  bottom: -3px;
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid #293653;
+  border-radius: 9px;
+  background: rgba(10, 15, 31, .96);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, .28);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .15s ease;
+}
+
+.season-card:hover .season-card-actions,
+.season-card:focus-within .season-card-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.season-card-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
   border: 0;
   border-radius: 7px;
-  padding: 7px 10px;
   background: transparent;
   color: #dfe5f2;
-  font: inherit;
-  font-size: 11px;
-  font-weight: 700;
   cursor: pointer;
 }
 
-/* Fundo de interação da barra de ações. */
-.championship-actions-floating button:hover {
+.season-card-actions button:hover {
   background: #202c47;
 }
 
-/* Ação destrutiva usa vermelho para comunicar risco. */
-.championship-actions-floating button[data-action="delete"] {
+.season-card-actions button.danger {
   color: #ff8b9b;
+}
+
+.season-card-actions button:focus-visible {
+  outline: 2px solid #8d7cff;
+  outline-offset: 1px;
 }
 
 /* Camada escura que bloqueia a página enquanto o modal está aberto. */
@@ -498,23 +515,23 @@ body.arena-compact-sidebar .side-bottom button {
 }
 
 /*
- * Ajustes do modal e da barra flutuante no tema claro.
+ * Ajustes do modal e das ações dos cards no tema claro.
  * A estrutura e o comportamento continuam iguais; apenas as superfícies,
  * bordas e textos são adaptados para manter contraste sobre o fundo claro.
  */
-body.arena-light .championship-actions-floating {
+body.arena-light .season-card-actions {
   background: rgba(255, 255, 255, .98);
   border-color: #dbe2ee;
-  box-shadow: 0 14px 34px rgba(31, 43, 68, .16);
+  box-shadow: 0 10px 24px rgba(31, 43, 68, .16);
 }
 
-/* Cor dos botões da barra flutuante clara. */
-body.arena-light .championship-actions-floating button {
+/* Cor dos botões de ação no tema claro. */
+body.arena-light .season-card-actions button {
   color: #34405a;
 }
 
-/* Estado hover da barra flutuante clara. */
-body.arena-light .championship-actions-floating button:hover {
+/* Estado hover das ações no tema claro. */
+body.arena-light .season-card-actions button:hover {
   background: #eef1f8;
 }
 
@@ -554,21 +571,18 @@ body.arena-light .championship-edit-cancel {
 
 /*
  * Tablets e telas intermediárias.
- * A sidebar compacta fica um pouco menor e a barra de ações deixa de seguir
- * o cartão para ficar fixa no canto inferior direito.
+ * A sidebar compacta fica um pouco menor e as ações dos cards de temporada
+ * passam a ficar sempre visíveis (telas de toque não têm hover confiável).
  */
 @media (max-width: 950px) {
   body.arena-compact-sidebar .shell {
     grid-template-columns: 70px 1fr;
   }
 
-  /* Corrige o posicionamento calculado pelo desktop em telas menores. */
-  .championship-actions-floating {
-    position: fixed;
-    left: auto !important;
-    top: auto !important;
-    right: 14px;
-    bottom: 14px;
+  /* Sem hover no toque: ações sempre visíveis. */
+  .season-card-actions {
+    opacity: 1;
+    pointer-events: auto;
   }
 }
 
