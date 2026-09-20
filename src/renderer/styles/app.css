@@ -3476,6 +3476,105 @@ nav .active {
 }
 
 /* =========================================================
+   ITEM 2.2+2.3 — time por participante persistido, TeamPicker
+   por jogador na montagem do campeonato, filtros dedicados de
+   liga/país no TeamPicker.
+   ========================================================= */
+
+/* Container de cada participante: toggle + picker de time abaixo,
+   substituindo o botão único de antes (que só marcava presença). */
+.player-pick {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  background: #121a2a;
+  border: 1px solid #232c40;
+  border-radius: 12px;
+  transition: border-color 150ms ease, background-color 150ms ease;
+}
+
+.player-pick.chosen {
+  border-color: #35cbb9;
+  background: #132322;
+}
+
+/* O toggle em si reaproveita o visual do antigo botão único
+   (mesmo layout interno: inicial + nome + status), mas agora só
+   controla presença — o time fica no TeamPicker abaixo. */
+.player-pick-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 4px;
+  background: transparent;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.player-pick-toggle .player-initial {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: #1b2639;
+  color: #cdd8ee;
+  font-weight: 700;
+}
+
+.player-pick-toggle > span:nth-child(2) {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.player-pick-toggle b {
+  color: #f1f5fb;
+  font-size: 13px;
+}
+
+.player-pick-toggle small {
+  color: #8a97ad;
+  font-size: 11px;
+}
+
+.player-pick-toggle svg {
+  color: #35cbb9;
+  flex-shrink: 0;
+}
+
+/* Filtros dedicados de liga/país dentro do TeamPicker aberto. */
+.team-picker-filters {
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+  border-bottom: 1px solid #232c40;
+}
+
+.team-picker-filters select {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  font-size: 12px;
+  color: #cdd8ee;
+  background: #0f1626;
+  border: 1px solid #2b3950;
+  border-radius: 8px;
+}
+
+@media (max-width: 900px) {
+  .team-picker-filters {
+    flex-direction: column;
+  }
+}
+
+/* =========================================================
    FC ARENA — CARDS DOS MUTADORES
    ========================================================= */
 

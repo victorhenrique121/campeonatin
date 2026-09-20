@@ -27,6 +27,10 @@ export type Api = {
   saveChampionship: (
     value: Omit<Championship, "id" | "participants"> & {
       participantIds: number[];
+      // Time escolhido para cada participante (mesmo índice de
+      // participantIds) — persistido, deixa de ser esquecido ao registrar
+      // resultados.
+      participantTeamIds?: (number | null)[];
     },
   ) => Promise<Championship>;
   updateChampionship: (id: number, name: string) => Promise<Championship>;

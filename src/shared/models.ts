@@ -135,6 +135,13 @@ export type Fixture = {
   score1?: number;
   score2?: number;
   match?: Match;
+  // Time configurado para cada jogador neste campeonato (persistido em
+  // championship_participants.team_id) — usado para pré-preencher o
+  // registro de resultado sem pedir de novo.
+  team1Id?: number | null;
+  team1?: string | null;
+  team2Id?: number | null;
+  team2?: string | null;
 };
 export type ChampionshipDetail = {
   championship: Championship;

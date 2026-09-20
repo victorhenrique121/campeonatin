@@ -545,8 +545,6 @@ function DashboardPage({
           onClose={() => setEditingMatch(null)}
           onSaved={async () => {
             setEditingMatch(null);
-            // P0-2: sem window.location.reload() — o App passa o reload de
-            // estado (dashboard/players/teams) e a janela permanece intacta.
             await reload();
           }}
         />
@@ -580,9 +578,9 @@ function PlayersPage({
           <h1>Jogadores</h1>
         </div>
       </section>
-        <section className="grid">
-        <article className="panel match-panel">
-          <form className="form match-form" onSubmit={save}>
+      <section className="grid players-layout">
+        <article className="panel">
+          <form className="form" onSubmit={save}>
             <label>
               Nome
               <input
@@ -651,14 +649,18 @@ function TeamPicker({
   teams,
   value,
   onChange,
+  excludeTeamIds,
 }: {
   label: string;
   teams: Team[];
   value: Team | null;
   onChange: (team: Team | null) => void;
+  excludeTeamIds?: number[];
 }) {
   const [search, setSearch] = useState(value?.name ?? "");
   const [open, setOpen] = useState(false);
+  const [leagueFilter, setLeagueFilter] = useState("");
+  const [countryFilter, setCountryFilter] = useState("");
   const rootRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -670,12 +672,23 @@ function TeamPicker({
     return () => document.removeEventListener("click", onDocumentClick);
   }, []);
 
+  const excluded = new Set(excludeTeamIds ?? []);
+  const availableTeams = teams.filter(
+    (t) => !excluded.has(t.id) || t.id === value?.id,
+  );
+  const leagues = Array.from(
+    new Set(availableTeams.map((t) => t.league)),
+  ).sort();
+  const countries = Array.from(
+    new Set(availableTeams.map((t) => t.country)),
+  ).sort();
+
   const query = search.toLowerCase();
-  const filtered = teams.filter(
+  const filtered = availableTeams.filter(
     (t) =>
-      t.name.toLowerCase().includes(query) ||
-      t.league.toLowerCase().includes(query) ||
-      t.country.toLowerCase().includes(query),
+      (!query || t.name.toLowerCase().includes(query)) &&
+      (!leagueFilter || t.league === leagueFilter) &&
+      (!countryFilter || t.country === countryFilter),
   );
 
   return (
@@ -688,13 +701,12 @@ function TeamPicker({
       <div className={`team-picker-slot ${value ? "filled" : "pending"}`}>
         <input
           type="text"
-          placeholder="Buscar time..."
+          placeholder="Buscar por nome..."
           value={search}
           autoComplete="off"
           aria-label={label}
           onChange={(event) => {
             setSearch(event.target.value);
-            // Ao editar a busca, o time selecionado deixa de ser válido.
             if (value) onChange(null);
           }}
           onFocus={() => setOpen(true)}
@@ -713,6 +725,32 @@ function TeamPicker({
       )}
       {open && (
         <div className="team-picker-results team-results">
+          <div className="team-picker-filters">
+            <select
+              value={leagueFilter}
+              onChange={(event) => setLeagueFilter(event.target.value)}
+              aria-label="Filtrar por liga"
+            >
+              <option value="">Todas as ligas</option>
+              {leagues.map((league) => (
+                <option key={league} value={league}>
+                  {league}
+                </option>
+              ))}
+            </select>
+            <select
+              value={countryFilter}
+              onChange={(event) => setCountryFilter(event.target.value)}
+              aria-label="Filtrar por país"
+            >
+              <option value="">Todos os países</option>
+              {countries.map((country) => (
+                <option key={country} value={country}>
+                  {country}
+                </option>
+              ))}
+            </select>
+          </div>
           {filtered.map((team) => (
             <button
               type="button"
@@ -762,9 +800,6 @@ function MatchesPage({
   const [formError, setFormError] = useState("");
   const [pickerEpoch, setPickerEpoch] = useState(0);
   const { toast, showToast } = useToast();
-  // P1-1: formulário 100% avulso. Resultados de campeonato são registrados
-  // na tela de detalhes da temporada (confronto pendente → "Registrar
-  // resultado"), com jogadores já definidos pela fixture.
   const [form, setForm] = useState({
     player1Id: "",
     team1Id: "",
@@ -774,9 +809,7 @@ function MatchesPage({
     team2Id: "",
   });
 
-   useEffect(() => {
-    // Se a leitura do histórico falhar, o card de confronto direto volta ao
-    // estado neutro silenciosamente — o formulário nunca trava por causa disso.
+  useEffect(() => {
     window.arena
       .matches()
       .then(setMatches)
@@ -858,7 +891,6 @@ function MatchesPage({
         player2Id: "",
         team2Id: "",
       });
-      // Remonta os TeamPickers zerando a busca interna.
       setPickerEpoch((epoch) => epoch + 1);
       await reload();
     } catch (error) {
@@ -869,9 +901,7 @@ function MatchesPage({
       );
     }
   };
-    // O confronto direto (antes calculado aqui e mostrado na raia central) virou
-  // o card <HeadToHeadCard /> no rodapé deste painel: mesmas entradas, mais
-  // informação (empates, último duelo e sequência de vitórias).
+
   return (
     <>
       <section className="page-title">
@@ -930,10 +960,6 @@ function MatchesPage({
             {formError && <div className="arena-form-error">{formError}</div>}
             <button className="primary">Salvar resultado</button>
           </form>
-          {/* Preenche o espaço que sobra neste painel: o grid já estica os dois
-              cards para a mesma altura, e o flex:1 do card ocupa o resto sem
-              nenhum height fixo. Reage ao mesmo estado de jogadores que
-              alimenta os TeamPickers (não espera pelos times). */}
           <HeadToHeadCard
             matches={matches}
             players={players}
@@ -1024,7 +1050,6 @@ const CARD_TONES = [
 type MutatorRarity = "comum" | "incomum" | "raro" | "epico" | "lendario";
 
 const MUTATORS = [
-  // ELENCO E FORMAÇÃO
   {
     icon: UsersRound,
     title: "10 em Campo",
@@ -1053,8 +1078,6 @@ const MUTATORS = [
     tag: "TÉCNICA",
     rarity: "epic",
   },
-
-  // CONTROLES E TÉCNICA
   {
     icon: EyeOff,
     title: "Visão Turva",
@@ -1111,8 +1134,6 @@ const MUTATORS = [
     tag: "ESTRATÉGIA",
     rarity: "incomum",
   },
-
-  // PRESSÃO E CAOS
   {
     icon: Flame,
     title: "Modo Fúria",
@@ -1134,8 +1155,6 @@ const MUTATORS = [
     tag: "CAOS",
     rarity: "raro",
   },
-
-  // RESENHA LOCAL
   {
     icon: MessageCircle,
     title: "Narrador de Rádio",
@@ -1221,341 +1240,341 @@ const MUTATORS = [
     rarity: "comum",
   },
   {
-  icon: Footprints,
-  title: "Caranguejo FC",
-  text: "Durante os próximos 3 minutos, você só pode atacar pelas laterais. Se entrar pelo centro, precisa devolver a bola para trás.",
-  tag: "TÁTICA",
-  rarity: "incomum",
-},
-{
-  icon: Zap,
-  title: "Chutou, Rezou",
-  text: "Durante 3 minutos, toda vez que entrar na área adversária, você precisa tentar finalizar antes de fazer mais de 3 passes.",
-  tag: "ATAQUE",
-  rarity: "raro",
-},
-{
-  icon: Shield,
-  title: "Defesa em Pânico",
-  text: "Durante os próximos 2 minutos, você não pode recuar voluntariamente a bola para o seu campo de defesa.",
-  tag: "DEFESA",
-  rarity: "raro",
-},
-{
-  icon: Shuffle,
-  title: "Futebol de Primeira",
-  text: "Durante 3 minutos, você não pode dar mais de 2 toques consecutivos com o mesmo jogador antes de passar ou finalizar.",
-  tag: "TÉCNICA",
-  rarity: "epic",
-},
-{
-  icon: Timer,
-  title: "Ataque Relâmpago",
-  text: "Durante 3 minutos, depois de recuperar a bola, você tem 15 segundos para tentar uma finalização.",
-  tag: "PRESSÃO",
-  rarity: "raro",
-},
-{
-  icon: MessageCircle,
-  title: "Advogado do Diabo",
-  text: "Durante os próximos 3 minutos, você precisa defender verbalmente todas as decisões controversas do árbitro, mesmo quando elas prejudicarem você.",
-  tag: "RESENHA",
-  rarity: "incomum",
-},
-{
-  icon: Mic,
-  title: "Comentarista Imparcial",
-  text: "Durante 2 minutos, você precisa narrar as jogadas dos dois jogadores como um comentarista profissional, sem demonstrar preferência.",
-  tag: "RESENHA",
-  rarity: "comum",
-},
-{
-  icon: Laugh,
-  title: "Cara de Enterro",
-  text: "Durante os próximos 3 minutos, você não pode comemorar, sorrir ou demonstrar empolgação quando marcar um gol.",
-  tag: "MENTAL",
-  rarity: "incomum",
-},
-{
-  icon: Heart,
-  title: "Elogio Obrigatório",
-  text: "Na próxima jogada bonita do adversário, você precisa elogiá-lo sinceramente antes de voltar a jogar.",
-  tag: "RESENHA",
-  rarity: "comum",
-},
-{
-  icon: Trophy,
-  title: "Cerimônia de Campeão",
-  text: "Se marcar o próximo gol, faça uma comemoração como se tivesse acabado de conquistar um título mundial.",
-  tag: "RESENHA",
-  rarity: "incomum",
-},
-{
-  icon: Ban,
-  title: "Proibido Recuar",
-  text: "Durante os próximos 3 minutos, você não pode fazer passes voluntários para trás no campo de ataque.",
-  tag: "TÁTICA",
-  rarity: "epic",
-},
-{
-  icon: Zap,
-  title: "Só Vale Golaço",
-  text: "Durante 3 minutos, você só pode tentar finalizar de fora da área. Gols de dentro da área não contam para o desafio.",
-  tag: "ATAQUE",
-  rarity: "epic",
-},
-{
-  icon: Snowflake,
-  title: "Congelamento Total",
-  text: "Durante os próximos 2 minutos, você não pode usar comandos especiais de drible nem corrida. Precisa construir as jogadas com passes e movimentação.",
-  tag: "TÉCNICA",
-  rarity: "raro",
-},
-{
-  icon: RotateCcw,
-  title: "Virada ou Vergonha",
-  text: "Se estiver perdendo, você precisa tentar marcar nos próximos 3 minutos. Se estiver empatando ou vencendo, precisa marcar mais um gol nesse período.",
-  tag: "PRESSÃO",
-  rarity: "lendario",
-},
-{
-  icon: Flame,
-  title: "Tudo ou Nada",
-  text: "Durante os próximos 3 minutos, você precisa jogar buscando o gol. Não pode manter a posse apenas para gastar tempo.",
-  tag: "CAOS",
-  rarity: "lendario",
-},
-{
-  icon: Footprints,
-  title: "Agachamento do Gol",
-  text: "Sempre que sofrer um gol, faça 5 agachamentos na próxima pausa.",
-  tag: "Físico",
-  rarity: "comum",
-},
-{
-  icon: Flame,
-  title: "Polichinelos da Derrota",
-  text: "Se estiver perdendo por 2 gols ou mais, faça 10 polichinelos na próxima pausa.",
-  tag: "Resistência",
-  rarity: "incomum",
-},
-{
-  icon: Shield,
-  title: "Flexão do Sofrimento",
-  text: "Ao sofrer 3 gols, faça 5 flexões na próxima pausa. Você pode adaptar o exercício ao seu condicionamento.",
-  tag: "Força",
-  rarity: "raro",
-},
-{
-  icon: Gauge,
-  title: "Corrida no Lugar",
-  text: "Se sofrer 2 gols consecutivos, corra no lugar por 10 segundos durante a próxima pausa.",
-  tag: "Cardio",
-  rarity: "incomum",
-},
-{
-  icon: Trophy,
-  title: "Pose de Craque",
-  text: "Ao marcar um gol, imite a pose de comemoração de um jogador por 5 segundos. Seu adversário precisa adivinhar quem é.",
-  tag: "Comédia",
-  rarity: "comum",
-},
-{
-  icon: Snowflake,
-  title: "Modo Estátua",
-  text: "Quando sofrer um gol, fique imóvel por 5 segundos antes de retomar a partida. Faça isso somente com a bola fora de jogo.",
-  tag: "Comédia",
-  rarity: "comum",
-},
-{
-  icon: Zap,
-  title: "Aquecimento do Craque",
-  text: "Antes da partida, faça 5 agachamentos, 5 polichinelos e 5 elevações de joelho.",
-  tag: "Aquecimento",
-  rarity: "comum",
-},
-{
-  icon: Timer,
-  title: "Prancha da Concentração",
-  text: "Na primeira pausa depois de sofrer um gol, faça uma prancha de 15 segundos.",
-  tag: "Força",
-  rarity: "raro",
-},
-{
-  icon: RotateCcw,
-  title: "Caminhada da Vergonha",
-  text: "Se terminar o primeiro tempo perdendo, dê uma volta caminhando ao redor da cadeira antes do segundo tempo.",
-  tag: "Comédia",
-  rarity: "incomum",
-},
-{
-  icon: UsersRound,
-  title: "Duelo de Resistência",
-  text: "Durante uma pausa, os dois jogadores ficam em posição de agachamento isométrico por até 15 segundos. Quem desistir primeiro perde o desafio.",
-  tag: "Duelo",
-  rarity: "epic",
-},
-{
-  icon: Flame,
-  title: "Sobrevivente",
-  text: "Ao sofrer 4 gols, faça 10 polichinelos durante a próxima pausa.",
-  tag: "Resistência",
-  rarity: "epic",
-},
-{
-  icon: Goal,
-  title: "Gol de Ouro, Pernas de Aço",
-  text: "Quando marcar o gol que coloca você na frente pela primeira vez, faça 5 agachamentos comemorativos na próxima pausa.",
-  tag: "Força",
-  rarity: "raro",
-},
-{
-  icon: Footprints,
-  title: "Pé de Pano",
-  text: "Durante uma pausa, dê 10 passos curtos tentando manter o equilíbrio, sem correr.",
-  tag: "Coordenação",
-  rarity: "incomum",
-},
-{
-  icon: Zap,
-  title: "A Última Esperança",
-  text: "Se estiver perdendo por 3 gols ou mais, faça 10 segundos de corrida no lugar durante a próxima pausa.",
-  tag: "Cardio",
-  rarity: "epic",
-},
-{
-  icon: Trophy,
-  title: "Tudo nas Pernas",
-  text: "Antes da partida, os dois jogadores fazem 10 agachamentos. Se alguém não conseguir, pode adaptar o exercício para uma versão mais leve.",
-  tag: "Desafio",
-  rarity: "lendario",
-},
-{
-  icon: Shield,
-  title: "Muralha Humana",
-  text: "Seu objetivo é terminar a partida sofrendo no máximo 1 gol. Se conseguir, complete o desafio. Se sofrer mais, o mutador falha.",
-  tag: "Desafio pessoal",
-  rarity: "raro",
-},
-{
-  icon: Goal,
-  title: "Artilheiro Solitário",
-  text: "Você precisa marcar pelo menos 3 gols com o mesmo jogador. Se conseguir até o apito final, vence o desafio.",
-  tag: "Objetivo",
-  rarity: "epic",
-},
-{
-  icon: Trophy,
-  title: "Vitória por Convicção",
-  text: "Você precisa vencer por pelo menos 2 gols de diferença. Se vencer por apenas 1, o desafio não será concluído.",
-  tag: "Objetivo",
-  rarity: "raro",
-},
-{
-  icon: Shuffle,
-  title: "Gol Democrático",
-  text: "Tente marcar gols com pelo menos 3 jogadores diferentes. Se conseguir, complete o mutador.",
-  tag: "Objetivo",
-  rarity: "incomum",
-},
-{
-  icon: Zap,
-  title: "Relâmpago",
-  text: "Seu primeiro gol precisa acontecer antes dos 30 minutos do jogo. Se não acontecer, você perde o desafio.",
-  tag: "Velocidade",
-  rarity: "raro",
-},
-{
-  icon: Ban,
-  title: "Proibido Repetir",
-  text: "Não marque dois gols consecutivos com o mesmo jogador. Se fizer isso, o mutador será considerado falho.",
-  tag: "Regra especial",
-  rarity: "epic",
-},
-{
-  icon: Footprints,
-  title: "Futebol Raiz",
-  text: "Durante a partida, tente marcar pelo menos um gol de fora da área. O desafio só termina no apito final.",
-  tag: "Habilidade",
-  rarity: "incomum",
-},
-{
-  icon: Dices,
-  title: "Aposta no Escanteio",
-  text: "Você precisa marcar pelo menos um gol após uma cobrança de escanteio. Se não conseguir, o desafio falha.",
-  tag: "Habilidade",
-  rarity: "raro",
-},
-{
-  icon: Heart,
-  title: "Fair Play",
-  text: "Termine a partida sem receber nenhum cartão vermelho. Se nenhum dos jogadores receber vermelho, ambos completam o desafio.",
-  tag: "Fair play",
-  rarity: "incomum",
-},
-{
-  icon: Timer,
-  title: "Pressão Até o Fim",
-  text: "Você precisa marcar pelo menos um gol no segundo tempo. Se terminar sem marcar, não completa o desafio.",
-  tag: "Objetivo",
-  rarity: "incomum",
-},
-{
-  icon: UsersRound,
-  title: "Elenco Participativo",
-  text: "Marque gols com pelo menos 4 jogadores diferentes durante a partida. Se conseguir, complete o desafio.",
-  tag: "Objetivo",
-  rarity: "epic",
-},
-{
-  icon: Sparkles,
-  title: "Gol de Cinema",
-  text: "Marque um gol de voleio, bicicleta ou outro tipo de finalização acrobática. O desafio só pode ser validado se os dois jogadores concordarem que a jogada valeu.",
-  tag: "Habilidade",
-  rarity: "lendario",
-},
-{
-  icon: MessageCircle,
-  title: "Comentarista Oficial",
-  text: "Durante toda a partida, você precisa narrar pelo menos uma jogada importante de cada tempo como se fosse um comentarista profissional.",
-  tag: "Interpretação",
-  rarity: "incomum",
-},
-{
-  icon: Laugh,
-  title: "Personagem do Jogo",
-  text: "Antes da partida começar, escolha uma personalidade: treinador furioso, comentarista dramático ou torcedor fanático. Mantenha o personagem durante o jogo.",
-  tag: "Comédia",
-  rarity: "raro",
-},
-{
-  icon: Hand,
-  title: "Acordo de Cavalheiros",
-  text: "Antes da partida, os dois jogadores escolhem uma comemoração combinada. Sempre que qualquer um marcar, ambos precisam executá-la após o gol.",
-  tag: "Duelo",
-  rarity: "comum",
-},
-{
-  icon: EyeOff,
-  title: "Poker Face",
-  text: "Durante a partida, tente não demonstrar frustração, surpresa ou comemoração exagerada. O adversário pode apontar uma reação evidente, mas os dois precisam concordar para validar.",
-  tag: "Autocontrole",
-  rarity: "raro",
-},
-{
-  icon: Flame,
-  title: "Rivalidade Máxima",
-  text: "Antes do jogo, cada jogador escolhe uma provocação leve e engraçada. Ela só pode ser usada durante a partida, sem ofensas pessoais.",
-  tag: "Rivalidade",
-  rarity: "incomum",
-},
-{
-  icon: CircleHelp,
-  title: "Missão Secreta",
-  text: "Antes do jogo, cada jogador escreve uma missão secreta relacionada à partida. No apito final, revelem as missões e confiram quem conseguiu cumprir a sua.",
-  tag: "Missão secreta",
-  rarity: "epic",
-},
+    icon: Footprints,
+    title: "Caranguejo FC",
+    text: "Durante os próximos 3 minutos, você só pode atacar pelas laterais. Se entrar pelo centro, precisa devolver a bola para trás.",
+    tag: "TÁTICA",
+    rarity: "incomum",
+  },
+  {
+    icon: Zap,
+    title: "Chutou, Rezou",
+    text: "Durante 3 minutos, toda vez que entrar na área adversária, você precisa tentar finalizar antes de fazer mais de 3 passes.",
+    tag: "ATAQUE",
+    rarity: "raro",
+  },
+  {
+    icon: Shield,
+    title: "Defesa em Pânico",
+    text: "Durante os próximos 2 minutos, você não pode recuar voluntariamente a bola para o seu campo de defesa.",
+    tag: "DEFESA",
+    rarity: "raro",
+  },
+  {
+    icon: Shuffle,
+    title: "Futebol de Primeira",
+    text: "Durante 3 minutos, você não pode dar mais de 2 toques consecutivos com o mesmo jogador antes de passar ou finalizar.",
+    tag: "TÉCNICA",
+    rarity: "epic",
+  },
+  {
+    icon: Timer,
+    title: "Ataque Relâmpago",
+    text: "Durante 3 minutos, depois de recuperar a bola, você tem 15 segundos para tentar uma finalização.",
+    tag: "PRESSÃO",
+    rarity: "raro",
+  },
+  {
+    icon: MessageCircle,
+    title: "Advogado do Diabo",
+    text: "Durante os próximos 3 minutos, você precisa defender verbalmente todas as decisões controversas do árbitro, mesmo quando elas prejudicarem você.",
+    tag: "RESENHA",
+    rarity: "incomum",
+  },
+  {
+    icon: Mic,
+    title: "Comentarista Imparcial",
+    text: "Durante 2 minutos, você precisa narrar as jogadas dos dois jogadores como um comentarista profissional, sem demonstrar preferência.",
+    tag: "RESENHA",
+    rarity: "comum",
+  },
+  {
+    icon: Laugh,
+    title: "Cara de Enterro",
+    text: "Durante os próximos 3 minutos, você não pode comemorar, sorrir ou demonstrar empolgação quando marcar um gol.",
+    tag: "MENTAL",
+    rarity: "incomum",
+  },
+  {
+    icon: Heart,
+    title: "Elogio Obrigatório",
+    text: "Na próxima jogada bonita do adversário, você precisa elogiá-lo sinceramente antes de voltar a jogar.",
+    tag: "RESENHA",
+    rarity: "comum",
+  },
+  {
+    icon: Trophy,
+    title: "Cerimônia de Campeão",
+    text: "Se marcar o próximo gol, faça uma comemoração como se tivesse acabado de conquistar um título mundial.",
+    tag: "RESENHA",
+    rarity: "incomum",
+  },
+  {
+    icon: Ban,
+    title: "Proibido Recuar",
+    text: "Durante os próximos 3 minutos, você não pode fazer passes voluntários para trás no campo de ataque.",
+    tag: "TÁTICA",
+    rarity: "epic",
+  },
+  {
+    icon: Zap,
+    title: "Só Vale Golaço",
+    text: "Durante 3 minutos, você só pode tentar finalizar de fora da área. Gols de dentro da área não contam para o desafio.",
+    tag: "ATAQUE",
+    rarity: "epic",
+  },
+  {
+    icon: Snowflake,
+    title: "Congelamento Total",
+    text: "Durante os próximos 2 minutos, você não pode usar comandos especiais de drible nem corrida. Precisa construir as jogadas com passes e movimentação.",
+    tag: "TÉCNICA",
+    rarity: "raro",
+  },
+  {
+    icon: RotateCcw,
+    title: "Virada ou Vergonha",
+    text: "Se estiver perdendo, você precisa tentar marcar nos próximos 3 minutos. Se estiver empatando ou vencendo, precisa marcar mais um gol nesse período.",
+    tag: "PRESSÃO",
+    rarity: "lendario",
+  },
+  {
+    icon: Flame,
+    title: "Tudo ou Nada",
+    text: "Durante os próximos 3 minutos, você precisa jogar buscando o gol. Não pode manter a posse apenas para gastar tempo.",
+    tag: "CAOS",
+    rarity: "lendario",
+  },
+  {
+    icon: Footprints,
+    title: "Agachamento do Gol",
+    text: "Sempre que sofrer um gol, faça 5 agachamentos na próxima pausa.",
+    tag: "Físico",
+    rarity: "comum",
+  },
+  {
+    icon: Flame,
+    title: "Polichinelos da Derrota",
+    text: "Se estiver perdendo por 2 gols ou mais, faça 10 polichinelos na próxima pausa.",
+    tag: "Resistência",
+    rarity: "incomum",
+  },
+  {
+    icon: Shield,
+    title: "Flexão do Sofrimento",
+    text: "Ao sofrer 3 gols, faça 5 flexões na próxima pausa. Você pode adaptar o exercício ao seu condicionamento.",
+    tag: "Força",
+    rarity: "raro",
+  },
+  {
+    icon: Gauge,
+    title: "Corrida no Lugar",
+    text: "Se sofrer 2 gols consecutivos, corra no lugar por 10 segundos durante a próxima pausa.",
+    tag: "Cardio",
+    rarity: "incomum",
+  },
+  {
+    icon: Trophy,
+    title: "Pose de Craque",
+    text: "Ao marcar um gol, imite a pose de comemoração de um jogador por 5 segundos. Seu adversário precisa adivinhar quem é.",
+    tag: "Comédia",
+    rarity: "comum",
+  },
+  {
+    icon: Snowflake,
+    title: "Modo Estátua",
+    text: "Quando sofrer um gol, fique imóvel por 5 segundos antes de retomar a partida. Faça isso somente com a bola fora de jogo.",
+    tag: "Comédia",
+    rarity: "comum",
+  },
+  {
+    icon: Zap,
+    title: "Aquecimento do Craque",
+    text: "Antes da partida, faça 5 agachamentos, 5 polichinelos e 5 elevações de joelho.",
+    tag: "Aquecimento",
+    rarity: "comum",
+  },
+  {
+    icon: Timer,
+    title: "Prancha da Concentração",
+    text: "Na primeira pausa depois de sofrer um gol, faça uma prancha de 15 segundos.",
+    tag: "Força",
+    rarity: "raro",
+  },
+  {
+    icon: RotateCcw,
+    title: "Caminhada da Vergonha",
+    text: "Se terminar o primeiro tempo perdendo, dê uma volta caminhando ao redor da cadeira antes do segundo tempo.",
+    tag: "Comédia",
+    rarity: "incomum",
+  },
+  {
+    icon: UsersRound,
+    title: "Duelo de Resistência",
+    text: "Durante uma pausa, os dois jogadores ficam em posição de agachamento isométrico por até 15 segundos. Quem desistir primeiro perde o desafio.",
+    tag: "Duelo",
+    rarity: "epic",
+  },
+  {
+    icon: Flame,
+    title: "Sobrevivente",
+    text: "Ao sofrer 4 gols, faça 10 polichinelos durante a próxima pausa.",
+    tag: "Resistência",
+    rarity: "epic",
+  },
+  {
+    icon: Goal,
+    title: "Gol de Ouro, Pernas de Aço",
+    text: "Quando marcar o gol que coloca você na frente pela primeira vez, faça 5 agachamentos comemorativos na próxima pausa.",
+    tag: "Força",
+    rarity: "raro",
+  },
+  {
+    icon: Footprints,
+    title: "Pé de Pano",
+    text: "Durante uma pausa, dê 10 passos curtos tentando manter o equilíbrio, sem correr.",
+    tag: "Coordenação",
+    rarity: "incomum",
+  },
+  {
+    icon: Zap,
+    title: "A Última Esperança",
+    text: "Se estiver perdendo por 3 gols ou mais, faça 10 segundos de corrida no lugar durante a próxima pausa.",
+    tag: "Cardio",
+    rarity: "epic",
+  },
+  {
+    icon: Trophy,
+    title: "Tudo nas Pernas",
+    text: "Antes da partida, os dois jogadores fazem 10 agachamentos. Se alguém não conseguir, pode adaptar o exercício para uma versão mais leve.",
+    tag: "Desafio",
+    rarity: "lendario",
+  },
+  {
+    icon: Shield,
+    title: "Muralha Humana",
+    text: "Seu objetivo é terminar a partida sofrendo no máximo 1 gol. Se conseguir, complete o desafio. Se sofrer mais, o mutador falha.",
+    tag: "Desafio pessoal",
+    rarity: "raro",
+  },
+  {
+    icon: Goal,
+    title: "Artilheiro Solitário",
+    text: "Você precisa marcar pelo menos 3 gols com o mesmo jogador. Se conseguir até o apito final, vence o desafio.",
+    tag: "Objetivo",
+    rarity: "epic",
+  },
+  {
+    icon: Trophy,
+    title: "Vitória por Convicção",
+    text: "Você precisa vencer por pelo menos 2 gols de diferença. Se vencer por apenas 1, o desafio não será concluído.",
+    tag: "Objetivo",
+    rarity: "raro",
+  },
+  {
+    icon: Shuffle,
+    title: "Gol Democrático",
+    text: "Tente marcar gols com pelo menos 3 jogadores diferentes. Se conseguir, complete o mutador.",
+    tag: "Objetivo",
+    rarity: "incomum",
+  },
+  {
+    icon: Zap,
+    title: "Relâmpago",
+    text: "Seu primeiro gol precisa acontecer antes dos 30 minutos do jogo. Se não acontecer, você perde o desafio.",
+    tag: "Velocidade",
+    rarity: "raro",
+  },
+  {
+    icon: Ban,
+    title: "Proibido Repetir",
+    text: "Não marque dois gols consecutivos com o mesmo jogador. Se fizer isso, o mutador será considerado falho.",
+    tag: "Regra especial",
+    rarity: "epic",
+  },
+  {
+    icon: Footprints,
+    title: "Futebol Raiz",
+    text: "Durante a partida, tente marcar pelo menos um gol de fora da área. O desafio só termina no apito final.",
+    tag: "Habilidade",
+    rarity: "incomum",
+  },
+  {
+    icon: Dices,
+    title: "Aposta no Escanteio",
+    text: "Você precisa marcar pelo menos um gol após uma cobrança de escanteio. Se não conseguir, o desafio falha.",
+    tag: "Habilidade",
+    rarity: "raro",
+  },
+  {
+    icon: Heart,
+    title: "Fair Play",
+    text: "Termine a partida sem receber nenhum cartão vermelho. Se nenhum dos jogadores receber vermelho, ambos completam o desafio.",
+    tag: "Fair play",
+    rarity: "incomum",
+  },
+  {
+    icon: Timer,
+    title: "Pressão Até o Fim",
+    text: "Você precisa marcar pelo menos um gol no segundo tempo. Se terminar sem marcar, não completa o desafio.",
+    tag: "Objetivo",
+    rarity: "incomum",
+  },
+  {
+    icon: UsersRound,
+    title: "Elenco Participativo",
+    text: "Marque gols com pelo menos 4 jogadores diferentes durante a partida. Se conseguir, complete o desafio.",
+    tag: "Objetivo",
+    rarity: "epic",
+  },
+  {
+    icon: Sparkles,
+    title: "Gol de Cinema",
+    text: "Marque um gol de voleio, bicicleta ou outro tipo de finalização acrobática. O desafio só pode ser validado se os dois jogadores concordarem que a jogada valeu.",
+    tag: "Habilidade",
+    rarity: "lendario",
+  },
+  {
+    icon: MessageCircle,
+    title: "Comentarista Oficial",
+    text: "Durante toda a partida, você precisa narrar pelo menos uma jogada importante de cada tempo como se fosse um comentarista profissional.",
+    tag: "Interpretação",
+    rarity: "incomum",
+  },
+  {
+    icon: Laugh,
+    title: "Personagem do Jogo",
+    text: "Antes da partida começar, escolha uma personalidade: treinador furioso, comentarista dramático ou torcedor fanático. Mantenha o personagem durante o jogo.",
+    tag: "Comédia",
+    rarity: "raro",
+  },
+  {
+    icon: Hand,
+    title: "Acordo de Cavalheiros",
+    text: "Antes da partida, os dois jogadores escolhem uma comemoração combinada. Sempre que qualquer um marcar, ambos precisam executá-la após o gol.",
+    tag: "Duelo",
+    rarity: "comum",
+  },
+  {
+    icon: EyeOff,
+    title: "Poker Face",
+    text: "Durante a partida, tente não demonstrar frustração, surpresa ou comemoração exagerada. O adversário pode apontar uma reação evidente, mas os dois precisam concordar para validar.",
+    tag: "Autocontrole",
+    rarity: "raro",
+  },
+  {
+    icon: Flame,
+    title: "Rivalidade Máxima",
+    text: "Antes do jogo, cada jogador escolhe uma provocação leve e engraçada. Ela só pode ser usada durante a partida, sem ofensas pessoais.",
+    tag: "Rivalidade",
+    rarity: "incomum",
+  },
+  {
+    icon: CircleHelp,
+    title: "Missão Secreta",
+    text: "Antes do jogo, cada jogador escreve uma missão secreta relacionada à partida. No apito final, revelem as missões e confiram quem conseguiu cumprir a sua.",
+    tag: "Missão secreta",
+    rarity: "epic",
+  },
 ];
 
 function ChampionshipPage({
@@ -1598,8 +1617,6 @@ function ChampionshipPage({
   useEffect(() => {
     if (selected) window.arena.championshipDetail(selected).then(setDetail);
   }, [selected, items.length]);
-  // P2-1: busca de clubes reaproveitando o canal teams:list (query opcional —
-  // o teams-service da Etapa 3 faz ilike remoto ou LIKE local), com debounce.
   useEffect(() => {
     const query = teamQuery.trim();
     if (!query) {
@@ -1617,18 +1634,31 @@ function ChampionshipPage({
   const selectorTeams = searchedTeams ?? teams;
   const save = async (e: FormEvent) => {
     e.preventDefault();
+    const teamIdsInOrder = participants.map(
+      (id) => assignments[id]?.id ?? null,
+    );
+    const assignedTeamIds = teamIdsInOrder.filter(
+      (teamId): teamId is number => typeof teamId === "number",
+    );
+    const hasDuplicateTeam =
+      new Set(assignedTeamIds).size !== assignedTeamIds.length;
+    if (hasDuplicateTeam) {
+      setFormError(
+        "Cada participante precisa de um time diferente — há times repetidos.",
+      );
+      return;
+    }
     try {
       const champ = await window.arena.saveChampionship({
         name,
         format,
-        // P2-2: o modo (clássico/dupla/maluco) e o desafio sorteado passam a
-        // ser persistidos para a diferenciação visual na galeria e no detalhe.
         mode,
         mutator:
           mode === "mad" && mutator !== null ? MUTATORS[mutator].title : null,
         startsAt: new Date().toISOString(),
         status: "active",
         participantIds: participants,
+        participantTeamIds: teamIdsInOrder,
       });
       setName("");
       setParticipants([]);
@@ -1648,8 +1678,15 @@ function ChampionshipPage({
       const included = list.includes(id);
       setAssignments((current) => {
         const next = { ...current };
-        if (included) delete next[id];
-        else if (team) next[id] = team;
+        if (included) {
+          delete next[id];
+        } else if (team) {
+          const alreadyTaken = Object.entries(current).some(
+            ([playerId, assignedTeam]) =>
+              Number(playerId) !== id && assignedTeam.id === team.id,
+          );
+          if (!alreadyTaken) next[id] = team;
+        }
         return next;
       });
       return included ? list.filter((item) => item !== id) : [...list, id];
@@ -1671,21 +1708,18 @@ function ChampionshipPage({
   };
   const drawTeam = () => {
     playArenaSound("draw");
-    // Com busca ativa, o sorteio considera a lista filtrada (decisão 5).
     const pool = selectorTeams.length ? selectorTeams : teams;
     if (pool.length) setTeam(pool[Math.floor(Math.random() * pool.length)]);
   };
   const pairPlayers = () => {
     playArenaSound("draw");
-    const shuffled = [...players].sort(() => Math.random() - 0.5);
-    setParticipants(shuffled.map((p) => p.id));
+    const shuffledPlayers = [...players].sort(() => Math.random() - 0.5);
+    const shuffledTeams = [...teams].sort(() => Math.random() - 0.5);
+    setParticipants(shuffledPlayers.map((p) => p.id));
     setAssignments(
       Object.fromEntries(
-        shuffled.map(
-          (p) =>
-            [p.id, teams[Math.floor(Math.random() * teams.length)]].filter(
-              Boolean,
-            ) as [number, Team],
+        shuffledPlayers.map(
+          (p, index) => [p.id, shuffledTeams[index]] as [number, Team],
         ),
       ),
     );
@@ -2016,27 +2050,58 @@ function ChampionshipPage({
           </div>
         )}
         <div className={`player-picks ${mode === "duo" ? "duo-picks" : ""}`}>
-          {players.map((p) => (
-            <button
-              type="button"
-              onClick={() => toggleParticipant(p.id)}
-              className={participants.includes(p.id) ? "chosen" : ""}
-              key={p.id}
-            >
-              <span className="player-initial">{p.name[0]}</span>
-              <span>
-                <b>{p.name}</b>
-                <small>
-                  {participants.includes(p.id)
-                    ? `→ ${assignments[p.id]?.name ?? "Escolha uma equipe"}`
-                    : mode === "duo"
-                      ? "Toque para compor dupla"
-                      : "Participante"}
-                </small>
-              </span>
-              {participants.includes(p.id) && <Check size={16} />}
-            </button>
-          ))}
+          {players.map((p) => {
+            const included = participants.includes(p.id);
+            return (
+              <div
+                className={`player-pick ${included ? "chosen" : ""}`}
+                key={p.id}
+              >
+                <button
+                  type="button"
+                  className="player-pick-toggle"
+                  onClick={() => toggleParticipant(p.id)}
+                >
+                  <span className="player-initial">{p.name[0]}</span>
+                  <span>
+                    <b>{p.name}</b>
+                    <small>
+                      {included
+                        ? mode === "duo"
+                          ? "Na dupla"
+                          : "Participante"
+                        : mode === "duo"
+                          ? "Toque para compor dupla"
+                          : "Toque para incluir"}
+                    </small>
+                  </span>
+                  {included && <Check size={16} />}
+                </button>
+                {included && (
+                  <TeamPicker
+                    label={`Time de ${p.name}`}
+                    teams={teams}
+                    value={assignments[p.id] ?? null}
+                    excludeTeamIds={participants
+                      .filter((otherId) => otherId !== p.id)
+                      .map((otherId) => assignments[otherId]?.id)
+                      .filter(
+                        (teamId): teamId is number =>
+                          typeof teamId === "number",
+                      )}
+                    onChange={(picked) =>
+                      setAssignments((current) => {
+                        const next = { ...current };
+                        if (picked) next[p.id] = picked;
+                        else delete next[p.id];
+                        return next;
+                      })
+                    }
+                  />
+                )}
+              </div>
+            );
+          })}
         </div>
         {mode === "duo" && participants.length > 0 && (
           <div className="duo-preview">
@@ -2129,8 +2194,6 @@ function ChampionshipPage({
                 <span>
                   Ver arena <ArrowRight size={15} />
                 </span>
-                {/* P0-1/P0-2: ações migradas do appearance.ts (DOM injetado)
-                    para a árvore React — sem confirm()/alert()/reload(). */}
                 <div
                   className="season-card-actions"
                   onClick={(event) => event.stopPropagation()}
@@ -2301,12 +2364,6 @@ function ChampionshipDetailView({
   );
 }
 
-/* ============================================================================
-   P2-2 — identidade visual dos modos de campeonato (clássico/dupla/maluco),
-   P0-2 — renomeação migrada do appearance.ts para o React (sem reload) e
-   P1-1 — registro de resultado direto do confronto pendente (fixture).
-   ============================================================================ */
-
 type ChampionshipMode = NonNullable<Championship["mode"]>;
 
 const MODE_META: Record<
@@ -2455,8 +2512,12 @@ function FixtureResultModal({
   onClose: () => void;
   onSaved: () => Promise<void>;
 }) {
-  const [team1, setTeam1] = useState<Team | null>(null);
-  const [team2, setTeam2] = useState<Team | null>(null);
+  const [team1, setTeam1] = useState<Team | null>(
+    () => teams.find((t) => t.id === fixture.team1Id) ?? null,
+  );
+  const [team2, setTeam2] = useState<Team | null>(
+    () => teams.find((t) => t.id === fixture.team2Id) ?? null,
+  );
   const [score1, setScore1] = useState("0");
   const [score2, setScore2] = useState("0");
   const [saving, setSaving] = useState(false);
@@ -2487,8 +2548,6 @@ function FixtureResultModal({
     setSaving(true);
     setError("");
     try {
-      // O repository encontra o confronto pendente pelo par de jogadores,
-      // vincula a fixture e avança o mata-mata — comportamento intacto.
       await window.arena.saveMatch({
         player1Id: fixture.player1Id,
         player2Id: fixture.player2Id,
@@ -2874,12 +2933,6 @@ function SettingsPage({ reload }: { reload: () => Promise<void> }) {
 
   const [confirmingReset, setConfirmingReset] = useState(false);
 
-  /*
-   * ============================================================
-   * APARÊNCIA
-   * ============================================================
-   */
-
   useEffect(() => {
     document.documentElement.style.setProperty("--arena-accent", accent);
 
@@ -2889,21 +2942,9 @@ function SettingsPage({ reload }: { reload: () => Promise<void> }) {
     localStorage.setItem("arena-background", background);
   }, [accent, background]);
 
-  /*
-   * ============================================================
-   * ÁUDIO
-   * ============================================================
-   */
-
   useEffect(() => {
     localStorage.setItem("arena-muted", String(muted));
   }, [muted]);
-
-  /*
-   * ============================================================
-   * REGRAS DO JOGO
-   * ============================================================
-   */
 
   useEffect(() => {
     if (section !== "rules") {
@@ -2927,15 +2968,6 @@ function SettingsPage({ reload }: { reload: () => Promise<void> }) {
       });
   }, [section]);
 
-  /*
-   * ============================================================
-   * RESET DOS DADOS
-   * ============================================================
-   */
-
-  // Reset dos dados. Nota: na UI atual esta função não possui botão de
-  // disparo (a seção "Dados" renderiza um placeholder) — fica pronta e
-  // refactorada para o AppModal do projeto, sem window.confirm nativo.
   const reset = async () => {
     await window.arena.resetArena();
     await reload();
@@ -2946,12 +2978,6 @@ function SettingsPage({ reload }: { reload: () => Promise<void> }) {
       setMessage("");
     }, 3000);
   };
-
-  /*
-   * ============================================================
-   * SALVAR REGRAS
-   * ============================================================
-   */
 
   const saveRules = async () => {
     if (!rules) {
@@ -2980,12 +3006,6 @@ function SettingsPage({ reload }: { reload: () => Promise<void> }) {
     }
   };
 
-  /*
-   * ============================================================
-   * RENDER
-   * ============================================================
-   */
-
   return (
     <section className="page settings-page">
       <header className="page-header">
@@ -3001,10 +3021,6 @@ function SettingsPage({ reload }: { reload: () => Promise<void> }) {
       </header>
 
       <div className="settings-layout">
-        {/* =====================================================
-            MENU LATERAL
-            ===================================================== */}
-
         <aside className="settings-sidebar">
           <div className="settings-sidebar-header">
             <span>CONFIGURAÇÕES</span>
@@ -3039,10 +3055,6 @@ function SettingsPage({ reload }: { reload: () => Promise<void> }) {
           </nav>
         </aside>
 
-        {/* =====================================================
-            CONTEÚDO
-            ===================================================== */}
-
         <div className="settings-content">
           {message && (
             <div className="settings-message">
@@ -3050,10 +3062,6 @@ function SettingsPage({ reload }: { reload: () => Promise<void> }) {
               <span>{message}</span>
             </div>
           )}
-
-          {/* ===================================================
-              APARÊNCIA
-              =================================================== */}
 
           {section === "appearance" ? (
             <article className="settings-card">
@@ -3166,11 +3174,7 @@ function SettingsPage({ reload }: { reload: () => Promise<void> }) {
                 </div>
               </div>
             </article>
-          ) : /* ===================================================
-             REGRAS
-             =================================================== */
-
-          section === "rules" ? (
+          ) : section === "rules" ? (
             <article className="settings-card">
               <div className="settings-card-header">
                 <div>
@@ -3205,9 +3209,6 @@ function SettingsPage({ reload }: { reload: () => Promise<void> }) {
                     </div>
 
                     <div className="settings-form-grid">
-                      {/* Mantenha aqui os campos de
-                          GameRulesSettings que já existiam
-                          anteriormente no seu arquivo. */}
                     </div>
                   </div>
 
@@ -3224,11 +3225,7 @@ function SettingsPage({ reload }: { reload: () => Promise<void> }) {
                 </>
               )}
             </article>
-          ) : /* ===================================================
-             SOBRE
-             =================================================== */
-
-          section === "about" ? (
+          ) : section === "about" ? (
             <article className="settings-card settings-about-app">
               <div className="settings-about-app-header">
                 <div className="settings-about-app-icon">
@@ -3289,10 +3286,6 @@ function SettingsPage({ reload }: { reload: () => Promise<void> }) {
               </div>
             </article>
           ) : (
-            /* ===================================================
-             OUTRAS SEÇÕES
-             =================================================== */
-
             <article className="settings-card settings-placeholder">
               <div className="settings-placeholder-icon">
                 {(() => {

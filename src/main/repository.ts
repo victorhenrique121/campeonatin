@@ -35,7 +35,7 @@ export function createDatabase(file: string) {
     CREATE TABLE IF NOT EXISTS players (id INTEGER PRIMARY KEY, name TEXT NOT NULL, nickname TEXT NOT NULL UNIQUE, avatar TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
     CREATE TABLE IF NOT EXISTS teams (id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE, league TEXT NOT NULL, country TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS championships (id INTEGER PRIMARY KEY, name TEXT NOT NULL, format TEXT NOT NULL CHECK(format IN ('league','knockout','groups_knockout')), mode TEXT NOT NULL DEFAULT 'classic' CHECK(mode IN ('classic','duo','mad')), mutator TEXT, starts_at TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'draft');
-    CREATE TABLE IF NOT EXISTS championship_participants (championship_id INTEGER NOT NULL REFERENCES championships(id) ON DELETE CASCADE, player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE RESTRICT, PRIMARY KEY(championship_id, player_id));
+    CREATE TABLE IF NOT EXISTS championship_participants (championship_id INTEGER NOT NULL REFERENCES championships(id) ON DELETE CASCADE, player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE RESTRICT, team_id INTEGER REFERENCES teams(id) ON DELETE RESTRICT, PRIMARY KEY(championship_id, player_id));
     CREATE TABLE IF NOT EXISTS fixtures (id INTEGER PRIMARY KEY, championship_id INTEGER NOT NULL REFERENCES championships(id) ON DELETE CASCADE, round_number INTEGER NOT NULL, stage TEXT NOT NULL DEFAULT 'league', player1_id INTEGER NOT NULL REFERENCES players(id) ON DELETE RESTRICT, player2_id INTEGER NOT NULL REFERENCES players(id) ON DELETE RESTRICT, match_id INTEGER UNIQUE REFERENCES matches(id) ON DELETE SET NULL, UNIQUE(championship_id, player1_id, player2_id));
     CREATE TABLE IF NOT EXISTS matches (id INTEGER PRIMARY KEY, player1_id INTEGER NOT NULL REFERENCES players(id) ON DELETE RESTRICT, player2_id INTEGER NOT NULL REFERENCES players(id) ON DELETE RESTRICT, team1_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE RESTRICT, team2_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE RESTRICT, score1 INTEGER NOT NULL CHECK(score1 >= 0), score2 INTEGER NOT NULL CHECK(score2 >= 0), championship_id INTEGER REFERENCES championships(id) ON DELETE SET NULL, played_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, CHECK(player1_id <> player2_id));
     CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -85,6 +85,21 @@ export function createDatabase(file: string) {
     );
   if (!championshipColumns.some((column) => column.name === "mutator"))
     db.exec("ALTER TABLE championships ADD COLUMN mutator TEXT");
+
+  // Migração: championship_participants ganha "team_id" — o time escolhido
+  // para cada participante passa a ser persistido (antes só existia como
+  // estado transitório de UI, nunca salvo, e por isso "esquecido" ao
+  // registrar o resultado). Nullable/guardada: campeonatos já existentes
+  // ficam com team_id NULL até o usuário reatribuir, sem quebrar nada.
+  const participantColumns = db
+    .prepare("PRAGMA table_info(championship_participants)")
+    .all() as {
+    name: string;
+  }[];
+  if (!participantColumns.some((column) => column.name === "team_id"))
+    db.exec(
+      "ALTER TABLE championship_participants ADD COLUMN team_id INTEGER REFERENCES teams(id) ON DELETE RESTRICT",
+    );
 
   db.exec(
     "CREATE INDEX IF NOT EXISTS idx_fixtures_championship_round ON fixtures(championship_id, round_number)",
@@ -857,7 +872,7 @@ export function repository(db: Database.Database) {
         .all(id, id, id);
       const fixtures = db
         .prepare(
-          `SELECT f.id,f.round_number round,f.stage,f.player1_id player1Id,f.player2_id player2Id,p1.name player1,p2.name player2,f.match_id matchId,m.score1 score1,m.score2 score2 FROM fixtures f JOIN players p1 ON p1.id=f.player1_id JOIN players p2 ON p2.id=f.player2_id LEFT JOIN matches m ON m.id=f.match_id WHERE f.championship_id=? ORDER BY f.round_number,f.id`,
+          `SELECT f.id,f.round_number round,f.stage,f.player1_id player1Id,f.player2_id player2Id,p1.name player1,p2.name player2,f.match_id matchId,m.score1 score1,m.score2 score2,cp1.team_id team1Id,t1.name team1,cp2.team_id team2Id,t2.name team2 FROM fixtures f JOIN players p1 ON p1.id=f.player1_id JOIN players p2 ON p2.id=f.player2_id LEFT JOIN matches m ON m.id=f.match_id LEFT JOIN championship_participants cp1 ON cp1.championship_id=f.championship_id AND cp1.player_id=f.player1_id LEFT JOIN teams t1 ON t1.id=cp1.team_id LEFT JOIN championship_participants cp2 ON cp2.championship_id=f.championship_id AND cp2.player_id=f.player2_id LEFT JOIN teams t2 ON t2.id=cp2.team_id WHERE f.championship_id=? ORDER BY f.round_number,f.id`,
         )
         .all(id);
       return { championship, standing, fixtures };
@@ -865,6 +880,11 @@ export function repository(db: Database.Database) {
     saveChampionship: (
       c: Omit<Championship, "id" | "participants"> & {
         participantIds: number[];
+        // Time escolhido para cada participante (mesma ordem/índice de
+        // participantIds). Persistido em championship_participants.team_id
+        // — antes disso só existia como estado de UI, nunca salvo, por
+        // isso o time "sumia" ao registrar o resultado.
+        participantTeamIds?: (number | null)[];
       },
     ) => {
       if (!c.name.trim() || c.participantIds.length < 2)
@@ -878,6 +898,19 @@ export function repository(db: Database.Database) {
         ![2, 4, 8, 16, 32].includes(c.participantIds.length)
       )
         throw new Error("O mata-mata exige 2, 4, 8, 16 ou 32 participantes.");
+      const teamIds = c.participantTeamIds ?? [];
+      // Times duplicados entre participantes são bloqueados (decisão
+      // aprovada): cada jogador precisa de um time exclusivo no campeonato.
+      const assignedTeamIds = teamIds.filter(
+        (teamId): teamId is number => typeof teamId === "number",
+      );
+      const duplicateTeamIds = assignedTeamIds.filter(
+        (teamId, index) => assignedTeamIds.indexOf(teamId) !== index,
+      );
+      if (duplicateTeamIds.length)
+        throw new Error(
+          "Cada participante precisa de um time diferente — há times repetidos.",
+        );
       const mode = c.mode === "duo" || c.mode === "mad" ? c.mode : "classic";
       const mutator =
         mode === "mad" && typeof c.mutator === "string" && c.mutator.trim()
@@ -893,9 +926,11 @@ export function repository(db: Database.Database) {
             .lastInsertRowid,
         );
         const add = db.prepare(
-          "INSERT INTO championship_participants(championship_id,player_id) VALUES (?,?)",
+          "INSERT INTO championship_participants(championship_id,player_id,team_id) VALUES (?,?,?)",
         );
-        c.participantIds.forEach((player) => add.run(id, player));
+        c.participantIds.forEach((player, index) =>
+          add.run(id, player, teamIds[index] ?? null),
+        );
         const fixture = db.prepare(
           "INSERT INTO fixtures(championship_id,round_number,stage,player1_id,player2_id) VALUES (?,?,?,?,?)",
         );
