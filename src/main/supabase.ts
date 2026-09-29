@@ -53,6 +53,24 @@ export type SupabaseAuthStatus = {
   email?: string;
 };
 
+export type AuthUser = {
+  id: string;
+  email: string;
+  displayName: string;
+  role: "admin" | "player" | "viewer";
+  emailConfirmedAt: string | null;
+};
+
+export type AuthSessionStatus = {
+  authenticated: boolean;
+  user: AuthUser | null;
+};
+
+export type AuthSignUpResult = {
+  requiresEmailConfirmation: boolean;
+  email: string;
+};
+
 const LOG_PREFIX = "[supabase]";
 const SERVICE_ROLE_ENV_VAR = "SUPABASE_SERVICE_ROLE_KEY";
 const APP_EMAIL_ENV_VAR = "SUPABASE_APP_EMAIL";
@@ -68,6 +86,8 @@ const NETWORK_ERROR_PATTERN =
 const FETCH_TIMEOUT_MS = 10_000;
 
 let client: SupabaseClient | null = null;
+/** Cliente separado para a sessão do usuário final. */
+let userAuthClient: SupabaseClient | null = null;
 let initialized = false;
 
 /** Indica se a mensagem de erro corresponde a falha de rede/timeout. */
@@ -182,15 +202,19 @@ export function initSupabase(
   }
 
   try {
-    client = createClient(url, anonKey, {
+    const globalOptions = {
       global: {
         // Timeout: evita travar operações quando não há conectividade.
-        fetch: (input, init) =>
+        fetch: (input: RequestInfo | URL, init?: RequestInit) =>
           fetch(input, {
             ...init,
             signal: init?.signal ?? AbortSignal.timeout(FETCH_TIMEOUT_MS),
           }),
       },
+    };
+
+    client = createClient(url, anonKey, {
+      ...globalOptions,
       auth: options.sessionStoragePath
         ? {
             persistSession: true,
@@ -198,12 +222,33 @@ export function initSupabase(
             storage: createFileStorage(options.sessionStoragePath),
           }
         : {
-            // Uso sem persistência (scripts pontuais, testes): sessão só em memória.
             persistSession: false,
             autoRefreshToken: false,
           },
     });
-    console.info(`${LOG_PREFIX} cliente criado para ${url} (chave anon pública).`);
+
+    // Sessão do usuário final fica separada da conta de serviço legada.
+    // Isso permite adicionar login/cadastro agora sem quebrar a sincronização
+    // existente do FC Arena. A lógica de ownership será migrada depois.
+    const userSessionPath = options.sessionStoragePath
+      ? path.join(path.dirname(options.sessionStoragePath), "fcarena-user-session.json")
+      : undefined;
+
+    userAuthClient = createClient(url, anonKey, {
+      ...globalOptions,
+      auth: userSessionPath
+        ? {
+            persistSession: true,
+            autoRefreshToken: true,
+            storage: createFileStorage(userSessionPath),
+          }
+        : {
+            persistSession: false,
+            autoRefreshToken: false,
+          },
+    });
+
+    console.info(`${LOG_PREFIX} clientes Supabase criados para ${url} (chave anon pública).`);
     return client;
   } catch (err) {
     client = null;
@@ -213,6 +258,166 @@ export function initSupabase(
     );
     return null;
   }
+}
+
+
+/** Retorna o cliente de Auth da sessão do usuário final. */
+function getUserAuthClient(): SupabaseClient | null {
+  if (!userAuthClient) initSupabase();
+  return userAuthClient;
+}
+
+function normalizeAuthError(error: { message?: string; code?: string } | null): Error {
+  const message = error?.message || "Não foi possível concluir a operação de autenticação.";
+  const lower = message.toLowerCase();
+
+  if (isNetworkErrorMessage(message)) {
+    return new Error("Não foi possível conectar ao Supabase. Verifique sua conexão com a internet e tente novamente.");
+  }
+  if (lower.includes("email not confirmed")) {
+    return new Error("Seu e-mail ainda não foi confirmado. Verifique sua caixa de entrada e confirme o endereço antes de entrar.");
+  }
+  if (lower.includes("invalid login credentials")) {
+    return new Error("E-mail ou senha incorretos.");
+  }
+  if (lower.includes("password should be at least")) {
+    return new Error("A senha é muito curta. Use pelo menos 8 caracteres.");
+  }
+  if (lower.includes("rate limit")) {
+    return new Error("Muitas tentativas de e-mail. Aguarde alguns minutos e tente novamente.");
+  }
+  return new Error(message);
+}
+
+async function getAuthUserFromSession(): Promise<AuthUser | null> {
+  const supabase = getUserAuthClient();
+  if (!supabase) return null;
+
+  const { data, error } = await supabase.auth.getUser();
+  if (error || !data.user) return null;
+
+  const user = data.user;
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select("display_name,role")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  if (profileError) {
+    console.warn(`${LOG_PREFIX} não foi possível carregar o profile do usuário:`, profileError.message);
+  }
+
+  const displayName =
+    (profile?.display_name as string | undefined)?.trim() ||
+    (user.user_metadata?.display_name as string | undefined)?.trim() ||
+    user.email?.split("@")[0] ||
+    "Usuário";
+
+  const roleValue = profile?.role;
+  const role: AuthUser["role"] =
+    roleValue === "admin" || roleValue === "player" || roleValue === "viewer"
+      ? roleValue
+      : "viewer";
+
+  return {
+    id: user.id,
+    email: user.email ?? "",
+    displayName,
+    role,
+    emailConfirmedAt: user.email_confirmed_at ?? null,
+  };
+}
+
+/** Retorna a sessão do usuário final atualmente conectado ao FC Arena. */
+export async function getAuthSession(): Promise<AuthSessionStatus> {
+  const user = await getAuthUserFromSession();
+  return { authenticated: Boolean(user), user };
+}
+
+/** Cadastro com e-mail, senha e nome. O trigger do banco cria o profile. */
+export async function signUpUser(
+  email: string,
+  password: string,
+  displayName: string,
+): Promise<AuthSignUpResult> {
+  const supabase = getUserAuthClient();
+  if (!supabase) throw new Error("Supabase não está configurado.");
+
+  const normalizedEmail = email.trim().toLowerCase();
+  const normalizedName = displayName.trim();
+
+  if (!normalizedName) throw new Error("Informe seu nome.");
+  if (!normalizedEmail || !/^\S+@\S+\.\S+$/.test(normalizedEmail)) {
+    throw new Error("Informe um e-mail válido.");
+  }
+  if (password.length < 8) {
+    throw new Error("A senha deve ter pelo menos 8 caracteres.");
+  }
+
+  const { data, error } = await supabase.auth.signUp({
+    email: normalizedEmail,
+    password,
+    options: {
+      data: { display_name: normalizedName },
+    },
+  });
+
+  if (error) throw normalizeAuthError(error);
+
+  return {
+    requiresEmailConfirmation: !data.session,
+    email: normalizedEmail,
+  };
+}
+
+/** Login do usuário final. O Supabase bloqueia usuários não confirmados. */
+export async function signInUser(
+  email: string,
+  password: string,
+): Promise<AuthUser> {
+  const supabase = getUserAuthClient();
+  if (!supabase) throw new Error("Supabase não está configurado.");
+
+  const normalizedEmail = email.trim().toLowerCase();
+  if (!normalizedEmail || !password) {
+    throw new Error("Informe e-mail e senha.");
+  }
+
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email: normalizedEmail,
+    password,
+  });
+
+  if (error) throw normalizeAuthError(error);
+  if (!data.user) throw new Error("Não foi possível identificar o usuário.");
+
+  const user = await getAuthUserFromSession();
+  if (!user) throw new Error("Login realizado, mas o perfil do usuário não pôde ser carregado.");
+  return user;
+}
+
+/** Reenvia o e-mail de confirmação do cadastro. */
+export async function resendSignupConfirmation(email: string): Promise<void> {
+  const supabase = getUserAuthClient();
+  if (!supabase) throw new Error("Supabase não está configurado.");
+
+  const normalizedEmail = email.trim().toLowerCase();
+  if (!normalizedEmail) throw new Error("Informe seu e-mail.");
+
+  const { error } = await supabase.auth.resend({
+    type: "signup",
+    email: normalizedEmail,
+  });
+
+  if (error) throw normalizeAuthError(error);
+}
+
+/** Encerra somente a sessão do usuário final. */
+export async function signOutUser(): Promise<void> {
+  const supabase = getUserAuthClient();
+  if (!supabase) return;
+  const { error } = await supabase.auth.signOut();
+  if (error) throw normalizeAuthError(error);
 }
 
 /** Retorna o cliente já inicializado, ou `null` se não configurado. */
