@@ -1,0 +1,66 @@
+/* FC Arena — autenticação */
+
+.auth-screen {
+  min-height: 100vh;
+  width: 100%;
+  display: grid;
+  place-items: center;
+  padding: 32px;
+  box-sizing: border-box;
+  background:
+    radial-gradient(circle at 50% 0%, #8872ff18, transparent 38%),
+    #0a0f1f;
+}
+
+.auth-card {
+  width: min(430px, 100%);
+  padding: 30px;
+  border: 1px solid #26324b;
+  border-radius: 18px;
+  background: linear-gradient(145deg, #131d33, #0e1628);
+  box-shadow: 0 28px 80px #0007;
+}
+
+.auth-brand { display:flex; align-items:center; gap:12px; margin-bottom:30px; }
+.auth-logo { width:42px; height:42px; display:grid; place-items:center; border-radius:12px; background:var(--arena-accent,#8872ff); color:#fff; font-weight:900; letter-spacing:-.05em; }
+.auth-brand strong { display:block; color:#f3f6ff; font-size:15px; letter-spacing:-.03em; }
+.auth-brand strong em { color:var(--arena-accent,#8872ff); font-style:normal; }
+.auth-brand span { display:block; margin-top:3px; color:#65738f; font-size:8px; font-weight:800; letter-spacing:.12em; }
+
+.auth-heading span { color:var(--arena-accent,#8872ff); font-size:9px; font-weight:900; letter-spacing:.13em; }
+.auth-heading h1 { margin:6px 0 0; color:#f2f5ff; font-size:25px; letter-spacing:-.035em; }
+.auth-heading p { margin:7px 0 0; color:#8491a9; font-size:11px; line-height:1.5; }
+
+.auth-form { display:grid; gap:13px; margin-top:23px; }
+.auth-form label { display:grid; gap:6px; }
+.auth-form label > span { color:#aab5c9; font-size:10px; font-weight:700; }
+.auth-input { min-height:42px; display:flex; align-items:center; gap:9px; padding:0 12px; border:1px solid #2b3853; border-radius:9px; background:#0b1324; color:#687894; transition:border-color .18s, box-shadow .18s; }
+.auth-input:focus-within { border-color:var(--arena-accent,#8872ff); box-shadow:0 0 0 3px #8872ff18; }
+.auth-input input { min-width:0; flex:1; border:0; outline:0; background:transparent; color:#eaf0ff; font:inherit; font-size:11px; }
+.auth-input input::placeholder { color:#4f5d76; }
+.auth-input-action { display:grid; place-items:center; border:0; background:transparent; color:#687894; cursor:pointer; padding:3px; }
+
+.auth-submit { min-height:43px; display:flex; align-items:center; justify-content:center; gap:8px; margin-top:4px; border:0; border-radius:9px; background:var(--arena-accent,#8872ff); color:#fff; font:inherit; font-size:11px; font-weight:800; cursor:pointer; transition:transform .18s, opacity .18s; }
+.auth-submit:hover:not(:disabled) { transform:translateY(-1px); }
+.auth-submit:disabled { opacity:.55; cursor:not-allowed; }
+.auth-spin { animation:auth-spin .8s linear infinite; }
+@keyframes auth-spin { to { transform:rotate(360deg); } }
+
+.auth-notice, .auth-error { margin-top:2px; padding:10px 12px; border-radius:9px; font-size:10px; line-height:1.5; }
+.auth-notice { display:flex; gap:9px; border:1px solid #5c5aa033; background:#8872ff0c; color:#cdd5e7; }
+.auth-notice svg { flex:0 0 auto; color:var(--arena-accent,#8872ff); margin-top:1px; }
+.auth-notice strong, .auth-notice span { display:block; }
+.auth-notice span { margin-top:3px; color:#8794ab; }
+.auth-notice b { color:#dfe5f3; }
+.auth-error { border:1px solid #693f49; background:#25151b; color:#efaab4; }
+
+.auth-resend { width:100%; margin-top:11px; padding:0; border:0; background:transparent; color:#a99cff; font:inherit; font-size:10px; font-weight:700; cursor:pointer; }
+.auth-resend:disabled { opacity:.5; cursor:not-allowed; }
+.auth-switch { display:flex; align-items:center; justify-content:center; gap:5px; margin-top:22px; color:#687894; font-size:10px; }
+.auth-switch button { border:0; padding:0; background:transparent; color:#b4aaff; font:inherit; font-weight:800; cursor:pointer; }
+.auth-footnote { display:block; margin-top:18px; color:#53627c; font-size:9px; line-height:1.5; text-align:center; }
+
+@media (max-width:520px) {
+  .auth-screen { padding:18px; }
+  .auth-card { padding:23px; }
+}
