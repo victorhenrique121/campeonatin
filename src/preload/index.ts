@@ -5,6 +5,7 @@ const invoke =
   (...args: unknown[]) =>
     ipcRenderer.invoke(channel, ...args);
 const api: Api = {
+  getProfile: invoke("profile:get"),
   auth: {
     session: invoke("auth:session"),
     signUp: invoke("auth:signup"),
