@@ -2861,6 +2861,7 @@ function ThemeControl() {
 
 function SettingsPage({ reload }: { reload: () => Promise<void> }) {
   type SettingsSection =
+    | "account"
     | "appearance"
     | "data"
     | "rules"
@@ -2931,7 +2932,15 @@ function SettingsPage({ reload }: { reload: () => Promise<void> }) {
     () => localStorage.getItem("arena-muted") === "true",
   );
 
-  const [section, setSection] = useState<SettingsSection>("appearance");
+  const [section, setSection] = useState<SettingsSection>(() =>
+    localStorage.getItem("arena-settings-target") === "account"
+      ? "account"
+      : "appearance",
+  );
+
+  useEffect(() => {
+    localStorage.removeItem("arena-settings-target");
+  }, []);
 
   const [message, setMessage] = useState("");
 
@@ -3073,7 +3082,21 @@ function SettingsPage({ reload }: { reload: () => Promise<void> }) {
             </div>
           )}
 
-          {section === "appearance" ? (
+          {section === "account" ? (
+            <article className="settings-card settings-placeholder">
+              <div className="settings-placeholder-icon">
+                <UserCircle size={22} />
+              </div>
+              <div>
+                <span className="settings-placeholder-label">CONTA</span>
+                <h2>Conta</h2>
+                <p>
+                  Esta seção será configurada na Etapa 4. O botão "Editar perfil"
+                  já direciona para este ponto das Configurações.
+                </p>
+              </div>
+            </article>
+          ) : section === "appearance" ? (
             <article className="settings-card">
               <div className="settings-card-header">
                 <div>
