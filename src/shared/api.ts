@@ -9,7 +9,33 @@ import type {
   Team,
   GameRulesSettings,
 } from "./models";
+
+export type AuthUser = {
+  id: string;
+  email: string;
+  displayName: string;
+  role: "admin" | "player" | "viewer";
+  emailConfirmedAt: string | null;
+};
+
+export type AuthSession = {
+  authenticated: boolean;
+  user: AuthUser | null;
+};
+
+export type AuthSignUpResult = {
+  requiresEmailConfirmation: boolean;
+  email: string;
+};
+
 export type Api = {
+  auth: {
+    session: () => Promise<AuthSession>;
+    signUp: (email: string, password: string, displayName: string) => Promise<AuthSignUpResult>;
+    signIn: (email: string, password: string) => Promise<AuthUser>;
+    resendConfirmation: (email: string) => Promise<void>;
+    signOut: () => Promise<void>;
+  };
   dashboard: () => Promise<Dashboard>;
   players: () => Promise<Player[]>;
   savePlayer: (player: Partial<Player>) => Promise<Player>;
