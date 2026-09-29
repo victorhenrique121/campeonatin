@@ -5,6 +5,13 @@ const invoke =
   (...args: unknown[]) =>
     ipcRenderer.invoke(channel, ...args);
 const api: Api = {
+  auth: {
+    session: invoke("auth:session"),
+    signUp: invoke("auth:signup"),
+    signIn: invoke("auth:signin"),
+    resendConfirmation: invoke("auth:resend-confirmation"),
+    signOut: invoke("auth:signout"),
+  },
   dashboard: invoke("dashboard"),
   players: invoke("players:list"),
   savePlayer: invoke("players:save"),
