@@ -42,6 +42,7 @@ import {
   Zap,
 } from "lucide-react";
 import type {
+  AuthUser,
   Championship,
   ChampionshipDetail,
   Dashboard,
@@ -53,6 +54,8 @@ import type {
   Team,
 } from "../shared/models";
 import { HeadToHeadCard } from "./HeadToHeadCard";
+import { AuthPage } from "./AuthPage";
+import "./styles/auth.css";
 import "./styles/app.css";
 import "./styles/fixtures.css";
 import "./styles/HeadToHeadCard.css";
@@ -3328,7 +3331,7 @@ function SettingsPage({ reload }: { reload: () => Promise<void> }) {
   );
 }
 
-function App() {
+function ArenaApp({ user, onSignOut }: { user: AuthUser; onSignOut: () => void }) {
   const [page, setPage] = useState<Page>("dashboard"),
     [data, setData] = useState<Dashboard>(),
     [loadError, setLoadError] = useState(""),
@@ -3434,8 +3437,71 @@ function App() {
         </div>
       </aside>
       <main>{view}</main>
+      <div className="user-session-badge" title={user.email}>
+        <span>{user.displayName.slice(0, 1).toUpperCase()}</span>
+        <div>
+          <strong>{user.displayName}</strong>
+          <small>{user.email}</small>
+        </div>
+        <button type="button" onClick={() => void onSignOut()}>
+          Sair
+        </button>
+      </div>
       <ThemeControl />
     </div>
   );
 }
+function App() {
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [checkingAuth, setCheckingAuth] = useState(true);
+  const [authError, setAuthError] = useState("");
+
+  useEffect(() => {
+    void window.arena.auth.session()
+      .then((session) => {
+        setUser(session.user);
+      })
+      .catch((error) => {
+        setAuthError(
+          error instanceof Error
+            ? error.message
+            : "Não foi possível verificar a sessão.",
+        );
+      })
+      .finally(() => setCheckingAuth(false));
+  }, []);
+
+  if (checkingAuth) {
+    return <main className="loading">Verificando sessão…</main>;
+  }
+
+  if (authError) {
+    return (
+      <main className="error-state">
+        <h1>Não foi possível verificar sua sessão</h1>
+        <p>{authError}</p>
+        <button
+          className="primary"
+          onClick={() => window.location.reload()}
+        >
+          Tentar novamente
+        </button>
+      </main>
+    );
+  }
+
+  if (!user) {
+    return <AuthPage onAuthenticated={setUser} />;
+  }
+
+  return (
+    <ArenaApp
+      user={user}
+      onSignOut={() => {
+        void window.arena.auth.signOut().then(() => setUser(null));
+      }}
+    />
+  );
+}
+
 createRoot(document.getElementById("root")!).render(<App />);
