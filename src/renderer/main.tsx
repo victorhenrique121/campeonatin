@@ -41,8 +41,8 @@ import {
   VolumeX,
   Zap,
 } from "lucide-react";
+import type { AuthUser } from "../shared/api";
 import type {
-  AuthUser,
   Championship,
   ChampionshipDetail,
   Dashboard,
