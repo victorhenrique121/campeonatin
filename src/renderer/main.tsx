@@ -59,6 +59,7 @@ import type {
 } from "../shared/models";
 import { HeadToHeadCard } from "./HeadToHeadCard";
 import { AuthPage } from "./AuthPage";
+import { ProfilePage } from "./ProfilePage";
 import "./styles/auth.css";
 import "./styles/app.css";
 import "./styles/account-menu.css";
@@ -3337,31 +3338,6 @@ function SettingsPage({ reload }: { reload: () => Promise<void> }) {
   );
 }
 
-function ProfilePage({ user }: { user: AuthUser }) {
-  return (
-    <section className="page profile-placeholder">
-      <header className="page-title">
-        <div>
-          <p>CONTA</p>
-          <h1>Meu perfil</h1>
-          <span>Os dados do seu perfil serão configurados na próxima etapa.</span>
-        </div>
-      </header>
-
-      <article className="panel profile-placeholder-card">
-        <div className="profile-placeholder-avatar">
-          {user.displayName.slice(0, 1).toUpperCase()}
-        </div>
-        <div>
-          <strong>{user.displayName}</strong>
-          <span>{user.email}</span>
-        </div>
-        <small>Etapa 2 — navegação pronta.</small>
-      </article>
-    </section>
-  );
-}
-
 function ArenaApp({ user, onSignOut }: { user: AuthUser; onSignOut: () => void }) {
   const [page, setPage] = useState<Page>("dashboard"),
     [data, setData] = useState<Dashboard>(),
@@ -3446,7 +3422,12 @@ function ArenaApp({ user, onSignOut }: { user: AuthUser; onSignOut: () => void }
     ) : page === "championships" ? (
       <ChampionshipPage players={players} teams={teams} />
     ) : page === "profile" ? (
-      <ProfilePage user={user} />
+      <ProfilePage
+        onEditProfile={() => {
+          localStorage.setItem("arena-settings-target", "account");
+          setPage("settings");
+        }}
+      />
     ) : page === "settings" ? (
       <SettingsPage reload={reload} />
     ) : (
