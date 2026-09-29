@@ -4495,3 +4495,48 @@ body.arena-light .team-search button:hover {
     color: #182033;
     background: #eef1f8;
 }
+
+/* Sessão atual — temporário até a etapa visual da conta. */
+.user-session-badge {
+  position: fixed;
+  top: 12px;
+  right: 58px;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 7px 6px 6px;
+  border: 1px solid #26324b;
+  border-radius: 10px;
+  background: #0f1728e8;
+  backdrop-filter: blur(12px);
+}
+.user-session-badge > span {
+  width: 25px;
+  height: 25px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--arena-accent);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 900;
+}
+.user-session-badge div { min-width: 0; display: grid; gap: 1px; }
+.user-session-badge strong { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #dfe5f3; font-size: 9px; }
+.user-session-badge small { max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #687894; font-size: 8px; }
+.user-session-badge button {
+  border: 0;
+  background: transparent;
+  color: #9ca9bf;
+  font: inherit;
+  font-size: 9px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.user-session-badge button:hover { color: #fff; }
+
+@media (max-width: 650px) {
+  .user-session-badge { right: 12px; }
+  .user-session-badge div { display: none; }
+}
