@@ -6,6 +6,7 @@ import { createTeamsService } from "./teams-service";
 import { createMatchesService } from "./matches-service";
 import {
   getAuthSession,
+  getProfile,
   initSupabase,
   resendSignupConfirmation,
   signInUser,
@@ -58,6 +59,7 @@ app.whenReady().then(() => {
   const matches = createMatchesService(db, repo);
 
   ipcMain.handle("auth:session", () => getAuthSession());
+  ipcMain.handle("profile:get", () => getProfile());
   ipcMain.handle("auth:signup", (_, email, password, displayName) =>
     signUpUser(email, password, displayName),
   );
