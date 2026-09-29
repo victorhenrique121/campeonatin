@@ -5,8 +5,8 @@ Aplicação desktop para organizar partidas, jogadores, times, rankings e campeo
 Os dados ficam em um banco **SQLite local**, com uma camada opcional de sincronização com **Supabase** (PostgreSQL) sendo adicionada de forma incremental. A aplicação funciona 100% offline — o Supabase é opcional e nunca é pré-requisito para usar o app.
 
 > **Status:** em desenvolvimento ativo.
-> Núcleo de partidas, ranking e campeonatos implementado e estável.
-> Migração para Supabase em andamento: `players` e `teams` concluídos; `matches`, `championships` e `fixtures` ainda 100% locais.
+> Núcleo de partidas, ranking, estatísticas e campeonatos implementado.
+> A integração com Supabase é incremental: `players` e `teams` possuem integração remota; `matches` já possui fluxo híbrido de escrita; `championships` e `fixtures` ainda dependem principalmente do SQLite.
 
 ---
 
@@ -250,54 +250,94 @@ Para entidades já migradas, o service correspondente escreve primeiro no Supaba
 
 ## Estrutura do projeto
 
+A estrutura atual separa interface, processo Electron, contratos compartilhados, scripts e infraestrutura do Supabase:
+
 ```text
 campeonatin/
 │
+├── .github/
+│   └── workflows/
+│       ├── codeql.yml
+│       └── copilot-instructions.md
+│
 ├── src/
-│   ├── main/                        # Processo principal (Node)
-│   │   ├── index.ts                 # Janela + handlers IPC
-│   │   ├── repository.ts            # Toda a lógica SQLite
-│   │   ├── championship-service.ts  # Regras de campeonato
-│   │   ├── supabase.ts              # Cliente + auth + diagnóstico
-│   │   ├── players-service.ts       # Camada de dados de players
-│   │   ├── teams-service.ts         # Camada de dados de teams
-│   │   ├── clubRows.ts              # Catálogo de 662 clubes
+│   ├── main/
+│   │   ├── index.ts
+│   │   ├── repository.ts
+│   │   ├── supabase.ts
+│   │   ├── players-service.ts
+│   │   ├── teams-service.ts
+│   │   ├── matches-service.ts
+│   │   ├── championship-service.ts
+│   │   ├── clubRows.ts
 │   │   └── scripts/
 │   │       ├── generate-clubs.ts
 │   │       └── FC26_20250921.csv
 │   │
-│   ├── preload/index.ts             # contextBridge
+│   ├── preload/
+│   │   └── index.ts
 │   │
-│   ├── renderer/                    # Interface React
+│   ├── renderer/
 │   │   ├── main.tsx
-│   │   ├── index.html
+│   │   ├── appearance.ts
+│   │   ├── HeadToHeadCard.tsx
 │   │   └── styles/
 │   │
-│   └── shared/                      # Contratos tipados
-│       ├── api.ts
-│       └── models.ts
+│   ├── shared/
+│   │   ├── api.ts
+│   │   └── models.ts
+│   │
+│   └── midia/
 │
 ├── scripts/
 │   ├── migrate-players-to-supabase.mjs
 │   ├── migrate-teams-to-supabase.mjs
-│   └── dev-tests/                   # Harness de testes com mock
-│       ├── mock-supabase.cjs        # Mock de GoTrue + PostgREST
+│   ├── migrate-matches-to-supabase.mjs
+│   ├── migrate-champions-to-supabase.mjs
+│   └── dev-tests/
+│       ├── mock-supabase.cjs
 │       ├── scenarios.cjs
-│       └── run-stage2-tests.cjs
+│       ├── run-stage2-tests.cjs
+│       └── run-stage4-tests.cjs
 │
 ├── supabase/
-│   ├── migrations/                  # Schema versionado
-│   └── SETUP.md                     # Guia de configuração
+│   ├── SETUP.md
+│   └── migrations/
+│       └── 20260827160000_initial_schema.sql
 │
 ├── .env.example
+├── .gitignore
 ├── package.json
+├── package-lock.json
 ├── tsconfig.json
 ├── tsconfig.electron.json
 ├── vite.config.ts
 └── README.md
 ```
 
----
+### Responsabilidade de cada área
+
+| Pasta | Responsabilidade |
+|---|---|
+| `src/main/` | Electron Main, SQLite, IPC handlers e serviços |
+| `src/preload/` | Ponte segura entre Renderer e Main |
+| `src/renderer/` | React, telas, componentes e estilos |
+| `src/shared/` | Tipos e contratos compartilhados |
+| `src/midia/` | Ícones e assets da aplicação |
+| `scripts/` | Migrações, testes e ferramentas auxiliares |
+| `supabase/` | Migrations e documentação do banco remoto |
+| `.github/` | CI e automações do GitHub |
+
+### Arquivos antigos na raiz
+
+O repositório ainda contém alguns arquivos que podem ser reorganizados futuramente:
+
+- `check-db.js` — ferramenta de diagnóstico do SQLite;
+- `clubRows.ts` — existe também a versão utilizada em `src/main/clubRows.ts`;
+- `FIXES_SUMMARY.md` — documentação que pode ficar em `docs/`;
+- `__tmp_probe__.txt` — aparenta ser temporário.
+
+**Não remova esses arquivos automaticamente.** Antes de mover ou excluir, confirme referências no projeto.
 
 ## Tecnologias
 
@@ -344,11 +384,11 @@ npm install --cache .npm-cache
 
 > ### ⚠️ Leia antes de rodar
 >
-> **O processo principal do Electron NÃO é recompilado automaticamente.**
+> O processo principal do Electron precisa ser compilado antes de abrir o aplicativo.
 >
-> O `package.json` aponta para `dist-electron/main/index.js` (JavaScript compilado), mas o script `dev:electron` apenas aguarda o Vite e abre o Electron — ele não compila nada.
+> O script atual `dev:electron` já executa `tsc -p tsconfig.electron.json` automaticamente.
 >
-> **Toda alteração em `src/main/` exige compilar manualmente antes:**
+> Se precisar compilar manualmente:
 >
 > ```bash
 > npx tsc -p tsconfig.electron.json
@@ -359,8 +399,10 @@ npm install --cache .npm-cache
 Fluxo recomendado:
 
 ```bash
-npx tsc -p tsconfig.electron.json   # compila o processo main
-npm run dev                          # inicia Vite + Electron
+npm run dev                          # compila o Main, inicia Vite e abre o Electron
+
+# ou, para compilar somente o processo Main:
+npx tsc -p tsconfig.electron.json
 ```
 
 O Electron aguarda o servidor Vite (porta 5173) ficar disponível antes de abrir a janela.
@@ -425,17 +467,22 @@ O guia completo está em [`supabase/SETUP.md`](supabase/SETUP.md). Resumo dos pa
 | Script | Descrição |
 |---|---|
 | `npm run dev` | Inicia Vite + Electron simultaneamente |
-| `npm run dev:electron` | Aguarda a porta do Vite e abre o Electron |
+| `npm run dev:electron` | Compila o Main, aguarda o Vite e abre o Electron |
 | `npm run typecheck` | Verificação TypeScript (renderer + main) |
-| `npm run build` | Compila e empacota a aplicação |
+| `npm run build` | Compila, gera o frontend e empacota a aplicação |
 | `npm run test:stage2` | Suíte de cenários contra o mock de Supabase |
 | `npm run migrate:players` | Migra jogadores do SQLite para o Supabase |
 | `npm run migrate:teams` | Migra o catálogo de times para o Supabase |
-| `npx tsc -p tsconfig.electron.json` | **Compila o processo main** (necessário após editar `src/main/`) |
+| `npm run migrate:matches` | Migra o histórico de partidas para o Supabase |
+| `npm run migrate:champions` | Executa a migração de campeonatos |
+| `npm run start` | Inicialização via Electron Forge |
+| `npm run package` | Empacotamento via Electron Forge |
+| `npm run make` | Geração de artefatos via Electron Forge |
+| `npx tsc -p tsconfig.electron.json` | Compila somente o processo Main |
 
 ### Sobre os scripts de migração
 
-Ambos preservam os IDs originais e são **idempotentes** (podem ser executados novamente com segurança). Aceitam um caminho de banco como argumento:
+Os scripts de migração preservam os IDs originais e usam upsert quando aplicável, permitindo repetir a migração sem criar registros duplicados. Aceitam um caminho de banco como argumento:
 
 ```bash
 npm run migrate:teams -- /caminho/para/fc-arena.sqlite
@@ -675,45 +722,220 @@ A tabela remota `teams` ainda não foi populada. Execute `npm run migrate:teams`
 
 ## Roadmap
 
-### Migração para Supabase
+### Base já implementada
 
-- [x] Etapa 1 — infraestrutura de conexão e diagnóstico
-- [x] Etapa 2 — `players` (fonte de verdade remota + espelho local)
-- [x] Etapa 3 — `teams` (leitura remota + script manual de catálogo)
-- [ ] Etapa 4 — `matches` (escrita remota, leitura local)
-- [ ] Etapa 5 — `championships` + `fixtures`
-- [ ] Backfill de `championship_id` nas partidas remotas
-- [ ] Tratamento de export/import/reset frente ao Supabase
-- [ ] Endurecimento da sessão com `safeStorage`
-- [ ] Mecanismo de configuração para app empacotado
-- [ ] Login real multiusuário (RLS por usuário)
-- [ ] Sincronização em tempo real (Realtime)
+- [x] Aplicação desktop Electron
+- [x] React + TypeScript + Vite
+- [x] SQLite local
+- [x] Cadastro de jogadores
+- [x] Catálogo de times
+- [x] Registro e edição de partidas
+- [x] Ranking
+- [x] Dashboard
+- [x] Estatísticas
+- [x] Campeonatos
+- [x] Pontos corridos
+- [x] Mata-mata
+- [x] Fixtures
+- [x] Backup e restauração
+- [x] Supabase foundation
+- [x] Migração de players
+- [x] Migração de teams
+- [x] Fluxo híbrido de matches
+- [x] Scripts de teste com mock
 
-### Funcionalidades
+### Em desenvolvimento
 
-- [ ] Formato grupos + mata-mata
-- [ ] Edição completa de participantes antes do início
-- [ ] Encerramento manual de campeonatos de pontos corridos
-- [ ] Estatísticas avançadas por campeonato
-- [ ] Histórico por jogador e confrontos diretos
-- [ ] Sistema Elo
-- [ ] Conquistas e recordes
-- [ ] Temporadas
-- [ ] Filtros e pesquisa avançada no histórico
-- [ ] Gráficos de desempenho
-- [ ] Exportação de estatísticas
-- [ ] Melhorias de UX e responsividade
-
----
-
-## Filosofia do projeto
-
-1. **Dados sob controle do usuário.** O SQLite local é a base; a nuvem é opcional e incremental.
-2. **Fonte de verdade única.** Resultados de partidas são a base de rankings e estatísticas — nada é duplicado.
-3. **Regras no backend.** A integridade não depende da interface.
-4. **Migração sem regressão.** Nenhuma etapa pode quebrar o que já funciona. Sem configuração, o app se comporta exatamente como antes.
+- [ ] Migração completa de championships
+- [ ] Migração completa de fixtures
+- [ ] Sincronização remota completa
+- [ ] Implementação completa de `groups_knockout`
+- [ ] Configuração do Supabase pela interface
+- [ ] Armazenamento seguro de credenciais em produção
+- [ ] Sistema de atualização do aplicativo
+- [ ] Melhorias nos modos especiais
+- [ ] Distribuição para usuários externos
 
 ---
+
+## Boas práticas para manutenção
+
+### Não substituir arquivos inteiros sem verificar dependências
+
+Arquivos centrais:
+
+```text
+src/main/repository.ts
+src/main/index.ts
+src/main/supabase.ts
+src/main/players-service.ts
+src/main/teams-service.ts
+src/main/matches-service.ts
+src/main/championship-service.ts
+src/preload/index.ts
+src/shared/api.ts
+src/shared/models.ts
+```
+
+Alterações nesses arquivos devem preservar os contratos existentes.
+
+### Preservar o contrato IPC
+
+O fluxo esperado é:
+
+```text
+Renderer
+   ↓
+shared/api.ts
+   ↓
+preload
+   ↓
+ipcMain
+   ↓
+service/repository
+   ↓
+SQLite / Supabase
+```
+
+### Preservar IDs durante migrações
+
+Quando uma entidade é espelhada:
+
+```text
+SQLite ID = Supabase ID
+```
+
+Isso evita quebrar chaves estrangeiras e relacionamentos existentes.
+
+### Validar antes de testar
+
+```bash
+npm run typecheck
+npm run build
+```
+
+### Separar responsabilidades
+
+```text
+src/renderer → interface
+src/preload  → ponte segura
+src/main     → Electron, banco e serviços
+src/shared   → contratos e tipos
+scripts      → migrações e testes
+supabase     → schema e configuração remota
+```
+
+## Solução de problemas
+
+### Electron abriu uma versão antiga do código
+
+Execute:
+
+```bash
+npx tsc -p tsconfig.electron.json
+npm run dev
+```
+
+O script `npm run dev` também compila o Main antes de iniciar o Electron.
+
+### Supabase não configurado
+
+Isso é permitido. Sem as variáveis necessárias no `.env`, o aplicativo pode operar em modo SQLite local.
+
+### Credenciais do Supabase inválidas
+
+Confira:
+
+```env
+SUPABASE_URL=
+SUPABASE_ANON_KEY=
+SUPABASE_APP_EMAIL=
+SUPABASE_APP_PASSWORD=
+```
+
+Confirme também se a conta existe em **Authentication → Users**, está confirmada e possui perfil com papel adequado.
+
+### Erro de RLS
+
+Verifique se o usuário autenticado possui o papel esperado em `public.profiles`.
+
+Para uma conta administrativa:
+
+```sql
+select
+  u.email,
+  p.role
+from public.profiles p
+join auth.users u on u.id = p.id;
+```
+
+### Jogadores ou times não aparecem no Supabase
+
+Execute novamente o script correspondente:
+
+```bash
+npm run migrate:players
+npm run migrate:teams
+```
+
+Os scripts preservam os IDs locais.
+
+### Erro de FK ao migrar partidas
+
+A migração de `matches` depende de jogadores e times já existentes no Supabase.
+
+Ordem recomendada:
+
+```bash
+npm run migrate:players
+npm run migrate:teams
+npm run migrate:matches
+```
+
+### Conflito de ID após migração
+
+Os scripts de migração exibem um comando `setval` ao final. Execute o comando indicado no SQL Editor do Supabase para alinhar a sequência PostgreSQL aos IDs já migrados.
+
+### Partidas perderam o vínculo de campeonato no Supabase
+
+Durante a Etapa 4, isso pode ser esperado.
+
+Enquanto `championships` e `fixtures` ainda dependem do SQLite, a migração histórica de `matches` pode manter `championship_id = NULL` no Supabase para evitar violação da FK remota.
+
+O vínculo original continua preservado no SQLite e poderá ser associado remotamente quando a migração de championships for concluída.
+
+### `npm run migrate` não funciona
+
+O `package.json` ainda possui uma entrada legada apontando para:
+
+```text
+scripts/migrate-to-supabase.mjs
+```
+
+Esse arquivo não está presente na estrutura atual.
+
+Use os comandos específicos:
+
+```bash
+npm run migrate:players
+npm run migrate:teams
+npm run migrate:matches
+npm run migrate:champions
+```
+
+### `test:stage4` não existe como comando npm
+
+O executor existe em:
+
+```text
+scripts/dev-tests/run-stage4-tests.cjs
+```
+
+Execute diretamente:
+
+```bash
+node scripts/dev-tests/run-stage4-tests.cjs
+```
 
 ## Licença
 
