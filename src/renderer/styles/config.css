@@ -59,6 +59,23 @@
     min-width: 0;
 }
 
+.settings-nav-group {
+    padding: 12px 10px 5px;
+
+    color: #596782;
+
+    font-size: 8px;
+    font-weight: 800;
+    letter-spacing: .14em;
+    line-height: 1.2;
+}
+
+.settings-nav-group:not(:first-child) {
+    margin-top: 7px;
+    padding-top: 12px;
+    border-top: 1px solid #ffffff0a;
+}
+
 .settings-nav-item {
     width: 100%;
     min-width: 0;
@@ -830,6 +847,10 @@
 /* =========================================================
    RESPONSIVIDADE
    ========================================================= */
+
+body.arena-light .settings-nav-group {
+    color: #71809a;
+}
 
 @media (max-width: 900px) {
     .settings-layout {
