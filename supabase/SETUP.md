@@ -878,3 +878,24 @@ Portanto:
 
 Qualquer nova etapa deve preservar as funcionalidades já existentes e ser
 implementada de forma compatível com as etapas anteriores.
+
+## Autenticação de usuários do FC Arena
+
+O aplicativo agora possui uma sessão de usuário separada da conta de serviço legada usada pela sincronização atual.
+
+No Supabase, em **Authentication → Providers → Email**, mantenha **Confirm Email** ativado. Com essa opção, o Supabase exige que o usuário confirme o endereço antes do primeiro login. O FC Arena também possui a opção de reenviar a confirmação.
+
+Para o primeiro teste:
+
+1. Ative **Email**.
+2. Ative **Confirm Email**.
+3. Verifique se o cadastro de novos usuários está permitido.
+4. Crie uma conta pelo FC Arena.
+5. Confirme o e-mail recebido.
+6. Volte ao FC Arena e faça login.
+
+O trigger `public.handle_new_user()` da migration cria automaticamente o registro correspondente em `public.profiles`.
+
+> Nesta etapa o login foi adicionado sem alterar ainda as regras de ownership dos campeonatos, jogadores e partidas. A adaptação dessas regras será feita depois da validação do fluxo de autenticação.
+
+O envio de e-mails do Supabase tem limites no serviço padrão; para produção, configure um SMTP próprio conforme a documentação do Supabase.
