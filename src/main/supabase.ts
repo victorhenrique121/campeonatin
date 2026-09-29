@@ -71,6 +71,19 @@ export type AuthSignUpResult = {
   email: string;
 };
 
+export type UserProfile = {
+  id: string;
+  displayName: string;
+  username: string | null;
+  avatarUrl: string | null;
+  bio: string | null;
+  role: "admin" | "player" | "viewer";
+  email: string;
+  emailConfirmedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 const LOG_PREFIX = "[supabase]";
 const SERVICE_ROLE_ENV_VAR = "SUPABASE_SERVICE_ROLE_KEY";
 const APP_EMAIL_ENV_VAR = "SUPABASE_APP_EMAIL";
@@ -332,6 +345,49 @@ async function getAuthUserFromSession(): Promise<AuthUser | null> {
 export async function getAuthSession(): Promise<AuthSessionStatus> {
   const user = await getAuthUserFromSession();
   return { authenticated: Boolean(user), user };
+}
+
+/** Lê somente o perfil do usuário autenticado e os metadados públicos de Auth necessários à página Meu perfil. */
+export async function getProfile(): Promise<UserProfile> {
+  const supabase = getUserAuthClient();
+  if (!supabase) throw new Error("Supabase não está configurado.");
+
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  if (authError || !authData.user) {
+    throw normalizeAuthError(authError);
+  }
+
+  const user = authData.user;
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select("id,display_name,username,avatar_url,bio,role,created_at,updated_at")
+    .eq("id", user.id)
+    .single();
+
+  if (profileError || !profile) {
+    throw new Error(
+      profileError?.message || "Não foi possível carregar seu perfil.",
+    );
+  }
+
+  const roleValue = profile.role;
+  const role: UserProfile["role"] =
+    roleValue === "admin" || roleValue === "player" || roleValue === "viewer"
+      ? roleValue
+      : "viewer";
+
+  return {
+    id: profile.id,
+    displayName: profile.display_name,
+    username: profile.username,
+    avatarUrl: profile.avatar_url,
+    bio: profile.bio,
+    role,
+    email: user.email ?? "",
+    emailConfirmedAt: user.email_confirmed_at ?? null,
+    createdAt: profile.created_at,
+    updatedAt: profile.updated_at,
+  };
 }
 
 /** Cadastro com e-mail, senha e nome. O trigger do banco cria o profile. */
