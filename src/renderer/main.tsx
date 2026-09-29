@@ -2877,6 +2877,12 @@ function SettingsPage({ reload }: { reload: () => Promise<void> }) {
     icon: React.ElementType;
   }> = [
     {
+    {
+      id: "account",
+      label: "Conta",
+      description: "Dados do perfil",
+      icon: UserCircle,
+    },
       id: "appearance",
       label: "Aparência",
       description: "Cores e efeitos",
