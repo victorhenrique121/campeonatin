@@ -4,7 +4,15 @@ import { createDatabase, repository } from "./repository";
 import { createPlayersService } from "./players-service";
 import { createTeamsService } from "./teams-service";
 import { createMatchesService } from "./matches-service";
-import { initSupabase, testSupabaseConnection } from "./supabase";
+import {
+  getAuthSession,
+  initSupabase,
+  resendSignupConfirmation,
+  signInUser,
+  signOutUser,
+  signUpUser,
+  testSupabaseConnection,
+} from "./supabase";
 import {
   getChampionships,
   saveChampionship,
@@ -48,6 +56,18 @@ app.whenReady().then(() => {
   const players = createPlayersService(db, repo);
   const teams = createTeamsService(repo);
   const matches = createMatchesService(db, repo);
+
+  ipcMain.handle("auth:session", () => getAuthSession());
+  ipcMain.handle("auth:signup", (_, email, password, displayName) =>
+    signUpUser(email, password, displayName),
+  );
+  ipcMain.handle("auth:signin", (_, email, password) =>
+    signInUser(email, password),
+  );
+  ipcMain.handle("auth:resend-confirmation", (_, email) =>
+    resendSignupConfirmation(email),
+  );
+  ipcMain.handle("auth:signout", () => signOutUser());
 
   ipcMain.handle("dashboard", () => repo.dashboard());
   ipcMain.handle("players:list", () => players.list());
