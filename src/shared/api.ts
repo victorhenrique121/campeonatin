@@ -23,12 +23,26 @@ export type AuthSession = {
   user: AuthUser | null;
 };
 
+export type UserProfile = {
+  id: string;
+  displayName: string;
+  username: string | null;
+  avatarUrl: string | null;
+  bio: string | null;
+  role: "admin" | "player" | "viewer";
+  email: string;
+  emailConfirmedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type AuthSignUpResult = {
   requiresEmailConfirmation: boolean;
   email: string;
 };
 
 export type Api = {
+  getProfile: () => Promise<UserProfile>;
   auth: {
     session: () => Promise<AuthSession>;
     signUp: (email: string, password: string, displayName: string) => Promise<AuthSignUpResult>;
