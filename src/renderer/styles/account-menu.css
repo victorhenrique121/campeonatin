@@ -1,0 +1,251 @@
+/* =========================================================
+   FC ARENA — MENU DA CONTA
+   Etapa 2: navegação de Meu perfil / Configurações / Sair
+   ========================================================= */
+
+.account-menu {
+  position: fixed;
+  top: 12px;
+  right: 58px;
+  z-index: 80;
+  width: min(270px, calc(100vw - 24px));
+}
+
+.account-menu-trigger {
+  width: 100%;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 8px 6px 6px;
+  border: 1px solid #26324b;
+  border-radius: 11px;
+  background: #0f1728e8;
+  color: #dfe5f3;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, .16);
+  cursor: pointer;
+  text-align: left;
+}
+
+.account-menu-trigger:hover {
+  border-color: #354461;
+  background: #131d31f2;
+}
+
+.account-menu-avatar {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--arena-accent);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.account-menu-identity {
+  min-width: 0;
+  flex: 1;
+  display: grid;
+  gap: 2px;
+}
+
+.account-menu-identity strong,
+.account-menu-identity small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-menu-identity strong {
+  color: #e7ebf4;
+  font-size: 10px;
+}
+
+.account-menu-identity small {
+  color: #75829a;
+  font-size: 8px;
+}
+
+.account-menu-chevron {
+  flex: 0 0 auto;
+  color: #8794ab;
+  transition: transform .16s ease;
+}
+
+.account-menu-chevron.open {
+  transform: rotate(180deg);
+}
+
+.account-menu-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 210px;
+  padding: 6px;
+  border: 1px solid #293653;
+  border-radius: 12px;
+  background: #0f1728f7;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, .38);
+  backdrop-filter: blur(16px);
+}
+
+.account-menu-panel button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 11px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #dce4f1;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.account-menu-panel button:hover {
+  background: #19243a;
+}
+
+.account-menu-panel button svg {
+  color: #8d7cff;
+  flex: 0 0 auto;
+}
+
+.account-menu-panel .account-menu-danger {
+  color: #f1a0ad;
+}
+
+.account-menu-panel .account-menu-danger svg {
+  color: #f17c8e;
+}
+
+.account-menu-divider {
+  height: 1px;
+  margin: 5px 4px;
+  background: #253148;
+}
+
+.profile-placeholder {
+  max-width: 920px;
+}
+
+.profile-placeholder-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: 120px;
+}
+
+.profile-placeholder-avatar {
+  width: 58px;
+  height: 58px;
+  flex: 0 0 58px;
+  display: grid;
+  place-items: center;
+  border-radius: 16px;
+  background: var(--arena-accent);
+  color: #fff;
+  font-size: 22px;
+  font-weight: 900;
+}
+
+.profile-placeholder-card > div:not(.profile-placeholder-avatar) {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.profile-placeholder-card strong {
+  color: #edf1f8;
+  font-size: 16px;
+}
+
+.profile-placeholder-card span,
+.profile-placeholder-card small {
+  color: #8e9bb1;
+  font-size: 12px;
+}
+
+.profile-placeholder-card small {
+  margin-left: auto;
+}
+
+body.arena-light .account-menu-trigger {
+  border-color: #dbe2ee;
+  background: #ffffffee;
+  color: #182033;
+}
+
+body.arena-light .account-menu-trigger:hover {
+  border-color: #cbd5e5;
+  background: #fff;
+}
+
+body.arena-light .account-menu-identity strong {
+  color: #182033;
+}
+
+body.arena-light .account-menu-identity small {
+  color: #647089;
+}
+
+body.arena-light .account-menu-panel {
+  border-color: #dbe2ee;
+  background: #fffffff5;
+  box-shadow: 0 18px 50px rgba(31, 43, 68, .18);
+}
+
+body.arena-light .account-menu-panel button {
+  color: #182033;
+}
+
+body.arena-light .account-menu-panel button:hover {
+  background: #eef1f8;
+}
+
+body.arena-light .account-menu-divider {
+  background: #e1e6ef;
+}
+
+body.arena-light .profile-placeholder-card strong {
+  color: #182033;
+}
+
+@media (max-width: 650px) {
+  .account-menu {
+    right: 12px;
+    width: min(250px, calc(100vw - 24px));
+  }
+
+  .account-menu-identity {
+    display: none;
+  }
+
+  .account-menu-trigger {
+    width: auto;
+  }
+
+  .profile-placeholder-card {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .profile-placeholder-card small {
+    width: 100%;
+    margin-left: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .account-menu-chevron {
+    transition: none;
+  }
+}
