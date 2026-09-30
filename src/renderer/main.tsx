@@ -61,6 +61,7 @@ import type {
 } from "../shared/models";
 import { HeadToHeadCard } from "./HeadToHeadCard";
 import { AuthPage } from "./AuthPage";
+import { ProfilePage } from "./ProfilePage";
 import "./styles/auth.css";
 import "./styles/app.css";
 import "./styles/account-menu.css";
@@ -2879,61 +2880,103 @@ function ArenaTools() {
 
 function SettingsPage({ reload }: { reload: () => Promise<void> }) {
   type SettingsSection =
+    | "account"
+    | "password"
+    | "email"
     | "appearance"
-    | "data"
+    | "notifications"
+    | "privacy"
     | "rules"
+    | "data"
     | "catalog"
     | "players"
-    | "notifications"
     | "about";
+
+  type SettingsGroup = "CONTA" | "APLICATIVO" | "PRIVACIDADE" | "ARENA";
 
   const sections: Array<{
     id: SettingsSection;
     label: string;
     description: string;
     icon: React.ElementType;
+    group: SettingsGroup;
   }> = [
+    {
+      id: "account",
+      label: "Conta",
+      description: "Dados do perfil",
+      icon: UserCircle,
+      group: "CONTA",
+    },
+    {
+      id: "password",
+      label: "Senha",
+      description: "Acesso à conta",
+      icon: Shield,
+      group: "CONTA",
+    },
+    {
+      id: "email",
+      label: "E-mail",
+      description: "Endereço da conta",
+      icon: MessageCircle,
+      group: "CONTA",
+    },
     {
       id: "appearance",
       label: "Aparência",
       description: "Cores e efeitos",
       icon: Sparkles,
-    },
-    {
-      id: "data",
-      label: "Dados e backup",
-      description: "Estrutura preparada",
-      icon: CalendarDays,
-    },
-    {
-      id: "rules",
-      label: "Regras do jogo",
-      description: "Estrutura preparada",
-      icon: Gauge,
-    },
-    {
-      id: "catalog",
-      label: "Catálogo de times",
-      description: "Estrutura preparada",
-      icon: Shield,
-    },
-    {
-      id: "players",
-      label: "Jogadores",
-      description: "Estrutura preparada",
-      icon: Users,
+      group: "APLICATIVO",
     },
     {
       id: "notifications",
       label: "Notificações",
-      description: "Estrutura preparada",
+      description: "Preferências de alertas",
       icon: Volume2,
+      group: "PRIVACIDADE",
+    },
+    {
+      id: "privacy",
+      label: "Privacidade",
+      description: "Controle de privacidade",
+      icon: EyeOff,
+      group: "PRIVACIDADE",
+    },
+    {
+      id: "rules",
+      label: "Regras do jogo",
+      description: "Configurações da Arena",
+      icon: Gauge,
+      group: "ARENA",
+    },
+    {
+      id: "data",
+      label: "Dados e backup",
+      description: "Dados da Arena",
+      icon: CalendarDays,
+      group: "ARENA",
+    },
+    {
+      id: "catalog",
+      label: "Catálogo de times",
+      description: "Times disponíveis",
+      icon: Shield,
+      group: "ARENA",
+    },
+    {
+      id: "players",
+      label: "Jogadores",
+      description: "Elenco da Arena",
+      icon: Users,
+      group: "ARENA",
     },
     {
       id: "about",
       label: "Sobre",
       description: "Informações do app",
       icon: Gamepad2,
+      group: "ARENA",
     },
   ];
 
@@ -2949,7 +2992,7 @@ function SettingsPage({ reload }: { reload: () => Promise<void> }) {
     () => localStorage.getItem("arena-muted") === "true",
   );
 
-  const [section, setSection] = useState<SettingsSection>("appearance");
+  const [section, setSection] = useState<SettingsSection>("account");
 
   const [message, setMessage] = useState("");
 
@@ -3055,29 +3098,36 @@ function SettingsPage({ reload }: { reload: () => Promise<void> }) {
           </div>
 
           <nav className="settings-nav">
-            {sections.map((item) => {
+            {sections.map((item, index) => {
               const Icon = item.icon;
               const active = section === item.id;
+              const showGroup =
+                index === 0 || sections[index - 1].group !== item.group;
 
               return (
-                <button
-                  key={item.id}
-                  type="button"
-                  className={`settings-nav-item ${active ? "active" : ""}`}
-                  onClick={() => setSection(item.id)}
-                >
-                  <span className="settings-nav-icon">
-                    <Icon size={18} />
-                  </span>
+                <React.Fragment key={item.id}>
+                  {showGroup && (
+                    <div className="settings-nav-group">{item.group}</div>
+                  )}
 
-                  <span className="settings-nav-content">
-                    <strong>{item.label}</strong>
+                  <button
+                    type="button"
+                    className={`settings-nav-item ${active ? "active" : ""}`}
+                    onClick={() => setSection(item.id)}
+                  >
+                    <span className="settings-nav-icon">
+                      <Icon size={18} />
+                    </span>
 
-                    <small>{item.description}</small>
-                  </span>
+                    <span className="settings-nav-content">
+                      <strong>{item.label}</strong>
 
-                  <ArrowRight size={15} className="settings-nav-arrow" />
-                </button>
+                      <small>{item.description}</small>
+                    </span>
+
+                    <ArrowRight size={15} className="settings-nav-arrow" />
+                  </button>
+                </React.Fragment>
               );
             })}
           </nav>
@@ -3091,7 +3141,27 @@ function SettingsPage({ reload }: { reload: () => Promise<void> }) {
             </div>
           )}
 
-          {section === "appearance" ? (
+          {["account", "password", "email"].includes(section) ? (
+            <article className="settings-card settings-placeholder">
+              <div className="settings-placeholder-icon">
+                {section === "account" ? (
+                  <UserCircle size={22} />
+                ) : section === "password" ? (
+                  <Shield size={22} />
+                ) : (
+                  <MessageCircle size={22} />
+                )}
+              </div>
+
+              <div>
+                <span className="settings-placeholder-label">CONTA</span>
+
+                <h2>{sections.find((item) => item.id === section)?.label}</h2>
+
+                <p>Em breve.</p>
+              </div>
+            </article>
+          ) : section === "appearance" ? (
             <article className="settings-card">
               <div className="settings-card-header">
                 <div>
@@ -3328,14 +3398,15 @@ function SettingsPage({ reload }: { reload: () => Promise<void> }) {
               </div>
 
               <div>
-                <span className="settings-placeholder-label">CONFIGURAÇÃO</span>
+                <span className="settings-placeholder-label">
+                  {["notifications", "privacy"].includes(section)
+                    ? "PRIVACIDADE"
+                    : "ARENA"}
+                </span>
 
                 <h2>{sections.find((item) => item.id === section)?.label}</h2>
 
-                <p>
-                  Esta categoria está preparada para uma próxima fase e ainda
-                  não possui ações configuradas.
-                </p>
+                <p>Em breve.</p>
               </div>
             </article>
           )}
@@ -3352,31 +3423,6 @@ function SettingsPage({ reload }: { reload: () => Promise<void> }) {
           onConfirm={reset}
         />
       )}
-    </section>
-  );
-}
-
-function ProfilePage({ user }: { user: AuthUser }) {
-  return (
-    <section className="page profile-placeholder">
-      <header className="page-title">
-        <div>
-          <p>CONTA</p>
-          <h1>Meu perfil</h1>
-          <span>Os dados do seu perfil serão configurados na próxima etapa.</span>
-        </div>
-      </header>
-
-      <article className="panel profile-placeholder-card">
-        <div className="profile-placeholder-avatar">
-          {user.displayName.slice(0, 1).toUpperCase()}
-        </div>
-        <div>
-          <strong>{user.displayName}</strong>
-          <span>{user.email}</span>
-        </div>
-        <small>Etapa 2 — navegação pronta.</small>
-      </article>
     </section>
   );
 }
@@ -3465,7 +3511,11 @@ function ArenaApp({ user, onSignOut }: { user: AuthUser; onSignOut: () => void }
     ) : page === "championships" ? (
       <ChampionshipPage players={players} teams={teams} />
     ) : page === "profile" ? (
-      <ProfilePage user={user} />
+      <ProfilePage
+        onEditProfile={() => {
+          setPage("settings");
+        }}
+      />
     ) : page === "settings" ? (
       <SettingsPage reload={reload} />
     ) : (
