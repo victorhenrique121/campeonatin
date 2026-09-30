@@ -23,6 +23,17 @@ export type AuthSession = {
   user: AuthUser | null;
 };
 
+export type UpdateProfileInput = {
+  displayName: string;
+  username: string | null;
+  bio: string | null;
+  avatar?: {
+    bytes: Uint8Array;
+    contentType: "image/jpeg" | "image/png" | "image/webp";
+    extension: "jpg" | "png" | "webp";
+  } | null;
+};
+
 export type UserProfile = {
   id: string;
   displayName: string;
@@ -43,6 +54,8 @@ export type AuthSignUpResult = {
 
 export type Api = {
   getProfile: () => Promise<UserProfile>;
+  isUsernameAvailable: (username: string) => Promise<boolean>;
+  updateProfile: (input: UpdateProfileInput) => Promise<UserProfile>;
   auth: {
     session: () => Promise<AuthSession>;
     signUp: (email: string, password: string, displayName: string) => Promise<AuthSignUpResult>;
