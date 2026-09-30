@@ -93,12 +93,22 @@ function parseEq(searchParams, column) {
   return match ? Number(match[1]) : null;
 }
 
+function parseEqFilters(searchParams, columns) {
+  const out = {};
+  for (const col of columns) {
+    const v = parseEq(searchParams, col);
+    if (v !== null) out[col] = v;
+  }
+  return out;
+}
+
 function parseOrFilters(searchParams) {
   // Exemplos: or=(player1_id.eq.3,player2_id.eq.3)
   //           or=(name.ilike.*real*,league.ilike.*real*,country.ilike.*real*)
   const value = searchParams.get("or");
   if (!value) return null;
-  const inner = value.startsWith("(") && value.endsWith(")") ? value.slice(1, -1) : value;
+  const inner =
+    value.startsWith("(") && value.endsWith(")") ? value.slice(1, -1) : value;
   const conditions = inner
     .split(",")
     .map((token) => {
@@ -110,7 +120,10 @@ function parseOrFilters(searchParams) {
         return (row) => Number(row[column]) === target;
       }
       const needle = raw.replace(/^[*%]+|[*%]+$/g, "").toLowerCase();
-      return (row) => String(row[column] ?? "").toLowerCase().includes(needle);
+      return (row) =>
+        String(row[column] ?? "")
+          .toLowerCase()
+          .includes(needle);
     })
     .filter(Boolean);
   return conditions.length ? (row) => conditions.some((fn) => fn(row)) : null;
@@ -141,7 +154,14 @@ const server = http.createServer(async (req, res) => {
     return send(res, 200, { ok: true, tableMissing });
   }
   if (url.pathname === "/__state" && req.method === "GET") {
-    return send(res, 200, { players, teams, matches, fixtures, authCalls, tableMissing });
+    return send(res, 200, {
+      players,
+      teams,
+      matches,
+      fixtures,
+      authCalls,
+      tableMissing,
+    });
   }
 
   // ---- GoTrue (Auth) --------------------------------------------------------
@@ -163,7 +183,8 @@ const server = http.createServer(async (req, res) => {
     });
   }
   if (url.pathname === "/auth/v1/user" && req.method === "GET") {
-    if (!authed) return send(res, 401, { error: "unauthorized", message: "unauthorized" });
+    if (!authed)
+      return send(res, 401, { error: "unauthorized", message: "unauthorized" });
     return send(res, 200, USER);
   }
   if (url.pathname === "/auth/v1/logout" && req.method === "POST") {
@@ -172,7 +193,8 @@ const server = http.createServer(async (req, res) => {
 
   // ---- PostgREST (REST) -----------------------------------------------------
   const restMatch = /^\/rest\/v1\/(\w+)$/.exec(url.pathname);
-  if (!restMatch) return send(res, 404, { message: "rota não encontrada no mock" });
+  if (!restMatch)
+    return send(res, 404, { message: "rota não encontrada no mock" });
   const table = restMatch[1];
 
   if (tableMissing && table === "players") {
@@ -184,11 +206,24 @@ const server = http.createServer(async (req, res) => {
     });
   }
 
-  const rowsOf = { players: () => players, teams: () => teams, matches: () => matches, fixtures: () => fixtures }[table];
-  if (!rowsOf) return send(res, 404, { code: "PGRST205", message: `mock: tabela ${table} não modelada` });
+  const rowsOf = {
+    players: () => players,
+    teams: () => teams,
+    matches: () => matches,
+    fixtures: () => fixtures,
+  }[table];
+  if (!rowsOf)
+    return send(res, 404, {
+      code: "PGRST205",
+      message: `mock: tabela ${table} não modelada`,
+    });
 
-  const wantsRepresentation = String(req.headers.prefer || "").includes("return=representation");
-  const isUpsert = String(req.headers.prefer || "").includes("resolution=merge-duplicates");
+  const wantsRepresentation = String(req.headers.prefer || "").includes(
+    "return=representation",
+  );
+  const isUpsert = String(req.headers.prefer || "").includes(
+    "resolution=merge-duplicates",
+  );
   const idFilter = parseEq(url.searchParams, "id");
   const orPredicate = parseOrFilters(url.searchParams);
 
@@ -201,12 +236,16 @@ const server = http.createServer(async (req, res) => {
     const order = url.searchParams.get("order"); // ex.: "name.asc" / "id.asc"
     if (order) {
       const [column, direction] = order.split(".");
-      rows = [...rows].sort((a, b) => (a[column] < b[column] ? -1 : a[column] > b[column] ? 1 : 0));
+      rows = [...rows].sort((a, b) =>
+        a[column] < b[column] ? -1 : a[column] > b[column] ? 1 : 0,
+      );
       if (direction === "desc") rows.reverse();
     }
     const limit = url.searchParams.get("limit");
     if (limit) rows = rows.slice(0, Number(limit));
-    return send(res, 200, rows, { "content-range": `0-${Math.max(rows.length - 1, 0)}/${rows.length}` });
+    return send(res, 200, rows, {
+      "content-range": `0-${Math.max(rows.length - 1, 0)}/${rows.length}`,
+    });
   }
 
   if (!authed) {
@@ -218,11 +257,16 @@ const server = http.createServer(async (req, res) => {
     });
   }
 
-  if (req.method === "POST" && (table === "players" || table === "teams" || table === "matches")) {
+  if (
+    req.method === "POST" &&
+    (table === "players" || table === "teams" || table === "matches")
+  ) {
     const uniqueColumn =
       table === "players" ? "nickname" : table === "teams" ? "name" : null;
-    const constraint = table === "players" ? "players_nickname_key" : "teams_name_key";
-    const store = table === "players" ? players : table === "teams" ? teams : matches;
+    const constraint =
+      table === "players" ? "players_nickname_key" : "teams_name_key";
+    const store =
+      table === "players" ? players : table === "teams" ? teams : matches;
     const body = await readBody(req);
     const incoming = Array.isArray(body) ? body : [body];
     const out = [];
@@ -251,12 +295,20 @@ const server = http.createServer(async (req, res) => {
           avatar: row.avatar ?? null,
           created_at:
             row.created_at ||
-            (existingIndex >= 0 ? store[existingIndex].created_at : new Date().toISOString()),
+            (existingIndex >= 0
+              ? store[existingIndex].created_at
+              : new Date().toISOString()),
           updated_at: new Date().toISOString(),
           user_id: null,
         };
       } else if (table === "teams") {
-        merged = { id, name: row.name, league: row.league, country: row.country };
+        merged = {
+          id,
+          name: row.name,
+          league: row.league,
+          country: row.country,
+          shield_url: row.shield_url ?? null,
+        };
       } else {
         // Etapa 4 — matches: id identity (gera quando ausente), created_by
         // obrigatório no schema real, championship_id praticamente sempre
@@ -276,9 +328,12 @@ const server = http.createServer(async (req, res) => {
               : prev
                 ? prev.championship_id
                 : null,
-          played_at: row.played_at || (prev ? prev.played_at : new Date().toISOString()),
+          played_at:
+            row.played_at || (prev ? prev.played_at : new Date().toISOString()),
           created_by: row.created_by ?? (prev ? prev.created_by : null),
-          created_at: row.created_at || (prev ? prev.created_at : new Date().toISOString()),
+          created_at:
+            row.created_at ||
+            (prev ? prev.created_at : new Date().toISOString()),
           updated_at: new Date().toISOString(),
         };
       }
@@ -298,18 +353,53 @@ const server = http.createServer(async (req, res) => {
     return send(res, isUpsert ? 200 : 201, wantsRepresentation ? out : null);
   }
 
-  if (req.method === "PATCH" && (table === "players" || table === "matches")) {
+  if (
+    req.method === "PATCH" &&
+    (table === "players" || table === "matches" || table === "fixtures")
+  ) {
     const body = (await readBody(req)) || {};
-    if (idFilter === null) return send(res, 400, { code: "PGRST100", message: "mock: PATCH sem filtro id" });
+
+    if (table === "fixtures") {
+      const filters = parseEqFilters(url.searchParams, [
+        "id",
+        "match_id",
+        "championship_id",
+      ]);
+      if (Object.keys(filters).length === 0) {
+        return send(res, 400, {
+          code: "PGRST100",
+          message: "mock: PATCH fixtures sem filtro eq.",
+        });
+      }
+      const updated = [];
+      for (const row of fixtures) {
+        const hit = Object.entries(filters).every(
+          ([col, val]) => Number(row[col]) === val,
+        );
+        if (!hit) continue;
+        Object.assign(row, body, { updated_at: new Date().toISOString() });
+        updated.push(row);
+      }
+      return send(res, 200, wantsRepresentation ? updated : null);
+    }
+
+    if (idFilter === null)
+      return send(res, 400, {
+        code: "PGRST100",
+        message: "mock: PATCH sem filtro id",
+      });
     const store = table === "players" ? players : matches;
     const row = store.find((p) => Number(p.id) === idFilter);
-    // Sem linha -> 200 com array vazio (comportamento real do PostgREST; o
-    // service da Etapa 4 usa isso para detectar partida legada e convergir).
     if (!row) return send(res, 200, wantsRepresentation ? [] : null);
-    if (table === "players" && body.nickname && nicknameConflict(body.nickname, row.id)) {
+    if (
+      table === "players" &&
+      body.nickname &&
+      nicknameConflict(body.nickname, row.id)
+    ) {
       return send(res, 409, {
         code: "23505",
-        message: 'duplicate key value violates unique constraint "players_nickname_key"',
+        message:
+          'duplicate key value violates unique constraint "players_nickname_key"',
         details: `Key (nickname)=(${body.nickname}) already exists.`,
         hint: null,
       });
@@ -335,7 +425,9 @@ const server = http.createServer(async (req, res) => {
     return send(res, 200, wantsRepresentation ? removed : null);
   }
 
-  return send(res, 405, { message: `mock: método não suportado ${req.method} ${table}` });
+  return send(res, 405, {
+    message: `mock: método não suportado ${req.method} ${table}`,
+  });
 });
 
 server.listen(PORT, "127.0.0.1", () => {

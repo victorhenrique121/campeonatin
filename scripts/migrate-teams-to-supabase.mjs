@@ -55,12 +55,16 @@ if (!fs.existsSync(dbPath)) {
 
 const db = new Database(dbPath, { readonly: true });
 const localTeams = db
-  .prepare(
-    `SELECT id, name, shield_url, created_at
-     FROM teams ORDER BY id`,
-  )
+  .prepare(`SELECT id, name, league, country, shield_url FROM teams ORDER BY id`)
   .all();
-db.close();
+
+const payload = localTeams.map((row) => ({
+  id: row.id,
+  name: row.name,
+  league: row.league || null,
+  country: row.country || null,
+  shield_url: row.shield_url || null,
+}));
 
 console.log(`SQLite: ${dbPath}`);
 console.log(`Times locais encontrados: ${localTeams.length}`);
@@ -89,14 +93,6 @@ if (!createdBy) {
   process.exit(1);
 }
 console.log(`Login OK como ${APP_EMAIL} (created_by=${createdBy}).`);
-
-const payload = localTeams.map((row) => ({
-  id: row.id,
-  name: row.name,
-  shield_url: row.shield_url || null,
-  created_at: row.created_at || new Date().toISOString(),
-  created_by: createdBy,
-}));
 
 const { data: batchData, error: batchError } = await supabase
   .from("teams")

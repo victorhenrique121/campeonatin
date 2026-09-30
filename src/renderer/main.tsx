@@ -31,10 +31,12 @@ import {
   Search,
   Shuffle,
   Shield,
+  Route,
   Snowflake,
   Sparkles,
   SquarePen,
   Timer,
+  Target,
   Trash2,
   Trophy,
   UserCircle,
@@ -96,10 +98,28 @@ const playArenaSound = (kind: "click" | "draw" | "whistle" = "click") => {
   oscillator.start();
   oscillator.stop(context.currentTime + 0.18);
 };
+
 const copyMatchSummary = async (match: Match) => {
-  await navigator.clipboard.writeText(
-    `⚽ *FC Arena*\n${match.player1} ${match.score1} × ${match.score2} ${match.player2}\n🏟️ ${match.team1} vs ${match.team2}${match.championship ? `\n🏆 ${match.championship}` : ""}`,
-  );
+  const summary = `⚽ *FC ARENA*
+
+━━━━━━━━━━━━━━
+🏆 *RESULTADO FINAL*
+━━━━━━━━━━━━━━
+
+👤 *${match.player1}*
+🏟️ ${match.team1}
+
+        *${match.score1} × ${match.score2}*
+
+👤 *${match.player2}*
+🏟️ ${match.team2}
+${match.championship ? `\n🏆 *${match.championship}*` : ""}
+
+━━━━━━━━━━━━━━
+🎮 Partida registrada no FC Arena
+`;
+
+  await navigator.clipboard.writeText(summary);
   playArenaSound("whistle");
 };
 const Empty = ({ text }: { text: string }) => (
@@ -2798,60 +2818,59 @@ function AppModal({
   );
 }
 
-function ThemeControl() {
+function ArenaTools() {
   const [open, setOpen] = useState(false);
-  const [accent, setAccent] = useState(
-    () => localStorage.getItem("arena-accent") ?? "#8872ff",
-  );
-  const [background, setBackground] = useState(
-    () => localStorage.getItem("arena-background") ?? "#0a0f1f",
-  );
-  useEffect(() => {
-    document.documentElement.style.setProperty("--arena-accent", accent);
-    document.documentElement.style.setProperty("--arena-bg", background);
-    localStorage.setItem("arena-accent", accent);
-    localStorage.setItem("arena-background", background);
-  }, [accent, background]);
+
   return (
-    <div className="theme-control">
+    <div className="arena-tools">
       <button
         type="button"
-        className="theme-fab"
+        className="arena-tools-fab"
         onClick={() => setOpen(!open)}
-        aria-label="Personalizar tema"
+        aria-label="Abrir ferramentas da Arena"
       >
-        <Sparkles size={18} />
+        <Route size={18} />
       </button>
+
       {open && (
-        <div className="theme-popover">
-          <b>Personalizar arena</b>
-          <label>
-            Cor de destaque
-            <input
-              type="color"
-              value={accent}
-              onChange={(e) => setAccent(e.target.value)}
-            />
-          </label>
-          <label>
-            Fundo principal
-            <input
-              type="color"
-              value={background}
-              onChange={(e) => setBackground(e.target.value)}
-            />
-          </label>
-          <div className="theme-swatches">
-            {["#8872ff", "#22c7b8", "#ef4f91", "#f0a947"].map((color) => (
-              <button
-                type="button"
-                key={color}
-                style={{ background: color }}
-                onClick={() => setAccent(color)}
-                aria-label={`Usar destaque ${color}`}
-              />
-            ))}
-          </div>
+        <div className="arena-tools-popover">
+          <b>Central da Arena</b>
+
+          <button
+            type="button"
+            className="arena-tool-button"
+            onClick={() => console.log("Mutador aleatório")}
+          >
+            <Dices size={17} />
+            <span>
+              <strong>Mutador aleatório</strong>
+              <small>Sortear um desafio para a partida</small>
+            </span>
+          </button>
+
+          <button
+            type="button"
+            className="arena-tool-button"
+            onClick={() => console.log("Desafio rápido")}
+          >
+            <Goal size={17} />
+            <span>
+              <strong>Desafio rápido</strong>
+              <small>Criar uma missão para os jogadores</small>
+            </span>
+          </button>
+
+          <button
+            type="button"
+            className="arena-tool-button"
+            onClick={() => console.log("Roleta")}
+          >
+            <Shuffle size={17} />
+            <span>
+              <strong>Roleta da Arena</strong>
+              <small>Deixe a sorte decidir</small>
+            </span>
+          </button>
         </div>
       )}
     </div>
@@ -3484,71 +3503,17 @@ function ArenaApp({ user, onSignOut }: { user: AuthUser; onSignOut: () => void }
         </div>
       </aside>
       <main>{view}</main>
-      <div className="account-menu" ref={accountMenuRef}>
-        <button
-          type="button"
-          className="account-menu-trigger"
-          onClick={() => setAccountMenuOpen((open) => !open)}
-          aria-expanded={accountMenuOpen}
-          aria-haspopup="menu"
-        >
-          <span className="account-menu-avatar">
-            {user.displayName.slice(0, 1).toUpperCase()}
-          </span>
-          <span className="account-menu-identity">
-            <strong>{user.displayName}</strong>
-            <small>{user.email}</small>
-          </span>
-          <ChevronDown
-            size={15}
-            className={accountMenuOpen ? "account-menu-chevron open" : "account-menu-chevron"}
-          />
+      <div className="user-session-badge" title={user.email}>
+        <span>{user.displayName.slice(0, 1).toUpperCase()}</span>
+        <div>
+          <strong>{user.displayName}</strong>
+          <small>{user.email}</small>
+        </div>
+        <button type="button" onClick={() => void onSignOut()}>
+          Sair
         </button>
-
-        {accountMenuOpen && (
-          <div className="account-menu-panel" role="menu">
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                setPage("profile");
-                setAccountMenuOpen(false);
-              }}
-            >
-              <UserCircle size={17} />
-              <span>Meu perfil</span>
-            </button>
-
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                setPage("settings");
-                setAccountMenuOpen(false);
-              }}
-            >
-              <Settings2 size={17} />
-              <span>Configurações</span>
-            </button>
-
-            <div className="account-menu-divider" />
-
-            <button
-              type="button"
-              role="menuitem"
-              className="account-menu-danger"
-              onClick={() => {
-                setAccountMenuOpen(false);
-                onSignOut();
-              }}
-            >
-              <LogOut size={17} />
-              <span>Sair</span>
-            </button>
-          </div>
-        )}
       </div>
-      <ThemeControl />
+      <ArenaTools />
     </div>
   );
 }

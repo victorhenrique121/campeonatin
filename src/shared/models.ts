@@ -5,11 +5,13 @@ export type Player = {
   avatar?: string;
   createdAt: string;
 };
-export type Team = {
+
+ export type Team = {
   id: number;
   name: string;
   league: string;
   country: string;
+  shieldUrl?: string;   // novo
 };
 export type Match = {
   id: number;

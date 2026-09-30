@@ -56,7 +56,7 @@ if (!fs.existsSync(dbPath)) {
 const db = new Database(dbPath, { readonly: true });
 const localPlayers = db
   .prepare(
-    `SELECT id, name, nickname, avatar_url, active, created_at
+    `SELECT id, name, nickname, avatar, created_at
      FROM players ORDER BY id`,
   )
   .all();
@@ -94,8 +94,7 @@ const payload = localPlayers.map((row) => ({
   id: row.id,
   name: row.name,
   nickname: row.nickname || null,
-  avatar_url: row.avatar_url || null,
-  active: row.active === 1 || row.active === true,
+  avatar: row.avatar || null,           // remoto usa "avatar" (confirmado na migration inicial)
   created_at: row.created_at || new Date().toISOString(),
   created_by: createdBy,
 }));
