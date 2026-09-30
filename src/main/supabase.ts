@@ -497,6 +497,7 @@ export async function updateProfile(input: UpdateProfileInput): Promise<UserProf
       display_name: displayName,
       username,
       bio,
+      updated_at: new Date().toISOString(),
       ...(avatarUrl !== undefined ? { avatar_url: avatarUrl } : {}),
     })
     .eq("id", user.id)
