@@ -3553,16 +3553,77 @@ function ArenaApp({ user, onSignOut }: { user: AuthUser; onSignOut: () => void }
         </div>
       </aside>
       <main>{view}</main>
-      <div className="user-session-badge" title={user.email}>
-        <span>{user.displayName.slice(0, 1).toUpperCase()}</span>
-        <div>
-          <strong>{user.displayName}</strong>
-          <small>{user.email}</small>
-        </div>
-        <button type="button" onClick={() => void onSignOut()}>
-          Sair
+      <div className="account-menu" ref={accountMenuRef}>
+        <button
+          type="button"
+          className="account-menu-trigger"
+          onClick={() => setAccountMenuOpen((open) => !open)}
+          aria-expanded={accountMenuOpen}
+          aria-haspopup="menu"
+        >
+          <span className="account-menu-avatar">
+            {user.displayName.slice(0, 1).toUpperCase()}
+          </span>
+
+          <span className="account-menu-identity">
+            <strong>{user.displayName}</strong>
+            <small>{user.email}</small>
+          </span>
+
+          <ChevronDown
+            size={15}
+            className={
+              accountMenuOpen
+                ? "account-menu-chevron open"
+                : "account-menu-chevron"
+            }
+          />
         </button>
+
+        {accountMenuOpen && (
+          <div className="account-menu-panel" role="menu">
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setPage("profile");
+                setAccountMenuOpen(false);
+              }}
+            >
+              <UserCircle size={17} />
+              <span>Meu perfil</span>
+            </button>
+
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setPage("settings");
+                setAccountMenuOpen(false);
+              }}
+            >
+              <Settings2 size={17} />
+              <span>Configurações</span>
+            </button>
+
+            <div className="account-menu-divider" />
+
+            <button
+              type="button"
+              role="menuitem"
+              className="account-menu-danger"
+              onClick={() => {
+                setAccountMenuOpen(false);
+                onSignOut();
+              }}
+            >
+              <LogOut size={17} />
+              <span>Sair</span>
+            </button>
+          </div>
+        )}
       </div>
+
       <ArenaTools />
     </div>
   );
