@@ -3277,14 +3277,9 @@ function SettingsPage({ reload }: { reload: () => Promise<void> }) {
               <div className="settings-card-header">
                 <div>
                   <span className="settings-card-label">REGRAS</span>
-
                   <h2>Regras do jogo</h2>
-
-                  <p>
-                    Configure as regras utilizadas nos campeonatos da Arena.
-                  </p>
+                  <p>Defina a pontuação usada pelo ranking e o mínimo da Melhor Forma.</p>
                 </div>
-
                 <Gauge size={22} />
               </div>
 
@@ -3297,17 +3292,34 @@ function SettingsPage({ reload }: { reload: () => Promise<void> }) {
                 </div>
               ) : (
                 <>
-                  <div className="settings-section">
-                    <div className="settings-section-heading">
-                      <div>
-                        <h3>Configurações gerais</h3>
-
-                        <p>Regras padrão para novos campeonatos.</p>
-                      </div>
-                    </div>
-
-                    <div className="settings-form-grid">
-                    </div>
+                  <div className="settings-form-grid">
+                    {[
+                      ["pointsWin", "Vitória"],
+                      ["pointsDraw", "Empate"],
+                      ["pointsLoss", "Derrota"],
+                      ["minimumBestFormMatches", "Mínimo da Melhor Forma"],
+                    ].map(([key, label]) => (
+                      <label key={key}>
+                        {label}
+                        <input
+                          type="number"
+                          min="0"
+                          step="1"
+                          value={rules[key as keyof GameRulesSettings]}
+                          onChange={(event) => {
+                            const value = Number(event.target.value);
+                            setRules((current) =>
+                              current
+                                ? {
+                                    ...current,
+                                    [key]: Number.isNaN(value) ? 0 : value,
+                                  }
+                                : current,
+                            );
+                          }}
+                        />
+                      </label>
+                    ))}
                   </div>
 
                   <div className="settings-actions">
@@ -3317,11 +3329,49 @@ function SettingsPage({ reload }: { reload: () => Promise<void> }) {
                       disabled={savingRules}
                       onClick={saveRules}
                     >
-                      {savingRules ? "Salvando..." : "Salvar regras"}
+                      {savingRules ? "Salvando..." : "Salvar alterações"}
                     </button>
                   </div>
                 </>
               )}
+            </article>
+          ) : section === "data" ? (
+            <article className="settings-card">
+              <div className="settings-card-header">
+                <div>
+                  <span className="settings-card-label">ARENA</span>
+                  <h2>Dados e backup</h2>
+                  <p>Gerencie os dados da Arena e os backups do aplicativo.</p>
+                </div>
+                <CalendarDays size={22} />
+              </div>
+
+              <div className="settings-section">
+                <div className="settings-section-heading">
+                  <div>
+                    <h3>Backup</h3>
+                    <p>Use os comandos da barra lateral para fazer ou restaurar um backup.</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="settings-section">
+                <div className="settings-section-heading">
+                  <div>
+                    <h3>Limpar dados</h3>
+                    <p>Remove jogadores, partidas e campeonatos. O catálogo de clubes é mantido.</p>
+                  </div>
+                </div>
+                <div className="settings-actions">
+                  <button
+                    type="button"
+                    className="danger"
+                    onClick={() => setConfirmingReset(true)}
+                  >
+                    Limpar dados da Arena
+                  </button>
+                </div>
+              </div>
             </article>
           ) : section === "about" ? (
             <article className="settings-card settings-about-app">
