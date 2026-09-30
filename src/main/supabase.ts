@@ -390,6 +390,150 @@ export async function getProfile(): Promise<UserProfile> {
   };
 }
 
+export type UpdateProfileInput = {
+  displayName: string;
+  username: string | null;
+  bio: string | null;
+  avatar?: {
+    bytes: Uint8Array;
+    contentType: "image/jpeg" | "image/png" | "image/webp";
+    extension: "jpg" | "png" | "webp";
+  } | null;
+};
+
+export async function isUsernameAvailable(username: string): Promise<boolean> {
+  const supabase = getUserAuthClient();
+  if (!supabase) throw new Error("Supabase não está configurado.");
+
+  const normalized = username.trim().toLowerCase();
+  const { data, error } = await supabase.rpc("is_username_available", {
+    p_username: normalized,
+  });
+
+  if (error) throw new Error("Não foi possível verificar a disponibilidade do username.");
+  return data === true;
+}
+
+function avatarPathFromUrl(url: string | null): string | null {
+  if (!url) return null;
+  const marker = "/storage/v1/object/public/avatars/";
+  const index = url.indexOf(marker);
+  if (index < 0) return null;
+  return decodeURIComponent(url.slice(index + marker.length).split("?")[0]);
+}
+
+export async function updateProfile(input: UpdateProfileInput): Promise<UserProfile> {
+  const supabase = getUserAuthClient();
+  if (!supabase) throw new Error("Supabase não está configurado.");
+
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  if (authError || !authData.user) throw normalizeAuthError(authError);
+
+  const user = authData.user;
+  const displayName = input.displayName.trim();
+  const username = input.username?.trim().toLowerCase() || null;
+  const bio = input.bio?.trim() || null;
+
+  if (!displayName) throw new Error("Informe o nome de exibição.");
+  if (displayName.length > 80) throw new Error("O nome de exibição deve ter no máximo 80 caracteres.");
+  if (username && !/^[a-z0-9_]{3,20}$/.test(username)) {
+    throw new Error("O username deve ter de 3 a 20 caracteres: letras minúsculas, números ou _.");
+  }
+  if (bio && bio.length > 160) throw new Error("A bio deve ter no máximo 160 caracteres.");
+
+  if (username) {
+    const { data: available, error } = await supabase.rpc("is_username_available", {
+      p_username: username,
+    });
+    if (error) throw new Error("Não foi possível verificar a disponibilidade do username.");
+    if (available !== true) {
+      const { data: current } = await supabase
+        .from("profiles")
+        .select("username")
+        .eq("id", user.id)
+        .maybeSingle();
+      if ((current?.username ?? null) !== username) {
+        throw new Error("Esse username já está em uso.");
+      }
+    }
+  }
+
+  const { data: currentProfile, error: currentError } = await supabase
+    .from("profiles")
+    .select("avatar_url")
+    .eq("id", user.id)
+    .single();
+
+  if (currentError || !currentProfile) {
+    throw new Error("Não foi possível carregar o perfil atual.");
+  }
+
+  let avatarUrl: string | null | undefined = undefined;
+  let newAvatarPath: string | null = null;
+  const oldAvatarPath = avatarPathFromUrl(currentProfile.avatar_url);
+
+  if (input.avatar) {
+    newAvatarPath = `${user.id}/avatar.${input.avatar.extension}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from("avatars")
+      .upload(newAvatarPath, input.avatar.bytes, {
+        contentType: input.avatar.contentType,
+        upsert: true,
+        cacheControl: "3600",
+      });
+
+    if (uploadError) {
+      throw new Error(`Não foi possível enviar o avatar: ${uploadError.message}`);
+    }
+
+    const { data: publicUrl } = supabase.storage.from("avatars").getPublicUrl(newAvatarPath);
+    avatarUrl = publicUrl.publicUrl;
+  }
+
+  const { data: updated, error: updateError } = await supabase
+    .from("profiles")
+    .update({
+      display_name: displayName,
+      username,
+      bio,
+      ...(avatarUrl !== undefined ? { avatar_url: avatarUrl } : {}),
+    })
+    .eq("id", user.id)
+    .select("id,display_name,username,avatar_url,bio,role,created_at,updated_at")
+    .single();
+
+  if (updateError || !updated) {
+    if (newAvatarPath) {
+      await supabase.storage.from("avatars").remove([newAvatarPath]).catch(() => undefined);
+    }
+    throw new Error(updateError?.message || "Não foi possível salvar o perfil.");
+  }
+
+  if (newAvatarPath && oldAvatarPath && oldAvatarPath !== newAvatarPath) {
+    await supabase.storage.from("avatars").remove([oldAvatarPath]);
+  }
+
+  const roleValue = updated.role;
+  const role: UserProfile["role"] =
+    roleValue === "admin" || roleValue === "player" || roleValue === "viewer"
+      ? roleValue
+      : "viewer";
+
+  return {
+    id: updated.id,
+    displayName: updated.display_name,
+    username: updated.username,
+    avatarUrl: updated.avatar_url,
+    bio: updated.bio,
+    role,
+    email: user.email ?? "",
+    emailConfirmedAt: user.email_confirmed_at ?? null,
+    createdAt: updated.created_at,
+    updatedAt: updated.updated_at,
+  };
+}
+
 /** Cadastro com e-mail, senha e nome. O trigger do banco cria o profile. */
 export async function signUpUser(
   email: string,
