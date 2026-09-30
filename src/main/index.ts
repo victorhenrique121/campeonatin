@@ -7,6 +7,8 @@ import { createMatchesService } from "./matches-service";
 import {
   getAuthSession,
   getProfile,
+  isUsernameAvailable,
+  updateProfile,
   initSupabase,
   resendSignupConfirmation,
   signInUser,
@@ -60,6 +62,10 @@ app.whenReady().then(() => {
 
   ipcMain.handle("auth:session", () => getAuthSession());
   ipcMain.handle("profile:get", () => getProfile());
+  ipcMain.handle("profile:username-available", (_, username) =>
+    isUsernameAvailable(username),
+  );
+  ipcMain.handle("profile:update", (_, input) => updateProfile(input));
   ipcMain.handle("auth:signup", (_, email, password, displayName) =>
     signUpUser(email, password, displayName),
   );
