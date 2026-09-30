@@ -6,6 +6,8 @@ const invoke =
     ipcRenderer.invoke(channel, ...args);
 const api: Api = {
   getProfile: invoke("profile:get"),
+  isUsernameAvailable: invoke("profile:username-available"),
+  updateProfile: invoke("profile:update"),
   auth: {
     session: invoke("auth:session"),
     signUp: invoke("auth:signup"),
