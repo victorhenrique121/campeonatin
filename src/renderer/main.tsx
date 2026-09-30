@@ -1,4 +1,5 @@
 import "./styles/config.css";
+import { AccountSettings } from "./settings/AccountSettings";
 import fcArenaLogo from "../midia/fcarena-icon.png";
 import React, { FormEvent, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
@@ -3141,23 +3142,16 @@ function SettingsPage({ reload }: { reload: () => Promise<void> }) {
             </div>
           )}
 
-          {["account", "password", "email"].includes(section) ? (
+          {section === "account" ? (
+            <AccountSettings />
+          ) : ["password", "email"].includes(section) ? (
             <article className="settings-card settings-placeholder">
               <div className="settings-placeholder-icon">
-                {section === "account" ? (
-                  <UserCircle size={22} />
-                ) : section === "password" ? (
-                  <Shield size={22} />
-                ) : (
-                  <MessageCircle size={22} />
-                )}
+                {section === "password" ? <Shield size={22} /> : <MessageCircle size={22} />}
               </div>
-
               <div>
                 <span className="settings-placeholder-label">CONTA</span>
-
                 <h2>{sections.find((item) => item.id === section)?.label}</h2>
-
                 <p>Em breve.</p>
               </div>
             </article>
