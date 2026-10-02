@@ -5,6 +5,7 @@ import { createPlayersService } from "./players-service";
 import { createTeamsService } from "./teams-service";
 import { createMatchesService } from "./matches-service";
 import {
+  changeEmail,
   changePassword,
   getAuthSession,
   getProfile,
