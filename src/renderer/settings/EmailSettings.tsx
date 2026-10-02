@@ -108,11 +108,7 @@ export function EmailSettings() {
         "Enviamos um e-mail de confirmação. Seu e-mail só muda depois da confirmação. Até lá, continue entrando com o e-mail atual.",
       );
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Algo deu errado. Tente novamente em instantes.",
-      );
+      setError(getFriendlyEmailSettingsError(err));
     } finally {
       setLoading(false);
     }
@@ -133,11 +129,7 @@ export function EmailSettings() {
         "Solicitação de reenvio aceita. Verifique o endereço pendente e a pasta de spam.",
       );
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Algo deu errado. Tente novamente em instantes.",
-      );
+      setError(getFriendlyEmailSettingsError(err));
     } finally {
       setResending(false);
     }
