@@ -4575,3 +4575,157 @@ body.arena-light .team-search button:hover {
   .user-session-badge { right: 12px; }
   .user-session-badge div { display: none; }
 }
+
+
+/* =========================================================
+   SENHA
+   ========================================================= */
+
+.settings-password-body {
+  position: relative;
+  z-index: 1;
+  padding-top: 22px;
+}
+
+.settings-password-form {
+  display: grid;
+  gap: 14px;
+  max-width: 620px;
+}
+
+.settings-password-field {
+  display: grid;
+  gap: 6px;
+}
+
+.settings-password-field > span {
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.settings-password-input {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 11px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 9px;
+  background: rgba(0, 0, 0, 0.16);
+  color: rgba(255, 255, 255, 0.34);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.settings-password-input:focus-within {
+  border-color: var(--arena-accent);
+  box-shadow: 0 0 0 3px rgba(136, 114, 255, 0.1);
+}
+
+.settings-password-input input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.88);
+  font: inherit;
+  font-size: 11px;
+}
+
+.settings-password-input input::placeholder {
+  color: rgba(255, 255, 255, 0.22);
+}
+
+.settings-password-visibility {
+  display: grid;
+  place-items: center;
+  padding: 3px;
+  border: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.34);
+  cursor: pointer;
+}
+
+.settings-password-visibility:hover:not(:disabled) {
+  color: rgba(255, 255, 255, 0.68);
+}
+
+.settings-password-visibility:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.settings-password-validation {
+  display: grid;
+  gap: 7px;
+  margin-top: 18px;
+  padding: 13px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.055);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.018);
+}
+
+.settings-password-validation > span {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: rgba(255, 255, 255, 0.34);
+  font-size: 10px;
+  transition: color 0.18s ease;
+}
+
+.settings-password-validation > span.valid {
+  color: #9ed7b3;
+}
+
+.settings-password-validation > span.invalid {
+  color: #efaab4;
+}
+
+.settings-password-dot {
+  width: 6px;
+  height: 6px;
+  margin: 0 4px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.settings-password-success {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  padding: 10px 13px;
+  border: 1px solid rgba(75, 181, 112, 0.18);
+  border-radius: 9px;
+  background: rgba(75, 181, 112, 0.055);
+  color: rgba(196, 235, 207, 0.9);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.settings-password-success svg {
+  flex-shrink: 0;
+}
+
+.settings-password-card .settings-actions {
+  justify-content: flex-start;
+}
+
+.settings-password-card .primary-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.settings-password-spin {
+  animation: settings-spin 0.8s linear infinite;
+}
+
+@media (max-width: 760px) {
+  .settings-password-form {
+    max-width: none;
+  }
+}
