@@ -1,6 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain } from "electron";
 import path from "node:path";
 import { createDatabase, repository } from "./repository";
+import type { ChangeEmailInput } from "../shared/api";
 import { createPlayersService } from "./players-service";
 import { createTeamsService } from "./teams-service";
 import { createMatchesService } from "./matches-service";
@@ -83,8 +84,8 @@ app.whenReady().then(() => {
     changePassword(currentPassword, newPassword),
   );
   ipcMain.handle("auth:email-settings", () => getEmailSettings());
-  ipcMain.handle("auth:change-email", (_, currentPassword, newEmail) =>
-    changeEmail(currentPassword, newEmail),
+  ipcMain.handle("auth:change-email", (_, input: ChangeEmailInput) =>
+    changeEmail(input),
   );
   ipcMain.handle("auth:resend-email-change", (_, pendingEmail) =>
     resendEmailChangeConfirmation(pendingEmail),
