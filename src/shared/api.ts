@@ -62,6 +62,9 @@ export type Api = {
     signIn: (email: string, password: string) => Promise<AuthUser>;
     resendConfirmation: (email: string) => Promise<void>;
     changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
+    emailSettings: () => Promise<EmailSettings>;
+    changeEmail: (currentPassword: string, newEmail: string) => Promise<EmailSettings>;
+    resendEmailChange: (pendingEmail: string) => Promise<void>;
     signOut: () => Promise<void>;
   };
   dashboard: () => Promise<Dashboard>;
