@@ -4729,3 +4729,269 @@ body.arena-light .team-search button:hover {
     max-width: none;
   }
 }
+
+/* =========================================================
+   E-MAIL
+   ========================================================= */
+
+.settings-email-body {
+  display: grid;
+  gap: 16px;
+  padding-top: 22px;
+}
+
+.settings-email-status,
+.settings-email-pending {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.018);
+}
+
+.settings-email-status-icon {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--arena-accent) 14%, transparent);
+  color: var(--arena-accent);
+}
+
+.settings-email-status > div:last-child,
+.settings-email-pending > div:first-child {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.settings-email-label {
+  color: rgba(255, 255, 255, 0.38);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.settings-email-status strong,
+.settings-email-pending strong {
+  overflow-wrap: anywhere;
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 12px;
+}
+
+.settings-email-status small {
+  color: rgba(255, 255, 255, 0.42);
+  font-size: 10px;
+}
+
+.settings-email-pending {
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  border-color: rgba(136, 114, 255, 0.16);
+  background: rgba(136, 114, 255, 0.035);
+}
+
+.settings-email-pending p {
+  margin: 2px 0 0;
+  color: rgba(255, 255, 255, 0.48);
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.settings-email-pending .secondary-button {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 0 11px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+  color: rgba(255, 255, 255, 0.72);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.settings-email-pending .secondary-button:hover:not(:disabled) {
+  border-color: var(--arena-accent);
+  color: #fff;
+}
+
+.settings-email-pending .secondary-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.settings-email-security-note,
+.settings-email-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 11px 13px;
+  border-radius: 9px;
+  color: rgba(255, 255, 255, 0.55);
+  background: rgba(255, 255, 255, 0.018);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.settings-email-security-note svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: var(--arena-accent);
+}
+
+.settings-email-security-note p,
+.settings-email-notice {
+  margin: 0;
+}
+
+.settings-email-notice {
+  color: #d9cfff;
+  border-color: rgba(136, 114, 255, 0.16);
+  background: rgba(136, 114, 255, 0.045);
+}
+
+.settings-email-form {
+  display: grid;
+  gap: 14px;
+  max-width: 620px;
+}
+
+.settings-email-field {
+  display: grid;
+  gap: 6px;
+}
+
+.settings-email-field > span {
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.settings-email-input {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 11px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 9px;
+  background: rgba(0, 0, 0, 0.16);
+  color: rgba(255, 255, 255, 0.34);
+}
+
+.settings-email-input:focus-within {
+  border-color: var(--arena-accent);
+  box-shadow: 0 0 0 3px rgba(136, 114, 255, 0.1);
+}
+
+.settings-email-input input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.88);
+  font: inherit;
+  font-size: 11px;
+}
+
+.settings-email-input input::placeholder {
+  color: rgba(255, 255, 255, 0.22);
+}
+
+.settings-email-field > small {
+  color: #efaab4;
+  font-size: 10px;
+}
+
+.settings-email-visibility {
+  display: grid;
+  place-items: center;
+  padding: 3px;
+  border: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.34);
+  cursor: pointer;
+}
+
+.settings-email-visibility:hover:not(:disabled) {
+  color: rgba(255, 255, 255, 0.68);
+}
+
+.settings-email-visibility:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.settings-email-spin {
+  animation: settings-spin 0.8s linear infinite;
+}
+
+@media (max-width: 760px) {
+  .settings-email-form {
+    max-width: none;
+  }
+
+  .settings-email-pending {
+    flex-direction: column;
+  }
+
+  .settings-email-pending .secondary-button {
+    width: 100%;
+  }
+}
+
+body.arena-light .settings-email-status,
+body.arena-light .settings-email-pending,
+body.arena-light .settings-email-security-note,
+body.arena-light .settings-email-notice {
+  border-color: #dbe2ee;
+  background: #f7f9fc;
+}
+
+body.arena-light .settings-email-label {
+  color: #647089;
+}
+
+body.arena-light .settings-email-status strong,
+body.arena-light .settings-email-pending strong {
+  color: #182033;
+}
+
+body.arena-light .settings-email-status small,
+body.arena-light .settings-email-pending p,
+body.arena-light .settings-email-security-note {
+  color: #647089;
+}
+
+body.arena-light .settings-email-input {
+  border-color: #dbe2ee;
+  background: #f6f8fc;
+  color: #647089;
+}
+
+body.arena-light .settings-email-input input {
+  color: #182033;
+}
+
+body.arena-light .settings-email-input input::placeholder {
+  color: #8a95aa;
+}
+
+body.arena-light .settings-email-pending .secondary-button {
+  border-color: #dbe2ee;
+  background: #fff;
+  color: #4d5870;
+}
