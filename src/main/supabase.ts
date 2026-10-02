@@ -733,7 +733,12 @@ export async function changePassword(
 
   if (signOutOthersError) {
     logSafeAuthError("falha ao encerrar outras sessões após alteração de senha", signOutOthersError);
-    throw new Error("Senha alterada, mas não foi possível encerrar as outras sessões. Tente novamente em instantes.");
+    const friendly = normalizeAuthError(signOutOthersError, "password-change");
+    throw new Error(
+      friendly.message === "Algo deu errado. Tente novamente em instantes."
+        ? "Senha alterada, mas não foi possível encerrar as outras sessões. Tente novamente em instantes."
+        : friendly.message,
+    );
   }
 }
 
