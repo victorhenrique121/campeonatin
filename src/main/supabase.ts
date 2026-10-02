@@ -280,13 +280,51 @@ function getUserAuthClient(): SupabaseClient | null {
   return userAuthClient;
 }
 
-function normalizeAuthError(error: { message?: string; code?: string } | null): Error {
+function normalizeAuthError(
+  error: { message?: string; code?: string; status?: number } | null,
+  context: "default" | "password-change" = "default",
+): Error {
   const message = error?.message || "Não foi possível concluir a operação de autenticação.";
   const lower = message.toLowerCase();
 
   if (isNetworkErrorMessage(message)) {
     return new Error("Não foi possível conectar ao Supabase. Verifique sua conexão com a internet e tente novamente.");
   }
+
+  if (context === "password-change") {
+    if (
+      lower.includes("session") &&
+      (lower.includes("missing") ||
+        lower.includes("expired") ||
+        lower.includes("not found") ||
+        lower.includes("invalid"))
+    ) {
+      return new Error("Sua sessão expirou. Entre novamente para alterar a senha.");
+    }
+    if (
+      lower.includes("rate limit") ||
+      lower.includes("too many requests") ||
+      error?.status === 429
+    ) {
+      return new Error("Muitas tentativas. Aguarde alguns minutos e tente novamente.");
+    }
+    if (
+      lower.includes("weak password") ||
+      lower.includes("password is too weak") ||
+      lower.includes("password should")
+    ) {
+      return new Error("A nova senha não atende aos requisitos de segurança configurados.");
+    }
+    if (
+      lower.includes("current password") ||
+      lower.includes("reauthentication") ||
+      lower.includes("nonce")
+    ) {
+      return new Error("Não foi possível confirmar sua identidade para alterar a senha.");
+    }
+    return new Error("Algo deu errado. Tente novamente em instantes.");
+  }
+
   if (lower.includes("email not confirmed")) {
     return new Error("Seu e-mail ainda não foi confirmado. Verifique sua caixa de entrada e confirme o endereço antes de entrar.");
   }
@@ -300,6 +338,15 @@ function normalizeAuthError(error: { message?: string; code?: string } | null): 
     return new Error("Muitas tentativas de e-mail. Aguarde alguns minutos e tente novamente.");
   }
   return new Error(message);
+}
+
+function logSafeAuthError(operation: string, error: { message?: string; code?: string; status?: number }) {
+  console.error(`${LOG_PREFIX} ${operation}:`, {
+    name: error.constructor?.name,
+    code: error.code,
+    status: error.status,
+    message: error.message,
+  });
 }
 
 async function getAuthUserFromSession(): Promise<AuthUser | null> {
@@ -625,6 +672,66 @@ export async function resendSignupConfirmation(email: string): Promise<void> {
   console.info(`${LOG_PREFIX} reenvio de confirmação aceito pelo Auth:`, {
     hasMessageId: Boolean(data?.messageId),
   });
+}
+
+/** Altera a senha do usuário final após reautenticar com a senha atual. */
+export async function changePassword(
+  currentPassword: string,
+  newPassword: string,
+): Promise<void> {
+  const supabase = getUserAuthClient();
+  if (!supabase) throw new Error("Supabase não está configurado.");
+
+  if (!currentPassword) {
+    throw new Error("Informe sua senha atual.");
+  }
+  if (newPassword.length < 8) {
+    throw new Error("A nova senha deve ter pelo menos 8 caracteres.");
+  }
+  if (newPassword === currentPassword) {
+    throw new Error("A nova senha deve ser diferente da senha atual.");
+  }
+
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  if (authError || !authData.user?.email) {
+    if (authError) logSafeAuthError("não foi possível obter a sessão para alterar a senha", authError);
+    throw new Error("Sua sessão expirou. Entre novamente para alterar a senha.");
+  }
+
+  const email = authData.user.email.trim().toLowerCase();
+
+  const { error: reauthError } = await supabase.auth.signInWithPassword({
+    email,
+    password: currentPassword,
+  });
+
+  if (reauthError) {
+    logSafeAuthError("reautenticação para alteração de senha recusada", reauthError);
+
+    if (/invalid login credentials/i.test(reauthError.message)) {
+      throw new Error("Senha atual incorreta.");
+    }
+
+    throw normalizeAuthError(reauthError, "password-change");
+  }
+
+  const { error: updateError } = await supabase.auth.updateUser({
+    password: newPassword,
+  });
+
+  if (updateError) {
+    logSafeAuthError("falha ao atualizar senha", updateError);
+    throw normalizeAuthError(updateError, "password-change");
+  }
+
+  const { error: signOutOthersError } = await supabase.auth.signOut({
+    scope: "others",
+  });
+
+  if (signOutOthersError) {
+    logSafeAuthError("falha ao encerrar outras sessões após alteração de senha", signOutOthersError);
+    throw new Error("Senha alterada, mas não foi possível encerrar as outras sessões. Tente novamente em instantes.");
+  }
 }
 
 /** Encerra somente a sessão do usuário final. */
