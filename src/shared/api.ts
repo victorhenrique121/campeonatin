@@ -61,6 +61,7 @@ export type Api = {
     signUp: (email: string, password: string, displayName: string) => Promise<AuthSignUpResult>;
     signIn: (email: string, password: string) => Promise<AuthUser>;
     resendConfirmation: (email: string) => Promise<void>;
+    changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
     signOut: () => Promise<void>;
   };
   dashboard: () => Promise<Dashboard>;
