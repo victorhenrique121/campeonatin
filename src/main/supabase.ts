@@ -1,6 +1,7 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import fs from "node:fs";
 import path from "node:path";
+import { EMAIL_CONFIRMATION_REDIRECT_URL } from "../shared/auth-config";
 
 /**
  * ============================================================================
@@ -282,13 +283,48 @@ function getUserAuthClient(): SupabaseClient | null {
 
 function normalizeAuthError(
   error: { message?: string; code?: string; status?: number } | null,
-  context: "default" | "password-change" = "default",
+  context: "default" | "password-change" | "email-change" = "default",
 ): Error {
   const message = error?.message || "Não foi possível concluir a operação de autenticação.";
   const lower = message.toLowerCase();
 
   if (isNetworkErrorMessage(message)) {
     return new Error("Não foi possível conectar ao Supabase. Verifique sua conexão com a internet e tente novamente.");
+  }
+
+  if (context === "email-change") {
+    if (
+      lower.includes("session") &&
+      (lower.includes("missing") ||
+        lower.includes("expired") ||
+        lower.includes("not found") ||
+        lower.includes("invalid"))
+    ) {
+      return new Error("Sua sessão expirou. Entre novamente para alterar o e-mail.");
+    }
+    if (
+      lower.includes("rate limit") ||
+      lower.includes("too many requests") ||
+      error?.status === 429
+    ) {
+      return new Error("Muitas tentativas. Aguarde alguns minutos e tente novamente.");
+    }
+    if (
+      lower.includes("expired") &&
+      (lower.includes("link") || lower.includes("token") || lower.includes("otp"))
+    ) {
+      return new Error("O link de confirmação expirou. Solicite uma nova confirmação.");
+    }
+    if (
+      lower.includes("already registered") ||
+      lower.includes("already been registered") ||
+      lower.includes("email already") ||
+      lower.includes("email_exists") ||
+      lower.includes("email exists")
+    ) {
+      return new Error("Não foi possível solicitar essa alteração. Confira o endereço informado e tente novamente.");
+    }
+    return new Error("Algo deu errado. Tente novamente em instantes.");
   }
 
   if (context === "password-change") {
@@ -607,6 +643,7 @@ export async function signUpUser(
     password,
     options: {
       data: { display_name: normalizedName },
+      emailRedirectTo: EMAIL_CONFIRMATION_REDIRECT_URL,
     },
   });
 
@@ -655,6 +692,9 @@ export async function resendSignupConfirmation(email: string): Promise<void> {
   const { data, error } = await supabase.auth.resend({
     type: "signup",
     email: normalizedEmail,
+    options: {
+      emailRedirectTo: EMAIL_CONFIRMATION_REDIRECT_URL,
+    },
   });
 
   // Registra somente metadados técnicos da resposta. Nunca registra o e-mail,
@@ -672,6 +712,104 @@ export async function resendSignupConfirmation(email: string): Promise<void> {
   console.info(`${LOG_PREFIX} reenvio de confirmação aceito pelo Auth:`, {
     hasMessageId: Boolean(data?.messageId),
   });
+}
+
+export type EmailSettings = {
+  email: string;
+  emailConfirmedAt: string | null;
+  pendingEmail: string | null;
+};
+
+export async function getEmailSettings(): Promise<EmailSettings> {
+  const supabase = getUserAuthClient();
+  if (!supabase) throw new Error("Supabase não está configurado.");
+
+  const { data, error } = await supabase.auth.getUser();
+  if (error || !data.user) {
+    throw normalizeAuthError(error, "email-change");
+  }
+
+  return {
+    email: data.user.email ?? "",
+    emailConfirmedAt: data.user.email_confirmed_at ?? null,
+    pendingEmail: data.user.new_email ?? null,
+  };
+}
+
+export async function changeEmail(
+  currentPassword: string,
+  newEmail: string,
+): Promise<EmailSettings> {
+  const supabase = getUserAuthClient();
+  if (!supabase) throw new Error("Supabase não está configurado.");
+
+  if (!currentPassword) throw new Error("Informe sua senha atual.");
+
+  const normalizedEmail = newEmail.trim().toLowerCase();
+  if (!normalizedEmail || !/^\\S+@\\S+\\.\\S+$/.test(normalizedEmail)) {
+    throw new Error("Informe um e-mail válido.");
+  }
+
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  if (authError || !authData.user?.email) {
+    if (authError) {
+      logSafeAuthError("não foi possível obter a sessão para alterar o e-mail", authError);
+      throw normalizeAuthError(authError, "email-change");
+    }
+    throw new Error("Sua sessão expirou. Entre novamente para alterar o e-mail.");
+  }
+
+  const currentEmail = authData.user.email.trim().toLowerCase();
+  if (normalizedEmail === currentEmail) {
+    throw new Error("O novo e-mail deve ser diferente do e-mail atual.");
+  }
+
+  const { error: reauthError } = await supabase.auth.signInWithPassword({
+    email: currentEmail,
+    password: currentPassword,
+  });
+
+  if (reauthError) {
+    logSafeAuthError("reautenticação para alteração de e-mail recusada", reauthError);
+
+    if (/invalid login credentials/i.test(reauthError.message)) {
+      throw new Error("Senha atual incorreta.");
+    }
+
+    throw normalizeAuthError(reauthError, "email-change");
+  }
+
+  const { error: updateError } = await supabase.auth.updateUser(
+    { email: normalizedEmail },
+    { emailRedirectTo: EMAIL_CONFIRMATION_REDIRECT_URL },
+  );
+
+  if (updateError) {
+    logSafeAuthError("falha ao solicitar alteração de e-mail", updateError);
+    throw normalizeAuthError(updateError, "email-change");
+  }
+
+  return getEmailSettings();
+}
+
+export async function resendEmailChangeConfirmation(
+  pendingEmail: string,
+): Promise<void> {
+  const supabase = getUserAuthClient();
+  if (!supabase) throw new Error("Supabase não está configurado.");
+
+  const normalizedEmail = pendingEmail.trim().toLowerCase();
+  if (!normalizedEmail) throw new Error("Não há troca de e-mail pendente.");
+
+  const { error } = await supabase.auth.resend({
+    type: "email_change",
+    email: normalizedEmail,
+  });
+
+  if (error) {
+    logSafeAuthError("falha no reenvio da confirmação de troca de e-mail", error);
+    throw normalizeAuthError(error, "email-change");
+  }
 }
 
 /** Altera a senha do usuário final após reautenticar com a senha atual. */
