@@ -5,6 +5,7 @@ import { createPlayersService } from "./players-service";
 import { createTeamsService } from "./teams-service";
 import { createMatchesService } from "./matches-service";
 import {
+  changePassword,
   getAuthSession,
   getProfile,
   isUsernameAvailable,
@@ -74,6 +75,9 @@ app.whenReady().then(() => {
   );
   ipcMain.handle("auth:resend-confirmation", (_, email) =>
     resendSignupConfirmation(email),
+  );
+  ipcMain.handle("auth:change-password", (_, currentPassword, newPassword) =>
+    changePassword(currentPassword, newPassword),
   );
   ipcMain.handle("auth:signout", () => signOutUser());
 
