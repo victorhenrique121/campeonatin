@@ -10,6 +10,11 @@ import type {
   GameRulesSettings,
 } from "./models";
 
+export type ChangeEmailInput = {
+  currentPassword: string;
+  newEmail: string;
+};
+
 export type EmailSettings = {
   email: string;
   emailConfirmedAt: string | null;
@@ -69,7 +74,7 @@ export type Api = {
     resendConfirmation: (email: string) => Promise<void>;
     changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
     emailSettings: () => Promise<EmailSettings>;
-    changeEmail: (currentPassword: string, newEmail: string) => Promise<EmailSettings>;
+    changeEmail: (input: ChangeEmailInput) => Promise<EmailSettings>;
     resendEmailChange: (pendingEmail: string) => Promise<void>;
     signOut: () => Promise<void>;
   };
