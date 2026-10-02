@@ -694,7 +694,10 @@ export async function changePassword(
 
   const { data: authData, error: authError } = await supabase.auth.getUser();
   if (authError || !authData.user?.email) {
-    if (authError) logSafeAuthError("não foi possível obter a sessão para alterar a senha", authError);
+    if (authError) {
+      logSafeAuthError("não foi possível obter a sessão para alterar a senha", authError);
+      throw normalizeAuthError(authError, "password-change");
+    }
     throw new Error("Sua sessão expirou. Entre novamente para alterar a senha.");
   }
 
