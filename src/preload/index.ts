@@ -13,6 +13,7 @@ const api: Api = {
     signUp: invoke("auth:signup"),
     signIn: invoke("auth:signin"),
     resendConfirmation: invoke("auth:resend-confirmation"),
+    changePassword: invoke("auth:change-password"),
     signOut: invoke("auth:signout"),
   },
   dashboard: invoke("dashboard"),
