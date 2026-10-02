@@ -1,4 +1,4 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { Eye, EyeOff, Mail, LockKeyhole, UserRound, ArrowRight, RefreshCw } from "lucide-react";
 import type { AuthUser } from "../shared/api";
 
@@ -19,6 +19,17 @@ export function AuthPage({ onAuthenticated }: Props) {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [verificationEmail, setVerificationEmail] = useState("");
+  const [resendCooldown, setResendCooldown] = useState(0);
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+
+    const timer = window.setInterval(() => {
+      setResendCooldown((value) => (value <= 1 ? 0 : value - 1));
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [resendCooldown]);
 
   const resetMessages = () => {
     setError("");
@@ -92,16 +103,29 @@ export function AuthPage({ onAuthenticated }: Props) {
   }
 
   async function resend() {
-    if (!verificationEmail) return;
+    if (!verificationEmail || resendCooldown > 0) return;
     setLoading(true);
     setError("");
     setNotice("");
 
     try {
       await window.arena.auth.resendConfirmation(verificationEmail);
-      setNotice("Novo e-mail de confirmação enviado. Verifique também a pasta de spam.");
+      setResendCooldown(60);
+      setNotice(
+        "Solicitação de reenvio aceita pelo Supabase. Verifique sua caixa de entrada e a pasta de spam.",
+      );
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Não foi possível reenviar o e-mail.");
+      const message =
+        err instanceof Error ? err.message : "Não foi possível reenviar o e-mail.";
+
+      setError(message);
+
+      if (/muitas tentativas|rate limit|too many|aguarde.*segundo/i.test(message)) {
+        setResendCooldown(60);
+        setNotice(
+          "O Supabase limitou novas tentativas de envio. Aguarde 60 segundos antes de tentar novamente.",
+        );
+      }
     } finally {
       setLoading(false);
     }
@@ -239,8 +263,15 @@ export function AuthPage({ onAuthenticated }: Props) {
         </form>
 
         {verificationEmail && mode === "login" && (
-          <button className="auth-resend" type="button" onClick={() => void resend()} disabled={loading}>
-            Reenviar e-mail de confirmação
+          <button
+            className="auth-resend"
+            type="button"
+            onClick={() => void resend()}
+            disabled={loading || resendCooldown > 0}
+          >
+            {resendCooldown > 0
+              ? `Reenviar e-mail de confirmação (${resendCooldown}s)`
+              : "Reenviar e-mail de confirmação"}
           </button>
         )}
 

@@ -605,12 +605,26 @@ export async function resendSignupConfirmation(email: string): Promise<void> {
   const normalizedEmail = email.trim().toLowerCase();
   if (!normalizedEmail) throw new Error("Informe seu e-mail.");
 
-  const { error } = await supabase.auth.resend({
+  const { data, error } = await supabase.auth.resend({
     type: "signup",
     email: normalizedEmail,
   });
 
-  if (error) throw normalizeAuthError(error);
+  // Registra somente metadados técnicos da resposta. Nunca registra o e-mail,
+  // tokens, links de confirmação ou o conteúdo completo do objeto de usuário.
+  if (error) {
+    console.error(`${LOG_PREFIX} falha no reenvio de confirmação:`, {
+      name: error.name,
+      code: error.code,
+      status: error.status,
+      message: error.message,
+    });
+    throw normalizeAuthError(error);
+  }
+
+  console.info(`${LOG_PREFIX} reenvio de confirmação aceito pelo Auth:`, {
+    hasMessageId: Boolean(data?.messageId),
+  });
 }
 
 /** Encerra somente a sessão do usuário final. */
