@@ -2,6 +2,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import fs from "node:fs";
 import path from "node:path";
 import { EMAIL_CONFIRMATION_REDIRECT_URL } from "../shared/auth-config";
+import type { EmailSettings } from "../shared/api";
 
 /**
  * ============================================================================
@@ -713,12 +714,6 @@ export async function resendSignupConfirmation(email: string): Promise<void> {
     hasMessageId: Boolean(data?.messageId),
   });
 }
-
-export type EmailSettings = {
-  email: string;
-  emailConfirmedAt: string | null;
-  pendingEmail: string | null;
-};
 
 export async function getEmailSettings(): Promise<EmailSettings> {
   const supabase = getUserAuthClient();
