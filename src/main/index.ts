@@ -80,6 +80,13 @@ app.whenReady().then(() => {
   ipcMain.handle("auth:change-password", (_, currentPassword, newPassword) =>
     changePassword(currentPassword, newPassword),
   );
+  ipcMain.handle("auth:email-settings", () => getEmailSettings());
+  ipcMain.handle("auth:change-email", (_, currentPassword, newEmail) =>
+    changeEmail(currentPassword, newEmail),
+  );
+  ipcMain.handle("auth:resend-email-change", (_, pendingEmail) =>
+    resendEmailChangeConfirmation(pendingEmail),
+  );
   ipcMain.handle("auth:signout", () => signOutUser());
 
   ipcMain.handle("dashboard", () => repo.dashboard());
