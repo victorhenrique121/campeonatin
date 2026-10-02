@@ -15,7 +15,7 @@ const api: Api = {
     resendConfirmation: invoke("auth:resend-confirmation"),
     changePassword: invoke("auth:change-password"),
     emailSettings: invoke("auth:email-settings"),
-    changeEmail: (input: ChangeEmailInput) => invoke("auth:change-email", input),
+    changeEmail: (input: ChangeEmailInput) => invoke("auth:change-email")(input),
     resendEmailChange: invoke("auth:resend-email-change"),
     signOut: invoke("auth:signout"),
   },
