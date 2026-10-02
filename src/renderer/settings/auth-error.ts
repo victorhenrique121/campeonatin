@@ -1,5 +1,5 @@
 const REMOTE_ERROR_PREFIX =
-  /^Error invoking remote method '[^']+':\\s*(?:Error:\\s*)?/i;
+  /^Error invoking remote method '[^']+':\s*(?:Error:\s*)?/i;
 
 const FRIENDLY_EMAIL_ERRORS = new Set([
   "Informe sua senha atual.",
