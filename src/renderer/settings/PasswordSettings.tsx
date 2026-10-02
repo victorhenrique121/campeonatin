@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Check, Eye, EyeOff, LockKeyhole, RefreshCw, ShieldCheck } from "lucide-react";
 
 type PasswordFieldProps = {
@@ -60,13 +60,8 @@ export function PasswordSettings() {
   const [success, setSuccess] = useState("");
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    return () => {
-      setCurrentPassword("");
-      setNewPassword("");
-      setConfirmation("");
-    };
-  }, []);
+  // Ao sair da seção, o componente é desmontado e os estados das senhas
+  // deixam de existir; ao voltar, o formulário começa vazio.
 
   const validation = useMemo(
     () => ({
