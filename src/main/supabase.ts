@@ -741,7 +741,7 @@ export async function changeEmail(
   const normalizedEmail = input.newEmail.trim().toLowerCase();
 
   if (!currentPassword) throw new Error("Informe sua senha atual.");
-  if (!normalizedEmail || !/^\\S+@\\S+\\.\\S+$/.test(normalizedEmail)) {
+  if (!normalizedEmail || !/^\S+@\S+\.\S+$/.test(normalizedEmail)) {
     throw new Error("Informe um e-mail válido.");
   }
 
