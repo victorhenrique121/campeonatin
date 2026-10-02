@@ -10,6 +10,12 @@ import type {
   GameRulesSettings,
 } from "./models";
 
+export type EmailSettings = {
+  email: string;
+  emailConfirmedAt: string | null;
+  pendingEmail: string | null;
+};
+
 export type AuthUser = {
   id: string;
   email: string;
