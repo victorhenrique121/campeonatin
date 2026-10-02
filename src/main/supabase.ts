@@ -2,7 +2,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import fs from "node:fs";
 import path from "node:path";
 import { EMAIL_CONFIRMATION_REDIRECT_URL } from "../shared/auth-config";
-import type { EmailSettings } from "../shared/api";
+import type { ChangeEmailInput, EmailSettings } from "../shared/api";
 
 /**
  * ============================================================================
@@ -732,15 +732,15 @@ export async function getEmailSettings(): Promise<EmailSettings> {
 }
 
 export async function changeEmail(
-  currentPassword: string,
-  newEmail: string,
+  input: ChangeEmailInput,
 ): Promise<EmailSettings> {
   const supabase = getUserAuthClient();
   if (!supabase) throw new Error("Supabase não está configurado.");
 
-  if (!currentPassword) throw new Error("Informe sua senha atual.");
+  const currentPassword = input.currentPassword;
+  const normalizedEmail = input.newEmail.trim().toLowerCase();
 
-  const normalizedEmail = newEmail.trim().toLowerCase();
+  if (!currentPassword) throw new Error("Informe sua senha atual.");
   if (!normalizedEmail || !/^\\S+@\\S+\\.\\S+$/.test(normalizedEmail)) {
     throw new Error("Informe um e-mail válido.");
   }
