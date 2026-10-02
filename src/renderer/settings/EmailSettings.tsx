@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Check, Eye, EyeOff, Mail, RefreshCw, ShieldCheck } from "lucide-react";
 import type { EmailSettings as EmailSettingsData } from "../../shared/api";
+import { getFriendlyEmailSettingsError } from "./auth-error";
 
 function formatEmailStatus(value: string | null) {
   return value
@@ -31,11 +32,7 @@ export function EmailSettings() {
     try {
       setSettings(await window.arena.auth.emailSettings());
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Algo deu errado. Tente novamente em instantes.",
-      );
+      setError(getFriendlyEmailSettingsError(err));
     } finally {
       setLoadingSettings(false);
     }
@@ -99,10 +96,10 @@ export function EmailSettings() {
     setLoading(true);
 
     try {
-      const updated = await window.arena.auth.changeEmail(
+      const updated = await window.arena.auth.changeEmail({
         currentPassword,
-        normalizedNewEmail,
-      );
+        newEmail: normalizedNewEmail,
+      });
 
       setSettings(updated);
       setCurrentPassword("");
