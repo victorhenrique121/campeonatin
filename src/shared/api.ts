@@ -77,6 +77,7 @@ export type Api = {
     changeEmail: (input: ChangeEmailInput) => Promise<EmailSettings>;
     resendEmailChange: (pendingEmail: string) => Promise<void>;
     signOut: () => Promise<void>;
+    signOutOthers: () => Promise<void>;
   };
   dashboard: () => Promise<Dashboard>;
   players: () => Promise<Player[]>;
