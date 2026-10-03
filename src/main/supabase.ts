@@ -284,7 +284,7 @@ function getUserAuthClient(): SupabaseClient | null {
 
 function normalizeAuthError(
   error: { message?: string; code?: string; status?: number } | null,
-  context: "default" | "password-change" | "email-change" = "default",
+  context: "default" | "password-change" | "email-change" | "session-management" = "default",
 ): Error {
   const message = error?.message || "Não foi possível concluir a operação de autenticação.";
   const lower = message.toLowerCase();
@@ -295,15 +295,15 @@ function normalizeAuthError(
 
   if (context === "session-management") {
     if (/session|jwt|refresh token|not found|expired|invalid/i.test(message)) {
-      return "Sua sessão expirou. Entre novamente para continuar.";
+      return new Error("Sua sessão expirou. Entre novamente para continuar.");
     }
     if (/rate limit|too many|429/i.test(message)) {
-      return "Muitas tentativas. Aguarde alguns minutos e tente novamente.";
+      return new Error("Muitas tentativas. Aguarde alguns minutos e tente novamente.");
     }
     if (/network|fetch failed|failed to fetch|connection/i.test(message)) {
-      return "Não foi possível conectar ao Supabase. Verifique sua conexão com a internet e tente novamente.";
+      return new Error("Não foi possível conectar ao Supabase. Verifique sua conexão com a internet e tente novamente.");
     }
-    return "Não foi possível encerrar as outras sessões. Tente novamente em instantes.";
+    return new Error("Não foi possível encerrar as outras sessões. Tente novamente em instantes.");
   }
 
   if (context === "email-change") {
