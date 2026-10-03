@@ -57,3 +57,52 @@ export function getFriendlyEmailSettingsError(error: unknown): string {
 
   return "Algo deu errado. Tente novamente em instantes.";
 }
+
+
+const FRIENDLY_PRIVACY_ERRORS = new Set([
+  "Sua sessão expirou. Entre novamente para continuar.",
+  "Muitas tentativas. Aguarde alguns minutos e tente novamente.",
+  "Não foi possível conectar ao Supabase. Verifique sua conexão com a internet e tente novamente.",
+  "Não foi possível encerrar as outras sessões. Tente novamente em instantes.",
+  "Supabase não está configurado.",
+]);
+
+export function getFriendlyPrivacyError(error: unknown): string {
+  const raw = error instanceof Error ? error.message : String(error ?? "");
+  const message = raw.replace(REMOTE_ERROR_PREFIX, "").trim();
+
+  if (FRIENDLY_PRIVACY_ERRORS.has(message)) {
+    return message;
+  }
+
+  const lower = message.toLowerCase();
+
+  if (
+    lower.includes("session") &&
+    (lower.includes("missing") ||
+      lower.includes("expired") ||
+      lower.includes("not found") ||
+      lower.includes("invalid"))
+  ) {
+    return "Sua sessão expirou. Entre novamente para continuar.";
+  }
+
+  if (
+    lower.includes("rate limit") ||
+    lower.includes("too many requests") ||
+    lower.includes("status code: 429")
+  ) {
+    return "Muitas tentativas. Aguarde alguns minutos e tente novamente.";
+  }
+
+  if (
+    lower.includes("network") ||
+    lower.includes("fetch failed") ||
+    lower.includes("failed to fetch") ||
+    lower.includes("connection")
+  ) {
+    return "Não foi possível conectar ao Supabase. Verifique sua conexão com a internet e tente novamente.";
+  }
+
+  return "Algo deu errado. Tente novamente em instantes.";
+}
