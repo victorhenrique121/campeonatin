@@ -92,6 +92,25 @@ const date = (value: string) =>
   new Intl.DateTimeFormat("pt-BR", { dateStyle: "medium" }).format(
     new Date(value),
   );
+const applyStoredAppearance = () => {
+  const theme: ArenaTheme =
+    localStorage.getItem("arena-theme") === "light" ? "light" : "dark";
+  const savedPalette = localStorage.getItem("arena-palette");
+  const palette = ARENA_PALETTES.find((item) => item.id === savedPalette);
+
+  const colors = palette
+    ? getArenaPaletteVariant(palette, theme)
+    : {
+        accent: localStorage.getItem("arena-accent") ?? "#8872ff",
+        background: localStorage.getItem("arena-background") ?? "#0a0f1f",
+      };
+
+  document.documentElement.style.setProperty("--arena-accent", colors.accent);
+  document.documentElement.style.setProperty("--arena-bg", colors.background);
+};
+
+applyStoredAppearance();
+
 const playArenaSound = (kind: "click" | "draw" | "whistle" = "click") => {
   if (localStorage.getItem("arena-muted") === "true") return;
   const Audio =
