@@ -17,6 +17,7 @@ import {
   resendEmailChangeConfirmation,
   resendSignupConfirmation,
   signInUser,
+  endOtherSessions,
   signOutUser,
   signUpUser,
   testSupabaseConnection,
@@ -91,6 +92,7 @@ app.whenReady().then(() => {
     resendEmailChangeConfirmation(pendingEmail),
   );
   ipcMain.handle("auth:signout", () => signOutUser());
+  ipcMain.handle("auth:signout-others", () => endOtherSessions());
 
   ipcMain.handle("dashboard", () => repo.dashboard());
   ipcMain.handle("players:list", () => players.list());
