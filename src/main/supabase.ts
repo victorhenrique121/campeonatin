@@ -293,6 +293,19 @@ function normalizeAuthError(
     return new Error("Não foi possível conectar ao Supabase. Verifique sua conexão com a internet e tente novamente.");
   }
 
+  if (context === "session-management") {
+    if (/session|jwt|refresh token|not found|expired|invalid/i.test(message)) {
+      return "Sua sessão expirou. Entre novamente para continuar.";
+    }
+    if (/rate limit|too many|429/i.test(message)) {
+      return "Muitas tentativas. Aguarde alguns minutos e tente novamente.";
+    }
+    if (/network|fetch failed|failed to fetch|connection/i.test(message)) {
+      return "Não foi possível conectar ao Supabase. Verifique sua conexão com a internet e tente novamente.";
+    }
+    return "Não foi possível encerrar as outras sessões. Tente novamente em instantes.";
+  }
+
   if (context === "email-change") {
     if (
       lower.includes("session") &&
@@ -876,6 +889,22 @@ export async function changePassword(
 }
 
 /** Encerra somente a sessão do usuário final. */
+export async function endOtherSessions(): Promise<void> {
+  const supabase = getUserAuthClient();
+  if (!supabase) throw new Error("Supabase não está configurado.");
+
+  const { data } = await supabase.auth.getUser();
+  if (!data.user) {
+    throw new Error("Sua sessão expirou. Entre novamente para continuar.");
+  }
+
+  const { error } = await supabase.auth.signOut({ scope: "others" });
+  if (error) {
+    logSafeAuthError("falha ao encerrar outras sessões", error);
+    throw normalizeAuthError(error, "session-management");
+  }
+}
+
 export async function signOutUser(): Promise<void> {
   const supabase = getUserAuthClient();
   if (!supabase) return;
