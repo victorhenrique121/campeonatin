@@ -18,6 +18,7 @@ const api: Api = {
     changeEmail: (input: ChangeEmailInput) => invoke("auth:change-email")(input),
     resendEmailChange: invoke("auth:resend-email-change"),
     signOut: invoke("auth:signout"),
+    signOutOthers: invoke("auth:signout-others"),
   },
   dashboard: invoke("dashboard"),
   players: invoke("players:list"),
