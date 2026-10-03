@@ -2,6 +2,14 @@ import "./styles/config.css";
 import { AccountSettings } from "./settings/AccountSettings";
 import { PasswordSettings } from "./settings/PasswordSettings";
 import { EmailSettings } from "./settings/EmailSettings";
+import {
+  ARENA_PALETTES,
+  DEFAULT_PALETTE_ID,
+  getArenaPalette,
+  getArenaPaletteVariant,
+  type ArenaPalette,
+  type ArenaTheme,
+} from "./settings/palettes";
 import fcArenaLogo from "../midia/fcarena-icon.png";
 import React, { FormEvent, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
@@ -2991,6 +2999,28 @@ function SettingsPage({ reload }: { reload: () => Promise<void> }) {
     () => localStorage.getItem("arena-background") ?? "#0a0f1f",
   );
 
+  const [paletteId, setPaletteId] = useState<ArenaPalette["id"] | "custom">(() => {
+    const saved = localStorage.getItem("arena-palette");
+    if (saved && ARENA_PALETTES.some((palette) => palette.id === saved)) {
+      return saved as ArenaPalette["id"];
+    }
+
+    const theme: ArenaTheme =
+      localStorage.getItem("arena-theme") === "light" ? "light" : "dark";
+    const currentAccent = localStorage.getItem("arena-accent") ?? "#8872ff";
+    const currentBackground =
+      localStorage.getItem("arena-background") ?? "#0a0f1f";
+    const matchingPalette = ARENA_PALETTES.find((palette) => {
+      const colors = getArenaPaletteVariant(palette, theme);
+      return (
+        colors.accent.toLowerCase() === currentAccent.toLowerCase() &&
+        colors.background.toLowerCase() === currentBackground.toLowerCase()
+      );
+    });
+
+    return matchingPalette?.id ?? "custom";
+  });
+
   const [muted, setMuted] = useState(
     () => localStorage.getItem("arena-muted") === "true",
   );
@@ -3009,12 +3039,40 @@ function SettingsPage({ reload }: { reload: () => Promise<void> }) {
 
   useEffect(() => {
     document.documentElement.style.setProperty("--arena-accent", accent);
-
     document.documentElement.style.setProperty("--arena-bg", background);
 
     localStorage.setItem("arena-accent", accent);
     localStorage.setItem("arena-background", background);
   }, [accent, background]);
+
+  useEffect(() => {
+    localStorage.setItem("arena-palette", paletteId);
+  }, [paletteId]);
+
+  const currentTheme: ArenaTheme =
+    localStorage.getItem("arena-theme") === "light" ? "light" : "dark";
+
+  const selectPalette = (id: ArenaPalette["id"]) => {
+    const palette = getArenaPalette(id);
+    const colors = getArenaPaletteVariant(palette, currentTheme);
+    setPaletteId(id);
+    setAccent(colors.accent);
+    setBackground(colors.background);
+  };
+
+  const setManualAccent = (color: string) => {
+    setPaletteId("custom");
+    setAccent(color);
+  };
+
+  const setManualBackground = (color: string) => {
+    setPaletteId("custom");
+    setBackground(color);
+  };
+
+  const restoreDefaultPalette = () => {
+    selectPalette(DEFAULT_PALETTE_ID);
+  };
 
   useEffect(() => {
     localStorage.setItem("arena-muted", String(muted));
@@ -3158,7 +3216,10 @@ function SettingsPage({ reload }: { reload: () => Promise<void> }) {
 
                   <h2>Aparência</h2>
 
-                  <p>Personalize as cores e efeitos visuais do FC Arena.</p>
+                  <p>
+                    Escolha uma paleta ou personalize as cores usadas pelo
+                    FC Arena.
+                  </p>
                 </div>
 
                 <Sparkles size={22} />
@@ -3167,11 +3228,75 @@ function SettingsPage({ reload }: { reload: () => Promise<void> }) {
               <div className="settings-section">
                 <div className="settings-section-heading">
                   <div>
+                    <h3>Paletas</h3>
+
+                    <p>
+                      Cada paleta se adapta ao modo claro ou escuro atual.
+                    </p>
+                  </div>
+
+                  <span className="settings-palette-current">
+                    {paletteId === "custom"
+                      ? "Personalizada"
+                      : getArenaPalette(paletteId).name}
+                  </span>
+                </div>
+
+                <div className="settings-palette-grid">
+                  {ARENA_PALETTES.map((palette) => {
+                    const colors = getArenaPaletteVariant(palette, currentTheme);
+                    const active = paletteId === palette.id;
+
+                    return (
+                      <button
+                        key={palette.id}
+                        type="button"
+                        className={`settings-palette-card ${active ? "active" : ""}`}
+                        aria-pressed={active}
+                        onClick={() => selectPalette(palette.id)}
+                      >
+                        <span
+                          className="settings-palette-preview"
+                          style={{
+                            background: colors.background,
+                            color: colors.text,
+                          }}
+                        >
+                          <span
+                            className="settings-palette-preview-accent"
+                            style={{ background: colors.accent }}
+                          />
+                          <span className="settings-palette-preview-line">
+                            {palette.name}
+                          </span>
+                          <span className="settings-palette-preview-text">
+                            Texto de exemplo
+                          </span>
+                        </span>
+
+                        <span className="settings-palette-card-body">
+                          <strong>{palette.name}</strong>
+                          <small>{palette.description}</small>
+                          {active && (
+                            <span className="settings-palette-active">
+                              <Check size={13} /> Ativa
+                            </span>
+                          )}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="settings-section">
+                <div className="settings-section-heading">
+                  <div>
                     <h3>Cor de destaque</h3>
 
                     <p>
-                      Escolha a cor principal utilizada nos elementos da
-                      interface.
+                      Alterar esta cor manualmente transforma a escolha em
+                      Personalizada.
                     </p>
                   </div>
 
@@ -3197,12 +3322,12 @@ function SettingsPage({ reload }: { reload: () => Promise<void> }) {
                       type="button"
                       aria-label={`Selecionar cor ${color}`}
                       className={`settings-color-option ${
-                        accent === color ? "active" : ""
+                        paletteId === "custom" && accent === color ? "active" : ""
                       }`}
                       style={{
                         background: color,
                       }}
-                      onClick={() => setAccent(color)}
+                      onClick={() => setManualAccent(color)}
                     />
                   ))}
                 </div>
@@ -3213,7 +3338,10 @@ function SettingsPage({ reload }: { reload: () => Promise<void> }) {
                   <div>
                     <h3>Fundo</h3>
 
-                    <p>Defina a tonalidade principal do aplicativo.</p>
+                    <p>
+                      Alterar este fundo manualmente transforma a escolha em
+                      Personalizada.
+                    </p>
                   </div>
 
                   <div
@@ -3231,14 +3359,27 @@ function SettingsPage({ reload }: { reload: () => Promise<void> }) {
                       type="button"
                       aria-label={`Selecionar fundo ${color}`}
                       className={`settings-color-option ${
-                        background === color ? "active" : ""
+                        paletteId === "custom" && background === color
+                          ? "active"
+                          : ""
                       }`}
                       style={{
                         background: color,
                       }}
-                      onClick={() => setBackground(color)}
+                      onClick={() => setManualBackground(color)}
                     />
                   ))}
+                </div>
+
+                <div className="settings-actions settings-appearance-actions">
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={restoreDefaultPalette}
+                    disabled={paletteId === DEFAULT_PALETTE_ID}
+                  >
+                    Restaurar padrão
+                  </button>
                 </div>
               </div>
 
