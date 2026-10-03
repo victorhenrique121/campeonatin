@@ -2,6 +2,8 @@ import "./styles/config.css";
 import { AccountSettings } from "./settings/AccountSettings";
 import { PasswordSettings } from "./settings/PasswordSettings";
 import { EmailSettings } from "./settings/EmailSettings";
+import { NotificationsSettings } from "./settings/NotificationsSettings";
+import { PrivacySettings } from "./settings/PrivacySettings";
 import {
   ARENA_PALETTES,
   DEFAULT_PALETTE_ID,
@@ -3421,6 +3423,10 @@ function SettingsPage({ reload }: { reload: () => Promise<void> }) {
                 </div>
               </div>
             </article>
+          ) : section === "notifications" ? (
+            <NotificationsSettings onOpenAppearance={() => setSection("appearance")} />
+          ) : section === "privacy" ? (
+            <PrivacySettings />
           ) : section === "rules" ? (
             <article className="settings-card">
               <div className="settings-card-header">

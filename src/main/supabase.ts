@@ -284,13 +284,26 @@ function getUserAuthClient(): SupabaseClient | null {
 
 function normalizeAuthError(
   error: { message?: string; code?: string; status?: number } | null,
-  context: "default" | "password-change" | "email-change" = "default",
+  context: "default" | "password-change" | "email-change" | "session-management" = "default",
 ): Error {
   const message = error?.message || "Não foi possível concluir a operação de autenticação.";
   const lower = message.toLowerCase();
 
   if (isNetworkErrorMessage(message)) {
     return new Error("Não foi possível conectar ao Supabase. Verifique sua conexão com a internet e tente novamente.");
+  }
+
+  if (context === "session-management") {
+    if (/session|jwt|refresh token|not found|expired|invalid/i.test(message)) {
+      return new Error("Sua sessão expirou. Entre novamente para continuar.");
+    }
+    if (/rate limit|too many|429/i.test(message)) {
+      return new Error("Muitas tentativas. Aguarde alguns minutos e tente novamente.");
+    }
+    if (/network|fetch failed|failed to fetch|connection/i.test(message)) {
+      return new Error("Não foi possível conectar ao Supabase. Verifique sua conexão com a internet e tente novamente.");
+    }
+    return new Error("Não foi possível encerrar as outras sessões. Tente novamente em instantes.");
   }
 
   if (context === "email-change") {
@@ -876,6 +889,22 @@ export async function changePassword(
 }
 
 /** Encerra somente a sessão do usuário final. */
+export async function endOtherSessions(): Promise<void> {
+  const supabase = getUserAuthClient();
+  if (!supabase) throw new Error("Supabase não está configurado.");
+
+  const { data } = await supabase.auth.getUser();
+  if (!data.user) {
+    throw new Error("Sua sessão expirou. Entre novamente para continuar.");
+  }
+
+  const { error } = await supabase.auth.signOut({ scope: "others" });
+  if (error) {
+    logSafeAuthError("falha ao encerrar outras sessões", error);
+    throw normalizeAuthError(error, "session-management");
+  }
+}
+
 export async function signOutUser(): Promise<void> {
   const supabase = getUserAuthClient();
   if (!supabase) return;
