@@ -1107,3 +1107,298 @@ body.arena-light .settings-appearance-actions .secondary-button {
         grid-template-columns: 1fr;
     }
 }
+
+/* =========================================================
+   NOTIFICAÇÕES E PRIVACIDADE
+   ========================================================= */
+
+.settings-backup-warning {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18px;
+    margin: 18px 0 0;
+    padding: 14px 16px;
+    border: 1px solid #8a6a20;
+    border-radius: 10px;
+    background: #2a210d;
+}
+
+.settings-backup-warning strong {
+    color: #f7df9b;
+    font-size: 11px;
+}
+
+.settings-backup-warning p {
+    margin: 4px 0 0;
+    color: #c9b986;
+    font-size: 10px;
+    line-height: 1.5;
+}
+
+.settings-status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    flex: 0 0 auto;
+    min-height: 26px;
+    padding: 0 9px;
+    border-radius: 999px;
+    font-size: 9px;
+    font-weight: 800;
+}
+
+.settings-status-badge.enabled {
+    color: #b9f5cf;
+    background: #14532d;
+}
+
+.settings-status-badge.disabled {
+    color: #c2cad8;
+    background: #334155;
+}
+
+.settings-status-badge.info {
+    color: #d7d0ff;
+    background: #332c66;
+}
+
+.settings-link-button,
+.settings-backup-warning .secondary-button {
+    min-height: 36px;
+    padding: 0 13px;
+    border: 1px solid #34415f;
+    border-radius: 8px;
+    background: #17223a;
+    color: #e8edf8;
+    font: inherit;
+    font-size: 10px;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.settings-link-button:hover,
+.settings-backup-warning .secondary-button:hover {
+    border-color: var(--arena-accent);
+}
+
+.settings-select-label {
+    display: grid;
+    gap: 7px;
+    max-width: 330px;
+    color: #a8b4ca;
+    font-size: 10px;
+    font-weight: 700;
+}
+
+.settings-select-label select {
+    min-height: 38px;
+    padding: 0 10px;
+    border: 1px solid #34415f;
+    border-radius: 8px;
+    background: #101a2d;
+    color: #edf1fb;
+    font: inherit;
+    font-size: 11px;
+}
+
+.settings-local-note {
+    margin: 9px 0 0;
+    color: #72819a;
+    font-size: 9px;
+}
+
+.settings-coming-grid {
+    display: grid;
+    gap: 8px;
+}
+
+.settings-coming-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 12px 13px;
+    border: 1px solid #26324b;
+    border-radius: 9px;
+    background: #ffffff03;
+    opacity: .62;
+}
+
+.settings-coming-item strong {
+    color: #c8d0df;
+    font-size: 10px;
+}
+
+.settings-coming-item p {
+    margin: 4px 0 0;
+    color: #74829b;
+    font-size: 9px;
+    line-height: 1.45;
+}
+
+.settings-coming-item > span {
+    flex: 0 0 auto;
+    padding: 4px 7px;
+    border: 1px solid #39455f;
+    border-radius: 999px;
+    color: #8d99ad;
+    font-size: 8px;
+    font-weight: 800;
+}
+
+.settings-confirm-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: grid;
+    place-items: center;
+    padding: 24px;
+    background: #020713aa;
+}
+
+.settings-confirm-modal {
+    width: min(420px, 100%);
+    padding: 22px;
+    border: 1px solid #34415f;
+    border-radius: 14px;
+    background: #111a2c;
+    box-shadow: 0 20px 55px #0008;
+}
+
+.settings-confirm-modal h3 {
+    margin: 6px 0 0;
+    color: #f1f4fb;
+    font-size: 16px;
+}
+
+.settings-confirm-modal p {
+    margin: 8px 0 0;
+    color: #8c99b0;
+    font-size: 10px;
+    line-height: 1.6;
+}
+
+.settings-confirm-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 20px;
+}
+
+.settings-confirm-actions .primary-button,
+.settings-confirm-actions .secondary-button {
+    min-height: 36px;
+    padding: 0 13px;
+    border-radius: 8px;
+    font: inherit;
+    font-size: 10px;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.settings-confirm-actions .primary-button {
+    border: 0;
+    background: var(--arena-accent);
+    color: #fff;
+}
+
+.settings-confirm-actions .secondary-button {
+    border: 1px solid #34415f;
+    background: #17223a;
+    color: #e8edf8;
+}
+
+.settings-confirm-actions button:disabled {
+    opacity: .5;
+    cursor: not-allowed;
+}
+
+body.arena-light .settings-backup-warning {
+    border-color: #d4a62a;
+    background: #fff9e8;
+}
+
+body.arena-light .settings-backup-warning strong {
+    color: #684b00;
+}
+
+body.arena-light .settings-backup-warning p {
+    color: #725e28;
+}
+
+body.arena-light .settings-status-badge.enabled {
+    color: #166534;
+    background: #dcfce7;
+}
+
+body.arena-light .settings-status-badge.disabled {
+    color: #475569;
+    background: #e2e8f0;
+}
+
+body.arena-light .settings-status-badge.info {
+    color: #4338ca;
+    background: #e0e7ff;
+}
+
+body.arena-light .settings-link-button,
+body.arena-light .settings-backup-warning .secondary-button,
+body.arena-light .settings-confirm-actions .secondary-button {
+    border-color: #c9d2e1;
+    background: #f6f8fc;
+    color: #182033;
+}
+
+body.arena-light .settings-select-label {
+    color: #46546c;
+}
+
+body.arena-light .settings-select-label select {
+    border-color: #c9d2e1;
+    background: #fff;
+    color: #182033;
+}
+
+body.arena-light .settings-coming-item {
+    border-color: #d6deeb;
+}
+
+body.arena-light .settings-coming-item strong {
+    color: #43516a;
+}
+
+body.arena-light .settings-coming-item p {
+    color: #6a7890;
+}
+
+body.arena-light .settings-coming-item > span {
+    border-color: #c9d2e1;
+    color: #6a7890;
+}
+
+body.arena-light .settings-confirm-modal {
+    border-color: #d6deeb;
+    background: #fff;
+    box-shadow: 0 20px 55px #1e293b33;
+}
+
+body.arena-light .settings-confirm-modal h3 {
+    color: #182033;
+}
+
+body.arena-light .settings-confirm-modal p {
+    color: #5e6b82;
+}
+
+@media (max-width: 650px) {
+    .settings-backup-warning {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .settings-coming-item {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+}
