@@ -89,7 +89,8 @@ app.whenReady().then(() => {
   );
   ipcMain.handle("auth:resend-email-change", (_, pendingEmail) =>
     resendEmailChangeConfirmation(pendingEmail),
-  );
+
+);
   ipcMain.handle("auth:signout", () => signOutUser());
 
   ipcMain.handle("dashboard", () => repo.dashboard());
