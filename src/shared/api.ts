@@ -7,7 +7,6 @@ import type {
   Player,
   Standing,
   Team,
-  GameRulesSettings,
 } from "./models";
 
 export type ChangeEmailInput = {
@@ -89,7 +88,6 @@ export type Api = {
   updateMatch: (match: MatchInput & { id: number }) => Promise<number>;
   deleteMatch: (id: number) => Promise<void>;
   clearMatches: () => Promise<void>;
-  resetArena: () => Promise<void>;
   ranking: () => Promise<Standing[]>;
   championships: () => Promise<Championship[]>;
   championshipDetail: (id: number) => Promise<ChampionshipDetail>;
@@ -104,10 +102,4 @@ export type Api = {
   ) => Promise<Championship>;
   updateChampionship: (id: number, name: string) => Promise<Championship>;
   deleteChampionship: (id: number) => Promise<void>;
-  exportArena: () => Promise<Record<string, unknown>>;
-  importArena: (data: Record<string, unknown>) => Promise<void>;
-  backup: () => Promise<string>;
-  restore: () => Promise<void>;
-  gameRules: () => Promise<GameRulesSettings>;
-  saveGameRules: (settings: GameRulesSettings) => Promise<GameRulesSettings>;
 };
