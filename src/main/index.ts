@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain } from "electron";
+import { app, BrowserWindow, ipcMain } from "electron";
 import path from "node:path";
 import { createDatabase, repository } from "./repository";
 import type { ChangeEmailInput } from "../shared/api";
@@ -105,7 +105,6 @@ app.whenReady().then(() => {
   ipcMain.handle("matches:update", (_, m) => matches.update(m));
   ipcMain.handle("matches:delete", (_, id) => matches.remove(id));
   ipcMain.handle("matches:clear", () => matches.clear());
-  ipcMain.handle("arena:reset", () => repo.resetArena());
   ipcMain.handle("ranking", () => repo.ranking());
 
   // Rotas de Campeonatos ligadas ao championship-service.ts (Supabase + SQLite)
@@ -126,29 +125,6 @@ app.whenReady().then(() => {
     repo.deleteChampionship(id),
   );
 
-  ipcMain.handle("arena:export", () => repo.exportArena());
-  ipcMain.handle("arena:import", (_, data) => repo.importArena(data));
-  ipcMain.handle("backup", async () => {
-    const dest = await dialog.showSaveDialog({
-      defaultPath: "fc-arena-backup.sqlite",
-    });
-    if (dest.canceled || !dest.filePath) return "";
-    return repo.backup(dest.filePath);
-  });
-  ipcMain.handle("restore", async () => {
-    const src = await dialog.showOpenDialog({
-      properties: ["openFile"],
-      filters: [{ name: "SQLite", extensions: ["sqlite", "db"] }],
-    });
-    if (src.canceled || !src.filePaths[0]) return;
-    repo.restore(src.filePaths[0]);
-    app.relaunch();
-    app.exit(0);
-  });
-  ipcMain.handle("game-rules:get", () => repo.gameRules());
-  ipcMain.handle("game-rules:save", (_, settings) =>
-    repo.saveGameRules(settings),
-  );
 
   initSupabase({
     rootDir: app.getAppPath(),
