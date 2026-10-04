@@ -30,18 +30,11 @@ const api: Api = {
   updateMatch: invoke("matches:update"),
   deleteMatch: invoke("matches:delete"),
   clearMatches: invoke("matches:clear"),
-  resetArena: invoke("arena:reset"),
   ranking: invoke("ranking"),
   championships: invoke("championships:list"),
   championshipDetail: invoke("championships:detail"),
   saveChampionship: invoke("championships:save"),
   updateChampionship: invoke("championships:update"),
   deleteChampionship: invoke("championships:delete"),
-  exportArena: invoke("arena:export"),
-  importArena: invoke("arena:import"),
-  backup: invoke("backup"),
-  restore: invoke("restore"),
-  gameRules: invoke("game-rules:get"),
-  saveGameRules: invoke("game-rules:save"),
 } as Api;
 contextBridge.exposeInMainWorld("arena", api);
