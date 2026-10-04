@@ -144,20 +144,7 @@ export function repository(db: Database.Database) {
       );
     return settings;
   };
-  const gameRules = (): GameRulesSettings => {
-    const rows = db
-      .prepare("SELECT key,value FROM app_settings")
-      .all() as Array<{ key: string; value: string }>;
-    const values = new Map(rows.map((row) => [row.key, Number(row.value)]));
-    return validateGameRules({
-      pointsWin: values.get("pointsWin") ?? defaultGameRules.pointsWin,
-      pointsDraw: values.get("pointsDraw") ?? defaultGameRules.pointsDraw,
-      pointsLoss: values.get("pointsLoss") ?? defaultGameRules.pointsLoss,
-      minimumBestFormMatches:
-        values.get("minimumBestFormMatches") ??
-        defaultGameRules.minimumBestFormMatches,
-    });
-  };
+  const gameRules = (): GameRulesSettings => ({ ...defaultGameRules });
   const pointsExpression = (settings: GameRulesSettings, alias = "a") =>
     `(COALESCE(${alias}.wins,0)*${settings.pointsWin}+COALESCE(${alias}.draws,0)*${settings.pointsDraw}+COALESCE(${alias}.losses,0)*${settings.pointsLoss})`;
   const winRateExpression = (alias = "a") =>
