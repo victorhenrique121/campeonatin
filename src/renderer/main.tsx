@@ -66,7 +66,6 @@ import type {
   ChampionshipDetail,
   Dashboard,
   Fixture,
-  GameRulesSettings,
   Match,
   Player,
   Standing,
@@ -2918,13 +2917,9 @@ function SettingsPage({ reload }: { reload: () => Promise<void> }) {
     | "appearance"
     | "notifications"
     | "privacy"
-    | "rules"
-    | "data"
-    | "catalog"
-    | "players"
     | "about";
 
-  type SettingsGroup = "CONTA" | "APLICATIVO" | "PRIVACIDADE" | "ARENA";
+  type SettingsGroup = "CONTA" | "APLICATIVO" | "PRIVACIDADE";
 
   const sections: Array<{
     id: SettingsSection;
@@ -2976,39 +2971,11 @@ function SettingsPage({ reload }: { reload: () => Promise<void> }) {
       group: "PRIVACIDADE",
     },
     {
-      id: "rules",
-      label: "Regras do jogo",
-      description: "Configurações da Arena",
-      icon: Gauge,
-      group: "ARENA",
-    },
-    {
-      id: "data",
-      label: "Dados e backup",
-      description: "Dados da Arena",
-      icon: CalendarDays,
-      group: "ARENA",
-    },
-    {
-      id: "catalog",
-      label: "Catálogo de times",
-      description: "Times disponíveis",
-      icon: Shield,
-      group: "ARENA",
-    },
-    {
-      id: "players",
-      label: "Jogadores",
-      description: "Elenco da Arena",
-      icon: Users,
-      group: "ARENA",
-    },
-    {
       id: "about",
       label: "Sobre",
       description: "Informações do app",
       icon: Gamepad2,
-      group: "ARENA",
+      group: "APLICATIVO",
     },
   ];
 
@@ -3049,14 +3016,6 @@ function SettingsPage({ reload }: { reload: () => Promise<void> }) {
   const [section, setSection] = useState<SettingsSection>("account");
 
   const [message, setMessage] = useState("");
-
-  const [rules, setRules] = useState<GameRulesSettings | null>(null);
-
-  const [rulesError, setRulesError] = useState("");
-
-  const [savingRules, setSavingRules] = useState(false);
-
-  const [confirmingReset, setConfirmingReset] = useState(false);
 
   useEffect(() => {
     document.documentElement.style.setProperty("--arena-accent", accent);
@@ -3099,65 +3058,6 @@ function SettingsPage({ reload }: { reload: () => Promise<void> }) {
     localStorage.setItem("arena-muted", String(muted));
   }, [muted]);
 
-  useEffect(() => {
-    if (section !== "rules") {
-      return;
-    }
-
-    setRulesError("");
-
-    void window.arena
-      .gameRules()
-      .then((savedRules) => {
-        setRules(savedRules);
-        setRulesError("");
-      })
-      .catch((error: unknown) => {
-        setRulesError(
-          error instanceof Error
-            ? error.message
-            : "Não foi possível carregar as regras do jogo.",
-        );
-      });
-  }, [section]);
-
-  const reset = async () => {
-    await window.arena.resetArena();
-    await reload();
-
-    setMessage("Dados da Arena limpos.");
-
-    window.setTimeout(() => {
-      setMessage("");
-    }, 3000);
-  };
-
-  const saveRules = async () => {
-    if (!rules) {
-      return;
-    }
-
-    setSavingRules(true);
-    setRulesError("");
-
-    try {
-      await window.arena.saveGameRules(rules);
-
-      setMessage("Regras do jogo salvas.");
-
-      window.setTimeout(() => {
-        setMessage("");
-      }, 3000);
-    } catch (error: unknown) {
-      setRulesError(
-        error instanceof Error
-          ? error.message
-          : "Não foi possível salvar as regras.",
-      );
-    } finally {
-      setSavingRules(false);
-    }
-  };
 
   return (
     <section className="page settings-page">
@@ -3427,107 +3327,6 @@ function SettingsPage({ reload }: { reload: () => Promise<void> }) {
             <NotificationsSettings onOpenAppearance={() => setSection("appearance")} />
           ) : section === "privacy" ? (
             <PrivacySettings />
-          ) : section === "rules" ? (
-            <article className="settings-card">
-              <div className="settings-card-header">
-                <div>
-                  <span className="settings-card-label">REGRAS</span>
-                  <h2>Regras do jogo</h2>
-                  <p>Defina a pontuação usada pelo ranking e o mínimo da Melhor Forma.</p>
-                </div>
-                <Gauge size={22} />
-              </div>
-
-              {rulesError && <div className="settings-error">{rulesError}</div>}
-
-              {!rules ? (
-                <div className="settings-loading">
-                  <span />
-                  <p>Carregando regras...</p>
-                </div>
-              ) : (
-                <>
-                  <div className="settings-form-grid">
-                    {[
-                      ["pointsWin", "Vitória"],
-                      ["pointsDraw", "Empate"],
-                      ["pointsLoss", "Derrota"],
-                      ["minimumBestFormMatches", "Mínimo da Melhor Forma"],
-                    ].map(([key, label]) => (
-                      <label key={key}>
-                        {label}
-                        <input
-                          type="number"
-                          min="0"
-                          step="1"
-                          value={rules[key as keyof GameRulesSettings]}
-                          onChange={(event) => {
-                            const value = Number(event.target.value);
-                            setRules((current) =>
-                              current
-                                ? {
-                                    ...current,
-                                    [key]: Number.isNaN(value) ? 0 : value,
-                                  }
-                                : current,
-                            );
-                          }}
-                        />
-                      </label>
-                    ))}
-                  </div>
-
-                  <div className="settings-actions">
-                    <button
-                      type="button"
-                      className="primary-button"
-                      disabled={savingRules}
-                      onClick={saveRules}
-                    >
-                      {savingRules ? "Salvando..." : "Salvar alterações"}
-                    </button>
-                  </div>
-                </>
-              )}
-            </article>
-          ) : section === "data" ? (
-            <article className="settings-card">
-              <div className="settings-card-header">
-                <div>
-                  <span className="settings-card-label">ARENA</span>
-                  <h2>Dados e backup</h2>
-                  <p>Gerencie os dados da Arena e os backups do aplicativo.</p>
-                </div>
-                <CalendarDays size={22} />
-              </div>
-
-              <div className="settings-section">
-                <div className="settings-section-heading">
-                  <div>
-                    <h3>Backup</h3>
-                    <p>Use os comandos da barra lateral para fazer ou restaurar um backup.</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="settings-section">
-                <div className="settings-section-heading">
-                  <div>
-                    <h3>Limpar dados</h3>
-                    <p>Remove jogadores, partidas e campeonatos. O catálogo de clubes é mantido.</p>
-                  </div>
-                </div>
-                <div className="settings-actions">
-                  <button
-                    type="button"
-                    className="danger"
-                    onClick={() => setConfirmingReset(true)}
-                  >
-                    Limpar dados da Arena
-                  </button>
-                </div>
-              </div>
-            </article>
           ) : section === "about" ? (
             <article className="settings-card settings-about-app">
               <div className="settings-about-app-header">
@@ -3588,46 +3387,10 @@ function SettingsPage({ reload }: { reload: () => Promise<void> }) {
                 </p>
               </div>
             </article>
-          ) : (
-            <article className="settings-card settings-placeholder">
-              <div className="settings-placeholder-icon">
-                {(() => {
-                  const currentSection = sections.find(
-                    (item) => item.id === section,
-                  );
-
-                  const Icon = currentSection?.icon ?? Sparkles;
-
-                  return <Icon size={22} />;
-                })()}
-              </div>
-
-              <div>
-                <span className="settings-placeholder-label">
-                  {["notifications", "privacy"].includes(section)
-                    ? "PRIVACIDADE"
-                    : "ARENA"}
-                </span>
-
-                <h2>{sections.find((item) => item.id === section)?.label}</h2>
-
-                <p>Em breve.</p>
-              </div>
-            </article>
           )}
         </div>
       </div>
 
-      {confirmingReset && (
-        <AppModal
-          title="Limpar dados da Arena?"
-          message="Limpar jogadores, partidas e campeonatos? Esta ação não pode ser desfeita."
-          confirmText="Limpar tudo"
-          danger
-          onClose={() => setConfirmingReset(false)}
-          onConfirm={reset}
-        />
-      )}
     </section>
   );
 }
@@ -3722,7 +3485,7 @@ function ArenaApp({ user, onSignOut }: { user: AuthUser; onSignOut: () => void }
         }}
       />
     ) : page === "settings" ? (
-      <SettingsPage reload={reload} />
+      <SettingsPage />
     ) : (
       <TeamsPage teams={teams} />
     );
@@ -3748,12 +3511,6 @@ function ArenaApp({ user, onSignOut }: { user: AuthUser; onSignOut: () => void }
           ))}
         </nav>
         <div className="side-bottom">
-          <button onClick={() => window.arena.backup()}>
-            <CalendarDays size={18} /> Fazer backup
-          </button>
-          <button onClick={() => window.arena.restore()}>
-            <CalendarDays size={18} /> Restaurar backup
-          </button>
           <small>v0.1.0 · dados locais</small>
         </div>
       </aside>
