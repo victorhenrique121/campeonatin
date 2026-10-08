@@ -1,5 +1,4 @@
-import { defineConfig, configDefaults } from 'vitest/config';
-
+import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
 export default defineConfig({
@@ -15,13 +14,5 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: true // Força o Vite a rodar na 5173 sem mudar sozinho
-  },
-
-  test: {
-    exclude: [
-      ...configDefaults.exclude,
-      'dist-electron/**',
-      'dist/**'
-    ]
   }
 });
