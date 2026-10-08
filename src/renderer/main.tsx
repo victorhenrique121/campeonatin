@@ -3387,7 +3387,7 @@ function SettingsPage({ reload }: { reload: () => Promise<void> }) {
                 </p>
               </div>
             </article>
-          )}
+          ): null}
         </div>
       </div>
 
@@ -3485,7 +3485,7 @@ function ArenaApp({ user, onSignOut }: { user: AuthUser; onSignOut: () => void }
         }}
       />
     ) : page === "settings" ? (
-      <SettingsPage />
+      <SettingsPage reload={reload} />
     ) : (
       <TeamsPage teams={teams} />
     );
