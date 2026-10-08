@@ -42,6 +42,7 @@ import {
   Ban,
   RotateCcw,
   Search,
+  Shuffle,
   Shield,
   Snowflake,
   Sparkles,
