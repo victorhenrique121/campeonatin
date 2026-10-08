@@ -75,6 +75,7 @@ import { ProfilePage } from "./ProfilePage";
 import { Ranking } from "./components/Ranking";
 import { AppModal } from "./components/AppModal";
 import { ArenaTools } from "./components/ArenaTools";
+import { TeamsPage } from "./pages/TeamsPage";
 import "./styles/auth.css";
 import "./styles/app.css";
 import "./styles/account-menu.css";
@@ -2701,36 +2702,6 @@ function FixtureResultModal({
         </div>
       </div>
     </div>
-  );
-}
-
-function TeamsPage({ teams }: { teams: Team[] }) {
-  return (
-    <>
-      <section className="page-title">
-        <div>
-          <p>CATÁLOGO</p>
-          <h1>Times</h1>
-        </div>
-      </section>
-      <div className="team-directory">
-        <div className="team-grid">
-          {teams.map((t) => (
-            <article className="team-card" key={t.id}>
-              <i>
-                <Shield size={24} />
-              </i>
-              <div>
-                <b>{t.name}</b>
-                <small>
-                  {t.league} · {t.country}
-                </small>
-              </div>
-            </article>
-          ))}
-        </div>
-      </div>
-    </>
   );
 }
 
