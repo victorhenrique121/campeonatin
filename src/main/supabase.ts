@@ -3,6 +3,12 @@ import fs from "node:fs";
 import path from "node:path";
 import { EMAIL_CONFIRMATION_REDIRECT_URL } from "../shared/auth-config";
 import type { ChangeEmailInput, EmailSettings } from "../shared/api";
+import {
+  isValidEmail,
+  isValidUsername,
+  normalizeEmail,
+  normalizeUsername,
+} from "../shared/validation";
 
 /**
  * ============================================================================
@@ -502,7 +508,7 @@ export async function isUsernameAvailable(username: string): Promise<boolean> {
   const supabase = getUserAuthClient();
   if (!supabase) throw new Error("Supabase não está configurado.");
 
-  const normalized = username.trim().toLowerCase();
+  const normalized = normalizeUsername(username);
   const { data, error } = await supabase.rpc("is_username_available", {
     p_username: normalized,
   });
@@ -528,12 +534,12 @@ export async function updateProfile(input: UpdateProfileInput): Promise<UserProf
 
   const user = authData.user;
   const displayName = input.displayName.trim();
-  const username = input.username?.trim().toLowerCase() || null;
+  const username = input.username ? normalizeUsername(input.username) : null;
   const bio = input.bio?.trim() || null;
 
   if (!displayName) throw new Error("Informe o nome de exibição.");
   if (displayName.length > 80) throw new Error("O nome de exibição deve ter no máximo 80 caracteres.");
-  if (username && !/^[a-z0-9_]{3,20}$/.test(username)) {
+  if (username && !isValidUsername(username)) {
     throw new Error("O username deve ter de 3 a 20 caracteres: letras minúsculas, números ou _.");
   }
   if (bio && bio.length > 160) throw new Error("A bio deve ter no máximo 160 caracteres.");
@@ -641,11 +647,11 @@ export async function signUpUser(
   const supabase = getUserAuthClient();
   if (!supabase) throw new Error("Supabase não está configurado.");
 
-  const normalizedEmail = email.trim().toLowerCase();
+  const normalizedEmail = normalizeEmail(email);
   const normalizedName = displayName.trim();
 
   if (!normalizedName) throw new Error("Informe seu nome.");
-  if (!normalizedEmail || !/^\S+@\S+\.\S+$/.test(normalizedEmail)) {
+  if (!normalizedEmail || !isValidEmail(normalizedEmail)) {
     throw new Error("Informe um e-mail válido.");
   }
   if (password.length < 8) {
@@ -677,7 +683,7 @@ export async function signInUser(
   const supabase = getUserAuthClient();
   if (!supabase) throw new Error("Supabase não está configurado.");
 
-  const normalizedEmail = email.trim().toLowerCase();
+  const normalizedEmail = normalizeEmail(email);
   if (!normalizedEmail || !password) {
     throw new Error("Informe e-mail e senha.");
   }
@@ -700,7 +706,7 @@ export async function resendSignupConfirmation(email: string): Promise<void> {
   const supabase = getUserAuthClient();
   if (!supabase) throw new Error("Supabase não está configurado.");
 
-  const normalizedEmail = email.trim().toLowerCase();
+  const normalizedEmail = normalizeEmail(email);
   if (!normalizedEmail) throw new Error("Informe seu e-mail.");
 
   const { data, error } = await supabase.auth.resend({
@@ -751,7 +757,7 @@ export async function changeEmail(
   if (!supabase) throw new Error("Supabase não está configurado.");
 
   const currentPassword = input.currentPassword;
-  const normalizedEmail = input.newEmail.trim().toLowerCase();
+  const normalizedEmail = normalizeEmail(input.newEmail);
 
   if (!currentPassword) throw new Error("Informe sua senha atual.");
   if (!normalizedEmail || !/^\S+@\S+\.\S+$/.test(normalizedEmail)) {
@@ -767,7 +773,7 @@ export async function changeEmail(
     throw new Error("Sua sessão expirou. Entre novamente para alterar o e-mail.");
   }
 
-  const currentEmail = authData.user.email.trim().toLowerCase();
+  const currentEmail = normalizeEmail(authData.user.email);
   if (normalizedEmail === currentEmail) {
     throw new Error("O novo e-mail deve ser diferente do e-mail atual.");
   }
@@ -806,7 +812,7 @@ export async function resendEmailChangeConfirmation(
   const supabase = getUserAuthClient();
   if (!supabase) throw new Error("Supabase não está configurado.");
 
-  const normalizedEmail = pendingEmail.trim().toLowerCase();
+  const normalizedEmail = normalizeEmail(pendingEmail);
   if (!normalizedEmail) throw new Error("Não há troca de e-mail pendente.");
 
   const { error } = await supabase.auth.resend({
@@ -847,7 +853,7 @@ export async function changePassword(
     throw new Error("Sua sessão expirou. Entre novamente para alterar a senha.");
   }
 
-  const email = authData.user.email.trim().toLowerCase();
+  const email = normalizeEmail(authData.user.email);
 
   const { error: reauthError } = await supabase.auth.signInWithPassword({
     email,

@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { Check, Eye, EyeOff, LockKeyhole, RefreshCw, ShieldCheck } from "lucide-react";
+import { validatePasswordChange } from "../../shared/validation";
 
 type PasswordFieldProps = {
   label: string;
@@ -64,14 +65,7 @@ export function PasswordSettings() {
   // deixam de existir; ao voltar, o formulário começa vazio.
 
   const validation = useMemo(
-    () => ({
-      currentFilled: currentPassword.length > 0,
-      minimumLength: newPassword.length >= 8,
-      confirmationMatches:
-        confirmation.length > 0 && confirmation === newPassword,
-      differentFromCurrent:
-        newPassword.length > 0 && newPassword !== currentPassword,
-    }),
+    () => validatePasswordChange(currentPassword, newPassword, confirmation),
     [currentPassword, newPassword, confirmation],
   );
 
