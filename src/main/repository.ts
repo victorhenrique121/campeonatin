@@ -11,6 +11,7 @@ import type {
   Standing,
   Team,
 } from "../shared/models";
+import { withWinningStreaks } from "../shared/ranking";
 
 import { clubRows } from "./clubRows";
 
@@ -231,40 +232,19 @@ export function repository(db: Database.Database) {
   SELECT p.id,p.name,COALESCE(a.played,0) played,COALESCE(a.wins,0) wins,COALESCE(a.draws,0) draws,COALESCE(a.losses,0) losses,COALESCE(a.goals_for,0) goalsFor,COALESCE(a.goals_against,0) goalsAgainst,${pointsExpression(settings)} points,${winRateExpression()} winRate,0 streak FROM players p LEFT JOIN aggregate a ON a.player_id=p.id ORDER BY points DESC,(goalsFor-goalsAgainst) DESC,goalsFor DESC,p.name`;
   const championshipRankingSql = (settings: GameRulesSettings) =>
     `WITH results AS (SELECT player1_id player_id,score1 gf,score2 ga FROM matches WHERE championship_id=? UNION ALL SELECT player2_id,score2,score1 FROM matches WHERE championship_id=?), aggregate AS (SELECT player_id,COUNT(*) played,SUM(gf>ga) wins,SUM(gf=ga) draws,SUM(gf<ga) losses,SUM(gf) goals_for,SUM(ga) goals_against FROM results GROUP BY player_id) SELECT p.id,p.name,COALESCE(a.played,0) played,COALESCE(a.wins,0) wins,COALESCE(a.draws,0) draws,COALESCE(a.losses,0) losses,COALESCE(a.goals_for,0) goalsFor,COALESCE(a.goals_against,0) goalsAgainst,${pointsExpression(settings)} points,${winRateExpression()} winRate,0 streak FROM championship_participants cp JOIN players p ON p.id=cp.player_id LEFT JOIN aggregate a ON a.player_id=p.id WHERE cp.championship_id=? ORDER BY points DESC,(goalsFor-goalsAgainst) DESC,goalsFor DESC,p.name`;
-  const withStreaks = (rows: Standing[]) =>
-    (() => {
-      const games = db
-        .prepare(
-          "SELECT player1_id player1Id,player2_id player2Id,score1,score2 FROM matches ORDER BY played_at DESC,id DESC",
-        )
-        .all() as Array<{
-        player1Id: number;
-        player2Id: number;
-        score1: number;
-        score2: number;
-      }>;
-      const active = new Map<number, boolean>();
-      const streaks = new Map<number, number>();
-      for (const game of games) {
-        for (const playerId of [game.player1Id, game.player2Id]) {
-          if (!active.has(playerId)) {
-            active.set(playerId, true);
-            streaks.set(playerId, 0);
-          }
-          if (!active.get(playerId)) continue;
-          const won =
-            game.player1Id === playerId
-              ? game.score1 > game.score2
-              : game.score2 > game.score1;
-          if (won) streaks.set(playerId, (streaks.get(playerId) ?? 0) + 1);
-          else active.set(playerId, false);
-        }
-      }
-      return rows.map((row) => ({
-        ...row,
-        streak: streaks.get(row.id) ?? 0,
-      }));
-    })();
+  const withStreaks = (rows: Standing[]) => {
+    const games = db
+      .prepare(
+        "SELECT player1_id player1Id,player2_id player2Id,score1,score2 FROM matches ORDER BY played_at DESC,id DESC",
+      )
+      .all() as Array<{
+      player1Id: number;
+      player2Id: number;
+      score1: number;
+      score2: number;
+    }>;
+    return withWinningStreaks(rows, games);
+  };
   const statisticsDashboard = (): StatisticsDashboard => {
     const settings = gameRules();
     const ranking = withStreaks(

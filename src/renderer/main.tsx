@@ -44,7 +44,6 @@ import {
   Search,
   Shuffle,
   Shield,
-  Route,
   Snowflake,
   Sparkles,
   SquarePen,
@@ -68,12 +67,16 @@ import type {
   Fixture,
   Match,
   Player,
-  Standing,
   Team,
 } from "../shared/models";
 import { HeadToHeadCard } from "./HeadToHeadCard";
 import { AuthPage } from "./AuthPage";
 import { ProfilePage } from "./ProfilePage";
+import { Ranking } from "./components/Ranking";
+import { AppModal } from "./components/AppModal";
+import { ArenaTools } from "./components/ArenaTools";
+import { EditMatchModal } from "./components/EditMatchModal";
+import { TeamsPage } from "./pages/TeamsPage";
 import "./styles/auth.css";
 import "./styles/app.css";
 import "./styles/account-menu.css";
@@ -181,184 +184,6 @@ function useToast() {
   useEffect(() => () => window.clearTimeout(timer.current), []);
   return { toast, showToast };
 }
-function Ranking({ rows }: { rows: Standing[] }) {
-  return (
-    <div className="table">
-      <div className="row header">
-        <span>#</span>
-        <span>Jogador</span>
-        <span>PTS</span>
-        <span>J</span>
-        <span>V</span>
-        <span>E</span>
-        <span>D</span>
-        <span>SG</span>
-        <span>APROV.</span>
-      </div>
-      {rows.map((row, index) => (
-        <div className="row" key={row.id}>
-          <span className="rank">{index + 1}</span>
-          <span className="player-cell">
-            <i>{row.name[0]}</i>
-            {row.name}
-            {row.streak >= 3 && (
-              <span className="hot-streak">🔥 Em chamas</span>
-            )}
-          </span>
-          <b>{row.points}</b>
-          <span>{row.played}</span>
-          <span>{row.wins}</span>
-          <span>{row.draws}</span>
-          <span>{row.losses}</span>
-          <span>{row.goalsFor - row.goalsAgainst}</span>
-          <span>{row.winRate}%</span>
-        </div>
-      ))}
-    </div>
-  );
-}
-function EditMatchModal({
-  match,
-  onClose,
-  onSaved,
-}: {
-  match: Match;
-  onClose: () => void;
-  onSaved: () => Promise<void>;
-}) {
-  const [score1, setScore1] = useState(String(match.score1));
-  const [score2, setScore2] = useState(String(match.score2));
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
-
-  async function handleSave() {
-    const newScore1 = Number(score1);
-    const newScore2 = Number(score2);
-
-    if (!Number.isInteger(newScore1) || newScore1 < 0) {
-      setError("O placar do primeiro jogador é inválido.");
-      return;
-    }
-
-    if (!Number.isInteger(newScore2) || newScore2 < 0) {
-      setError("O placar do segundo jogador é inválido.");
-      return;
-    }
-
-    setSaving(true);
-    setError("");
-
-    try {
-      await window.arena.updateMatch({
-        id: match.id,
-        player1Id: match.player1Id,
-        player2Id: match.player2Id,
-        team1Id: match.team1Id,
-        team2Id: match.team2Id,
-        score1: newScore1,
-        score2: newScore2,
-        championshipId: match.championshipId ?? undefined,
-        playedAt: match.playedAt,
-      });
-
-      await onSaved();
-    } catch (error) {
-      setError(
-        error instanceof Error
-          ? error.message
-          : "Não foi possível atualizar a partida.",
-      );
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div className="edit-modal-backdrop" onMouseDown={onClose}>
-      <div className="edit-modal" onMouseDown={(e) => e.stopPropagation()}>
-        <div className="edit-modal-header">
-          <div>
-            <span>EDITAR PARTIDA</span>
-            <h2>Alterar resultado</h2>
-          </div>
-
-          <button
-            type="button"
-            className="edit-modal-close"
-            onClick={onClose}
-            disabled={saving}
-            aria-label="Fechar"
-          >
-            ×
-          </button>
-        </div>
-
-        <div className="edit-match-info">
-          <small>
-            {date(match.playedAt)}
-            {match.championship ? ` · ${match.championship}` : ""}
-          </small>
-        </div>
-
-        <div className="edit-scoreboard">
-          <div className="edit-player">
-            <strong>{match.player1}</strong>
-            <span>{match.team1}</span>
-          </div>
-
-          <div className="edit-score">
-            <input
-              type="number"
-              min="0"
-              value={score1}
-              onChange={(e) => setScore1(e.target.value)}
-              disabled={saving}
-              autoFocus
-            />
-
-            <span>×</span>
-
-            <input
-              type="number"
-              min="0"
-              value={score2}
-              onChange={(e) => setScore2(e.target.value)}
-              disabled={saving}
-            />
-          </div>
-
-          <div className="edit-player edit-player-right">
-            <strong>{match.player2}</strong>
-            <span>{match.team2}</span>
-          </div>
-        </div>
-
-        {error && <div className="edit-error">{error}</div>}
-
-        <div className="edit-modal-actions">
-          <button
-            type="button"
-            className="edit-cancel"
-            onClick={onClose}
-            disabled={saving}
-          >
-            Cancelar
-          </button>
-
-          <button
-            type="button"
-            className="edit-save"
-            onClick={handleSave}
-            disabled={saving}
-          >
-            {saving ? "Salvando..." : "Salvar resultado"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function Game({
   match,
   onEdit,
@@ -2739,176 +2564,6 @@ function FixtureResultModal({
   );
 }
 
-function TeamsPage({ teams }: { teams: Team[] }) {
-  return (
-    <>
-      <section className="page-title">
-        <div>
-          <p>CATÁLOGO</p>
-          <h1>Times</h1>
-        </div>
-      </section>
-      <div className="team-directory">
-        <div className="team-grid">
-          {teams.map((t) => (
-            <article className="team-card" key={t.id}>
-              <i>
-                <Shield size={24} />
-              </i>
-              <div>
-                <b>{t.name}</b>
-                <small>
-                  {t.league} · {t.country}
-                </small>
-              </div>
-            </article>
-          ))}
-        </div>
-      </div>
-    </>
-  );
-}
-
-function AppModal({
-  title,
-  message,
-  onClose,
-  onConfirm,
-  confirmText = "Confirmar",
-  cancelText = "Cancelar",
-  danger = false,
-}: {
-  title: string;
-  message: string;
-  onClose: () => void;
-  onConfirm?: () => void | Promise<void>;
-  confirmText?: string;
-  cancelText?: string;
-  danger?: boolean;
-}) {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-
-  async function handleConfirm() {
-    if (!onConfirm) {
-      onClose();
-      return;
-    }
-
-    setLoading(true);
-    setError("");
-
-    try {
-      await onConfirm();
-      onClose();
-    } catch (error) {
-      setError(
-        error instanceof Error
-          ? error.message
-          : "Não foi possível realizar esta ação.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  return (
-    <div className="app-modal-backdrop" onMouseDown={onClose}>
-      <div className="app-modal" onMouseDown={(e) => e.stopPropagation()}>
-        <div className={`app-modal-icon ${danger ? "danger" : ""}`}>
-          {danger ? "!" : "?"}
-        </div>
-
-        <div className="app-modal-content">
-          <h2>{title}</h2>
-          <p>{message}</p>
-        </div>
-
-        {error && <div className="app-modal-error">{error}</div>}
-
-        <div className="app-modal-actions">
-          <button
-            type="button"
-            className="app-modal-cancel"
-            onClick={onClose}
-            disabled={loading}
-          >
-            {cancelText}
-          </button>
-
-          <button
-            type="button"
-            className={danger ? "app-modal-danger" : "app-modal-confirm"}
-            onClick={handleConfirm}
-            disabled={loading}
-          >
-            {loading ? "Aguarde..." : confirmText}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ArenaTools() {
-  const [open, setOpen] = useState(false);
-
-  return (
-    <div className="arena-tools">
-      <button
-        type="button"
-        className="arena-tools-fab"
-        onClick={() => setOpen(!open)}
-        aria-label="Abrir ferramentas da Arena"
-      >
-        <Route size={18} />
-      </button>
-
-      {open && (
-        <div className="arena-tools-popover">
-          <b>Central da Arena</b>
-
-          <button
-            type="button"
-            className="arena-tool-button"
-            onClick={() => console.log("Mutador aleatório")}
-          >
-            <Dices size={17} />
-            <span>
-              <strong>Mutador aleatório</strong>
-              <small>Sortear um desafio para a partida</small>
-            </span>
-          </button>
-
-          <button
-            type="button"
-            className="arena-tool-button"
-            onClick={() => console.log("Desafio rápido")}
-          >
-            <Goal size={17} />
-            <span>
-              <strong>Desafio rápido</strong>
-              <small>Criar uma missão para os jogadores</small>
-            </span>
-          </button>
-
-          <button
-            type="button"
-            className="arena-tool-button"
-            onClick={() => console.log("Roleta")}
-          >
-            <Shuffle size={17} />
-            <span>
-              <strong>Roleta da Arena</strong>
-              <small>Deixe a sorte decidir</small>
-            </span>
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
-
 function SettingsPage({ reload }: { reload: () => Promise<void> }) {
   type SettingsSection =
     | "account"
@@ -3387,7 +3042,7 @@ function SettingsPage({ reload }: { reload: () => Promise<void> }) {
                 </p>
               </div>
             </article>
-          )}
+          ): null}
         </div>
       </div>
 
@@ -3485,7 +3140,7 @@ function ArenaApp({ user, onSignOut }: { user: AuthUser; onSignOut: () => void }
         }}
       />
     ) : page === "settings" ? (
-      <SettingsPage />
+      <SettingsPage reload={reload} />
     ) : (
       <TeamsPage teams={teams} />
     );

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CheckCircle2, ImagePlus, Loader2, UserCircle } from "lucide-react";
 import type { UserProfile } from "../../shared/api";
+import { isValidUsername, normalizeUsername } from "../../shared/validation";
 import "./account-settings.css";
 
 const MAX_AVATAR_BYTES = 5 * 1024 * 1024;
@@ -61,7 +62,7 @@ export function AccountSettings({ onSaved }: Props) {
   }, [avatarFile]);
 
   useEffect(() => {
-    const normalized = username.trim().toLowerCase();
+    const normalized = normalizeUsername(username);
     setError("");
     setSuccess("");
     if (!normalized) {
@@ -69,7 +70,7 @@ export function AccountSettings({ onSaved }: Props) {
       setCheckingUsername(false);
       return;
     }
-    if (!/^[a-z0-9_]{3,20}$/.test(normalized)) {
+    if (!isValidUsername(normalized)) {
       setUsernameAvailable(false);
       setCheckingUsername(false);
       return;
@@ -114,11 +115,11 @@ export function AccountSettings({ onSaved }: Props) {
 
   const save = async () => {
     if (!profile || saving) return;
-    const normalizedUsername = username.trim().toLowerCase();
+    const normalizedUsername = normalizeUsername(username);
     const normalizedBio = bio.trim();
 
     if (!displayName.trim()) return setError("Informe o nome de exibição.");
-    if (normalizedUsername && !/^[a-z0-9_]{3,20}$/.test(normalizedUsername)) {
+    if (normalizedUsername && !isValidUsername(normalizedUsername)) {
       return setError("O username deve ter de 3 a 20 caracteres: letras minúsculas, números ou _.");
     }
     if (normalizedUsername && usernameAvailable !== true) {
