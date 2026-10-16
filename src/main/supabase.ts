@@ -534,7 +534,7 @@ export async function updateProfile(input: UpdateProfileInput): Promise<UserProf
 
   const user = authData.user;
   const displayName = input.displayName.trim();
-  const username = input.username ? normalizeUsername(input.username) : null;
+  const username = normalizeUsername(input.username ?? "") || null;
   const bio = input.bio?.trim() || null;
 
   if (!displayName) throw new Error("Informe o nome de exibição.");
