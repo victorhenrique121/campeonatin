@@ -28,3 +28,9 @@ jobs:
 
       - name: Verificar tipos
         run: npm run typecheck
+
+      - name: Verificar lint
+        run: npm run lint
+
+      - name: Executar testes
+        run: npm test
