@@ -852,14 +852,11 @@ Maluco + desafio sorteado) passou a persistir `mode` e `mutator` no
 (`PRAGMA table_info` + `ALTER TABLE ... ADD COLUMN`, default
 `'classic'`) — não há nada a fazer localmente, nem em bancos antigos.
 
-No **Supabase**, `public.championships` continua sem uso pelo aplicativo
-(a migração de championships é a próxima etapa, conforme a seção 19).
-Para manter o schema remoto alinhado com o local desde já, aplique no
-**SQL Editor** a migration
-`supabase/migrations/20260917120000_add_championship_mode.sql`
-(idempotente; inofensiva com a tabela vazia; não altera RLS). Se
-preferir, aplique junto da etapa de championships — o app não lê nem
-escreve championships remotamente nesta fase.
+As colunas `mode` e `mutator` já fazem parte da migration inicial do
+schema (`supabase/migrations/20260827160000_initial_schema.sql`). Não há
+uma migration adicional a aplicar nesta fase. A migração de
+`championships` segue como próxima etapa, conforme a seção 19; o app não
+lê nem escreve `championships` remotamente nesta fase.
 
 ---
 
