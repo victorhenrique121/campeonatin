@@ -9,9 +9,14 @@ revoke all on public.room_join_attempts from anon, authenticated;
 
 create or replace function public.room_entry_code()
 returns text language plpgsql volatile security definer set search_path = '' as $$
-declare alphabet constant text := 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; result text := ''; i integer;
+declare alphabet constant text := 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; result text := ''; b integer;
 begin
-  for i in 1..8 loop result := result || substr(alphabet, (get_byte(extensions.gen_random_bytes(1), 0) & 31) + 1, 1); end loop;
+  while char_length(result) < 8 loop
+    b := get_byte(extensions.gen_random_bytes(1), 0);
+    if b < 248 then
+      result := result || substr(alphabet, (b % 31) + 1, 1);
+    end if;
+  end loop;
   return result;
 end; $$;
 
@@ -54,18 +59,20 @@ begin
   raise exception 'Não foi possível criar a sala. Tente novamente.';
 end; $$;
 
+drop function if exists public.join_room(text);
 create or replace function public.join_room(p_code text)
-returns public.rooms language plpgsql security definer set search_path = '' as $$
-declare v_user uuid := auth.uid(); v_code text := upper(trim(coalesce(p_code, ''))); v_room public.rooms; v_attempts integer;
+returns uuid language plpgsql security definer set search_path = '' as $$
+declare v_user uuid := auth.uid(); v_code text := upper(trim(coalesce(p_code, ''))); v_room_id uuid; v_attempts integer;
 begin
-  if v_user is null then raise exception 'Código de entrada inválido.'; end if;
+  if v_user is null then return null; end if;
+  delete from public.room_join_attempts where attempted_at < now() - interval '1 day';
   insert into public.room_join_attempts(user_id) values (v_user);
   select count(*) into v_attempts from public.room_join_attempts where user_id = v_user and attempted_at >= now() - interval '15 minutes';
-  if v_attempts > 5 then raise exception 'Código de entrada inválido.'; end if;
-  select * into v_room from public.rooms where entry_code = v_code and deleted_at is null;
-  if not found then raise exception 'Código de entrada inválido.'; end if;
-  insert into public.room_members(room_id, user_id) values (v_room.id, v_user) on conflict (room_id, user_id) do nothing;
-  return v_room;
+  if v_attempts > 5 then return null; end if;
+  select id into v_room_id from public.rooms where entry_code = v_code and deleted_at is null;
+  if v_room_id is null then return null; end if;
+  insert into public.room_members(room_id, user_id) values (v_room_id, v_user) on conflict (room_id, user_id) do nothing;
+  return v_room_id;
 end; $$;
 
 create or replace function public.regenerate_room_code(p_room_id uuid)
@@ -82,13 +89,13 @@ begin
   raise exception 'Não foi possível regenerar o código. Tente novamente.';
 end; $$;
 
-revoke all on function public.room_entry_code() from public;
-revoke all on function public.is_room_member(uuid) from public;
-revoke all on function public.room_member_role(uuid) from public;
-revoke all on function public.room_member_profiles(uuid) from public;
-revoke all on function public.create_room(text) from public;
-revoke all on function public.join_room(text) from public;
-revoke all on function public.regenerate_room_code(uuid) from public;
+revoke all on function public.room_entry_code() from public, anon;
+revoke all on function public.is_room_member(uuid) from public, anon;
+revoke all on function public.room_member_role(uuid) from public, anon;
+revoke all on function public.room_member_profiles(uuid) from public, anon;
+revoke all on function public.create_room(text) from public, anon;
+revoke all on function public.join_room(text) from public, anon;
+revoke all on function public.regenerate_room_code(uuid) from public, anon;
 grant execute on function public.is_room_member(uuid), public.room_member_role(uuid), public.room_member_profiles(uuid), public.create_room(text), public.join_room(text), public.regenerate_room_code(uuid) to authenticated;
 
 create policy rooms_select_member on public.rooms for select to authenticated using ((select public.is_room_member(id)));
