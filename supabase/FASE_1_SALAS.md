@@ -12,7 +12,7 @@
 
 ## Tentativas de entrada
 
-`room_join_attempts` registra somente `user_id` e horário, nunca o código informado. `join_room` aceita no máximo cinco chamadas por usuário em quinze minutos. Código inexistente, sala removida e limite excedido retornam a mesma mensagem: `Código de entrada inválido.`
+`room_join_attempts` registra somente `user_id` e horário, nunca o código informado. `join_room(codigo)` devolve o UUID da sala ao entrar com sucesso e `NULL` para código inexistente, sala removida, usuário sem sessão ou limite atingido. Cada chamada autenticada é registrada; são aceitas no máximo cinco tentativas por usuário em quinze minutos e a sexta devolve `NULL`.
 
 ## Matriz de RLS
 
@@ -23,6 +23,10 @@ Crie quatro usuários confirmados: A e B pertencem à sala A; A também pertence
 | A owner da sala A e B | permitido | permitido | permitido | permitido |
 | B participant da sala A | permitido | negado | negado | negado |
 | C sem sala | negado | negado | negado | negado |
+
+Teste explicitamente a leitura do participante: na sessão de B, `SELECT` para cada tabela de domínio com `room_id = ROOM_A` deve devolver somente os dados da sala A. O mesmo usuário não pode inserir, alterar nem excluir esses dados.
+
+Teste o limite de entrada com uma sessão autenticada sem sala: chame `select public.join_room('CODIGO-INVALIDO');` cinco vezes, confirme cinco linhas recentes para o usuário em `room_join_attempts`, chame uma sexta vez e confirme retorno `NULL` e uma sexta linha registrada. Uma chamada com código válido durante a janela também deve devolver `NULL`.
 
 Execute os mesmos comandos abaixo para `players`, `championships`, `matches`, `fixtures` e `championship_participants`, substituindo IDs válidos da respectiva sala. O `SELECT` deve retornar apenas linhas permitidas; as escritas negadas devem afetar zero linhas ou receber erro de RLS.
 
@@ -44,6 +48,12 @@ delete from public.matches where room_id = 'ROOM_A' and id = MATCH_ID;
 ```
 
 Para `fixtures` e `championship_participants`, use os mesmos quatro verbos com suas colunas obrigatórias. Confirme também que `select * from public.room_member_profiles('ROOM_A');` retorna somente `display_name`, `username` e `avatar_url`, sem e-mail.
+
+## Pendências da Fase 4
+
+- Gestão de membros: promover admin, remover participante, sair da sala e transferir propriedade.
+- Gestão da sala: renomear e excluir sala.
+- Decidir se participantes podem receber o `entry_code` pela API ou se ele ficará visível apenas para owner e admin.
 
 ## Reversão no desenvolvimento
 
