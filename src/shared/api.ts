@@ -63,6 +63,14 @@ export type AuthSignUpResult = {
 };
 
 export type Api = {
+  listRoomMembers: (roomId: string) => Promise<Array<{ userId: string; role: string; displayName: string; username: string | null; avatarUrl: string | null }>>;
+  promoteRoomAdmin: (roomId: string, userId: string) => Promise<void>;
+  removeRoomMember: (roomId: string, userId: string) => Promise<void>;
+  renameRoom: (roomId: string, name: string) => Promise<void>;
+  regenerateRoomCode: (roomId: string) => Promise<string>;
+  transferRoomOwnership: (roomId: string, newOwnerId: string) => Promise<void>;
+  deleteRoom: (roomId: string) => Promise<void>;
+  leaveRoom: (roomId: string) => Promise<void>;
   createRoom: (name: string) => Promise<{ id: string; name: string; entryCode: string }>;
   listMyRooms: () => Promise<Array<{ id: string; name: string; role: string; entryCode: string; memberCount: number }>>;
   joinRoom: (code: string) => Promise<{ roomId: string | null }>;

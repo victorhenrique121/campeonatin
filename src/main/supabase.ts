@@ -325,6 +325,55 @@ export async function joinRoom(code: string): Promise<{ roomId: string | null }>
   return { roomId: data };
 }
 
+async function roomRpc(name: string, args: Record<string, string>) {
+  const client = await roomSessionClient();
+  const { data, error } = await client.rpc(name, args);
+  if (error) throw new Error("Algo deu errado. Tente novamente em instantes.");
+  return data;
+}
+
+export async function listRoomMembers(roomId: string): Promise<Array<{ userId: string; role: string; displayName: string; username: string | null; avatarUrl: string | null }>> {
+  const data = await roomRpc("list_room_members", { p_room_id: roomId });
+  if (!Array.isArray(data)) throw new Error("Algo deu errado. Tente novamente em instantes.");
+  return data.map((member: { user_id: string; role: string; display_name: string; username: string | null; avatar_url: string | null }) => ({
+    userId: member.user_id,
+    role: member.role,
+    displayName: member.display_name,
+    username: member.username,
+    avatarUrl: member.avatar_url,
+  }));
+}
+
+export async function promoteRoomAdmin(roomId: string, userId: string): Promise<void> {
+  await roomRpc("promote_room_admin", { p_room_id: roomId, p_user_id: userId });
+}
+
+export async function removeRoomMember(roomId: string, userId: string): Promise<void> {
+  await roomRpc("remove_room_member", { p_room_id: roomId, p_user_id: userId });
+}
+
+export async function renameRoom(roomId: string, name: string): Promise<void> {
+  await roomRpc("rename_room", { p_room_id: roomId, p_name: name });
+}
+
+export async function regenerateRoomCode(roomId: string): Promise<string> {
+  const data = await roomRpc("regenerate_room_code", { p_room_id: roomId });
+  if (typeof data !== "string") throw new Error("Algo deu errado. Tente novamente em instantes.");
+  return data;
+}
+
+export async function transferRoomOwnership(roomId: string, newOwnerId: string): Promise<void> {
+  await roomRpc("transfer_room_ownership", { p_room_id: roomId, p_new_owner_id: newOwnerId });
+}
+
+export async function deleteRoom(roomId: string): Promise<void> {
+  await roomRpc("delete_room", { p_room_id: roomId });
+}
+
+export async function leaveRoom(roomId: string): Promise<void> {
+  await roomRpc("leave_room", { p_room_id: roomId });
+}
+
 function normalizeAuthError(
   error: { message?: string; code?: string; status?: number } | null,
   context: "default" | "password-change" | "email-change" | "session-management" = "default",

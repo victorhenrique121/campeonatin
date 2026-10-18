@@ -16,6 +16,14 @@ const invokeRoom = (channel: string) => async (...args: unknown[]) => {
   }
 };
 const api: Api = {
+  listRoomMembers: invokeRoom("rooms:list-members"),
+  promoteRoomAdmin: invokeRoom("rooms:promote-admin"),
+  removeRoomMember: invokeRoom("rooms:remove-member"),
+  renameRoom: invokeRoom("rooms:rename"),
+  regenerateRoomCode: invokeRoom("rooms:regenerate-code"),
+  transferRoomOwnership: invokeRoom("rooms:transfer-ownership"),
+  deleteRoom: invokeRoom("rooms:delete"),
+  leaveRoom: invokeRoom("rooms:leave"),
   createRoom: invokeRoom("rooms:create"),
   listMyRooms: invokeRoom("rooms:list-mine"),
   joinRoom: invokeRoom("rooms:join"),
