@@ -5,6 +5,7 @@ import type {
   ArenaNews,
   Championship,
   Dashboard,
+  Duo,
   GameRulesSettings,
   MatchInput,
   Player,
@@ -583,6 +584,30 @@ export function repository(db: Database.Database) {
   return {
     gameRules,
     arenaNews,
+    findOrCreateDuo: (player1Id: number, player2Id: number, roomId: string | null): number => {
+      if (player1Id === player2Id) throw new Error("Uma dupla precisa de dois jogadores diferentes.");
+      const [first, second] = player1Id < player2Id ? [player1Id, player2Id] : [player2Id, player1Id];
+      const existing = db.prepare(
+        "SELECT id FROM teams2v2 WHERE player1_id = ? AND player2_id = ? AND room_id IS NOT DISTINCT FROM ?",
+      ).get(first, second, roomId) as { id: number } | undefined;
+      if (existing) return existing.id;
+      const result = db.prepare(
+        "INSERT INTO teams2v2 (room_id, player1_id, player2_id, created_at, updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+      ).run(roomId, first, second);
+      return Number(result.lastInsertRowid);
+    },
+    listDuos: (): Duo[] => db.prepare(
+      "SELECT id, room_id roomId, player1_id player1Id, player2_id player2Id, name FROM teams2v2",
+    ).all() as Duo[],
+    getDuoPlayers: (duoId: number): { player1: Player; player2: Player } | null => {
+      const duo = db.prepare("SELECT player1_id player1Id, player2_id player2Id FROM teams2v2 WHERE id = ?")
+        .get(duoId) as { player1Id: number; player2Id: number } | undefined;
+      if (!duo) return null;
+      const query = db.prepare("SELECT id, name, nickname, avatar, created_at createdAt FROM players WHERE id = ?");
+      const player1 = query.get(duo.player1Id) as Player | undefined;
+      const player2 = query.get(duo.player2Id) as Player | undefined;
+      return player1 && player2 ? { player1, player2 } : null;
+    },
     maybeFinishLeagueChampionship: (championshipId: number): boolean => {
       const championship = db
         .prepare("SELECT format FROM championships WHERE id=?")

@@ -27,6 +27,8 @@ export type Match = {
 
   player1Id: number;
   player2Id: number;
+  team1DuoId?: number | null;
+  team2DuoId?: number | null;
 
   player1: string;
   player2: string;
@@ -124,6 +126,8 @@ export type MatchInput = {
   championshipId?: number;
   playedAt?: string;
 };
+export type DuoInput = { player1Id: number; player2Id: number };
+export type Duo = { id: number; roomId: string | null; player1Id: number; player2Id: number; name: string | null };
 export type Championship = {
   id: number;
   name: string;
@@ -140,6 +144,8 @@ export type Fixture = {
   stage: string;
   player1Id: number;
   player2Id: number;
+  team1DuoId?: number | null;
+  team2DuoId?: number | null;
   player1: string;
   player2: string;
   matchId?: number;

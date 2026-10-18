@@ -3,6 +3,7 @@ import type {
   Championship,
   ChampionshipDetail,
   Dashboard,
+  DuoInput,
   Match,
   MatchInput,
   Player,
@@ -107,6 +108,7 @@ export type Api = {
   saveChampionship: (
     value: Omit<Championship, "id" | "participants"> & {
       participantIds: number[];
+      participantDuos?: DuoInput[];
       // Time escolhido para cada participante (mesmo índice de
       // participantIds) — persistido, deixa de ser esquecido ao registrar
       // resultados.
