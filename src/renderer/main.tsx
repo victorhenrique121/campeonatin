@@ -2063,15 +2063,6 @@ function ChampionshipPage({
           </span>
         </button>
         <button
-          className={mode === "duo" ? "active duo" : ""}
-          onClick={() => setMode("duo")}
-        >
-          <UsersRound />{" "}
-          <span>
-            Modo Dupla<small>Co-op · 2v2</small>
-          </span>
-        </button>
-        <button
           className={mode === "mad" ? "active mad" : ""}
           onClick={() => setMode("mad")}
         >
