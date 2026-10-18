@@ -256,6 +256,10 @@ function RoomsPage() {
   const [entryCode, setEntryCode] = useState("");
   const [error, setError] = useState("");
   const [creating, setCreating] = useState(false);
+  const [code, setCode] = useState("");
+  const [joinError, setJoinError] = useState("");
+  const [joinSuccess, setJoinSuccess] = useState("");
+  const [joining, setJoining] = useState(false);
   const [rooms, setRooms] = useState<Awaited<ReturnType<typeof window.arena.listMyRooms>>>([]);
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
   const [loadingRooms, setLoadingRooms] = useState(true);
@@ -306,6 +310,44 @@ function RoomsPage() {
     }
   };
 
+  const join = async (event: FormEvent) => {
+    event.preventDefault();
+    setJoinSuccess("");
+    if (!code.trim()) {
+      setJoinError("Informe o código da sala.");
+      return;
+    }
+
+    setJoinError("");
+    setJoining(true);
+    try {
+      const { roomId } = await window.arena.joinRoom(code);
+      if (roomId === null) {
+        setJoinError("Código inválido ou limite de tentativas atingido.");
+        return;
+      }
+
+      setJoinSuccess("Você entrou na sala.");
+      setCode("");
+      try {
+        const request = ++roomsRequest.current;
+        const result = await window.arena.listMyRooms();
+        if (request === roomsRequest.current) {
+          setRooms(result);
+          setRoomsError("");
+          setLoadingRooms(false);
+        }
+      } catch {
+        setLoadingRooms(false);
+        setJoinError("Você entrou na sala, mas não foi possível atualizar a lista.");
+      }
+    } catch (err) {
+      setJoinError(getFriendlyPrivacyError(err));
+    } finally {
+      setJoining(false);
+    }
+  };
+
   return (
     <>
       <section className="page-title">
@@ -319,12 +361,25 @@ function RoomsPage() {
             Nome da sala
             <input value={name} onChange={(event) => setName(event.target.value)} />
           </label>
-          <button className="primary" type="submit" disabled={creating}>
+          <button className="primary" type="submit" disabled={creating || joining}>
             {creating ? "Criando sala..." : "Criar sala"}
           </button>
         </form>
         {entryCode && <p role="status">Código da sala: {entryCode}</p>}
         {error && <p role="alert">{error}</p>}
+      </article>
+      <article className="panel">
+        <form className="form" onSubmit={join}>
+          <label>
+            Código da sala
+            <input value={code} onChange={(event) => setCode(event.target.value)} />
+          </label>
+          <button className="primary" type="submit" disabled={joining || creating}>
+            {joining ? "Entrando..." : "Entrar"}
+          </button>
+        </form>
+        {joinSuccess && <p role="status">{joinSuccess}</p>}
+        {joinError && <p role="alert">{joinError}</p>}
       </article>
       <article className="panel">
         <h2>Minhas salas</h2>
