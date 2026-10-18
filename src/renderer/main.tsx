@@ -696,11 +696,14 @@ function DashboardPage({
   const [editingMatch, setEditingMatch] = useState<Match | null>(null);
   const { toast, showToast } = useToast();
   const stats = data.statistics;
+  const largestStreak = stats?.streaks.reduce<(typeof stats.streaks)[number] | null>(
+    (largest, current) => !largest || current.streak > largest.streak ? current : largest,
+    null,
+  );
   const metrics = [
-    ["PARTIDAS", data.matches],
-    ["JOGADORES", data.players],
-    ["LÍDER", data.leader?.name ?? "—"],
-    ["TIME MAIS USADO", data.mostUsedTeam ?? "—"],
+    { label: "PARTIDAS TOTAIS", value: data.matches, detail: "Partidas registradas" },
+    { label: "LÍDER DA TEMPORADA", value: data.leader?.name ?? "—", detail: data.leader ? `${data.leader.points} pontos no ranking geral` : "Sem líder" },
+    { label: "MAIOR SEQUÊNCIA", value: largestStreak?.streak ?? 0, detail: largestStreak?.streak ? `${largestStreak.name} · sequência atual` : "Nenhuma sequência atual" },
   ];
   const trendPoints = stats?.rankingTrend[0]?.points ?? [];
   const maxTrend = Math.max(...trendPoints.map((point) => point.position), 1);
@@ -728,16 +731,12 @@ function DashboardPage({
           </button>
         )}
       </section>
-      <section className="metrics">
-        {metrics.map(([label, value]) => (
+      <section className="metrics dashboard-metrics">
+        {metrics.map(({ label, value, detail }) => (
           <article className="metric" key={label}>
             <span>{label}</span>
             <strong>{value}</strong>
-            <small>
-              {label === "LÍDER" && data.leader
-                ? `${data.leader.points} pontos`
-                : "No servidor"}
-            </small>
+            <small>{detail}</small>
           </article>
         ))}
       </section>
@@ -842,20 +841,28 @@ function DashboardPage({
         </article>
         <article className="panel">
           <div className="panel-head">
+            <h2>Rivalidade da Semana</h2>
+          </div>
+          <Empty text="Sem dados de rivalidade ainda" />
+        </article>
+        <article className="panel dashboard-recent">
+          <div className="panel-head">
             <h2>Últimas partidas</h2>
           </div>
           {data.recent.length ? (
             <div className="games">
               {data.recent.map((m) => (
-                <Game
-                  key={m.id}
-                  match={m}
-                  onEdit={setEditingMatch}
-                  onShare={async (match) => {
-                    await copyMatchSummary(match);
-                    showToast("Resumo copiado para o WhatsApp.");
-                  }}
-                />
+                <div key={m.id} className="dashboard-recent-match">
+                  <span className="dashboard-competition">{m.championship ?? "Competição não informada"}</span>
+                  <Game
+                    match={m}
+                    onEdit={setEditingMatch}
+                    onShare={async (match) => {
+                      await copyMatchSummary(match);
+                      showToast("Resumo copiado para o WhatsApp.");
+                    }}
+                  />
+                </div>
               ))}
             </div>
           ) : (

@@ -2204,10 +2204,10 @@ aside {
 
 main {
     padding: 44px clamp(24px, 4vw, 64px);
-    max-width: 1640px;
+    max-width: 1400px;
     width: 100%;
     min-width: 0;
-    margin: auto;
+    margin: 0 auto;
 }
 
 
@@ -3015,6 +3015,43 @@ nav .active {
     padding: 21px;
 }
 
+.dashboard-metrics {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    min-width: 0;
+}
+
+.dashboard-metrics > .metric,
+.dashboard-recent-match,
+.cards > * {
+    min-width: 0;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+}
+
+.dashboard-recent .games {
+    gap: 16px;
+}
+
+.dashboard-recent-match {
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    padding-top: 16px;
+}
+
+.dashboard-recent-match:first-child {
+    border-top: 0;
+    padding-top: 0;
+}
+
+.dashboard-competition {
+    color: var(--arena-accent);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.dashboard-recent .game em {
+    display: none;
+}
+
 .metric span {
     color: #8795ae;
     font-size: 11px;
@@ -3296,7 +3333,8 @@ nav .active {
 
 .cards {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    min-width: 0;
     gap: 10px;
 }
 
@@ -4000,6 +4038,20 @@ nav .active {
     to {
         opacity: 1;
         transform: translateY(0) scale(1);
+    }
+}
+
+@media (max-width: 1199px) {
+    .metrics.dashboard-metrics,
+    .cards {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 899px) {
+    .metrics.dashboard-metrics,
+    .cards {
+        grid-template-columns: minmax(0, 1fr);
     }
 }
 
