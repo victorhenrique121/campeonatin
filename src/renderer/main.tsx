@@ -265,6 +265,33 @@ function RoomsPage() {
   const [loadingRooms, setLoadingRooms] = useState(true);
   const [roomsError, setRoomsError] = useState("");
   const roomsRequest = useRef(0);
+  const [memberResult, setMemberResult] = useState<{
+    roomId: string;
+    members: Awaited<ReturnType<typeof window.arena.listRoomMembers>>;
+    error: string;
+  } | null>(null);
+  const [copyMessage, setCopyMessage] = useState("");
+  const selectedRoom = rooms.find((room) => room.id === selectedRoomId);
+
+  useEffect(() => {
+    if (!selectedRoomId) return;
+    let current = true;
+    window.arena.listRoomMembers(selectedRoomId).then((members) => {
+      if (current) setMemberResult({ roomId: selectedRoomId, members, error: "" });
+    }).catch((err: unknown) => {
+      if (current) setMemberResult({ roomId: selectedRoomId, members: [], error: getFriendlyPrivacyError(err) });
+    });
+    return () => { current = false; };
+  }, [selectedRoomId]);
+
+  const copyRoomCode = async (roomCode: string) => {
+    try {
+      await navigator.clipboard.writeText(roomCode);
+      setCopyMessage("Código copiado.");
+    } catch {
+      setCopyMessage("Não foi possível copiar o código.");
+    }
+  };
 
   useEffect(() => {
     const request = ++roomsRequest.current;
@@ -403,7 +430,11 @@ function RoomsPage() {
                 type="button"
                 className="secondary-button"
                 aria-pressed={selectedRoomId === room.id}
-                onClick={() => setSelectedRoomId(room.id)}
+                onClick={() => {
+                  setCopyMessage("");
+                  if (selectedRoomId !== room.id) setMemberResult(null);
+                  setSelectedRoomId(room.id);
+                }}
               >
                 {selectedRoomId === room.id ? "Selecionada" : "Entrar"}
               </button>
@@ -411,6 +442,39 @@ function RoomsPage() {
           ))}
         </div>
       </article>
+      {selectedRoom && (
+        <article className="panel">
+          <h2>{selectedRoom.name}</h2>
+          <p>Código da sala: {selectedRoom.entryCode}</p>
+          <button type="button" className="secondary-button" onClick={() => copyRoomCode(selectedRoom.entryCode)}>
+            Copiar
+          </button>
+          {copyMessage && <p role="status">{copyMessage}</p>}
+          <h3>Membros</h3>
+          {memberResult?.roomId !== selectedRoom.id ? (
+            <p role="status">Carregando membros...</p>
+          ) : memberResult.error ? (
+            <p role="alert">{memberResult.error}</p>
+          ) : (
+            <div className="cards players-list">
+              {memberResult.members.map((member) => (
+                <div className="player-card" key={member.userId}>
+                  {member.avatarUrl ? (
+                    <img src={member.avatarUrl} alt="" width={27} height={27} />
+                  ) : (
+                    <i>{member.displayName.slice(0, 1).toUpperCase()}</i>
+                  )}
+                  <div>
+                    <b>{member.displayName}</b>
+                    {member.username && <small>@{member.username}</small>}
+                    <small>{member.role === "owner" ? "Proprietário" : member.role === "admin" ? "Administrador" : member.role === "participant" ? "Participante" : "Desconhecido"}</small>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </article>
+      )}
     </>
   );
 }
