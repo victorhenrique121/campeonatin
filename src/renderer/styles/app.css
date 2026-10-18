@@ -5,9 +5,16 @@
    ================================---------- */
 :root {
     font-family: Inter, system-ui, sans-serif;
-    color: #ecf0fb;
-    --arena-bg: #0a0f1f;
-    --arena-accent: #8872ff;
+    color: var(--arena-text);
+    font-size: 15px;
+    font-weight: 400;
+    --arena-bg: #0a0c10;
+    --arena-card: #161a22;
+    --arena-accent: #7e5ff0;
+    --arena-success: #3dfd96;
+    --arena-gold: #ffd700;
+    --arena-text: #ffffff;
+    --arena-text-secondary: #8b949e;
     background: var(--arena-bg);
 }
 
@@ -2188,8 +2195,8 @@ body {
 
 aside {
     min-width: 0;
-    background: #0d1427;
-    border-right: 1px solid #202942;
+    background: var(--arena-bg);
+    border-right: 1px solid rgba(255, 255, 255, 0.06);
     padding: 25px 14px;
     display: flex;
     flex-direction: column;
@@ -2234,12 +2241,12 @@ nav {
 nav button,
 .side-bottom button {
     background: transparent;
-    color: #8e9ab5;
+    color: var(--arena-text-secondary);
     display: flex;
     align-items: center;
     gap: 12px;
     padding: 12px;
-    border-radius: 9px;
+    border-radius: 8px;
     text-align: left;
 }
 
@@ -2250,7 +2257,10 @@ nav .active {
 }
 
 nav .active {
-    box-shadow: inset 3px 0 #8c7cff;
+    background: var(--arena-card);
+    border: 1px solid var(--arena-accent);
+    color: var(--arena-text);
+    box-shadow: 0 0 16px color-mix(in srgb, var(--arena-accent) 30%, transparent);
 }
 
 .side-bottom {
@@ -2365,10 +2375,10 @@ nav .active {
 }
 
 .app-modal-cancel {
-    border: 1px solid #293653;
+    border: 1px solid rgba(255, 255, 255, 0.12);
 
-    background: #111a2e;
-    color: #9ba8bd;
+    background: transparent;
+    color: var(--arena-text);
 }
 
 .app-modal-cancel:hover {
@@ -2388,10 +2398,10 @@ nav .active {
 }
 
 .app-modal-danger {
-    border: 1px solid #693f49;
+    border: 1px solid #ff5c5c;
 
-    background: #351b23;
-    color: #f0a7b1;
+    background: transparent;
+    color: #ff5c5c;
 }
 
 .app-modal-danger:hover {
@@ -2431,10 +2441,10 @@ nav .active {
    4. COMPONENTES E BOTÕES
    ================================---------- */
 .primary {
-    background: linear-gradient(135deg, #8d78ff, #6954e8);
+    background: var(--arena-accent);
     color: white;
-    padding: 12px 17px;
-    border-radius: 9px;
+    padding: 10px 16px;
+    border-radius: 8px;
     font-weight: 700;
     display: flex;
     gap: 8px;
@@ -2621,9 +2631,9 @@ nav .active {
   gap: 6px;
   padding: 4px 10px;
   background: transparent;
-  color: #94a3b8; /* Cor neutra/discreta no estado normal */
-  border: 1px solid transparent;
-  border-radius: 6px;
+  color: #ff5c5c;
+  border: 1px solid #ff5c5c;
+  border-radius: 8px;
   font-size: 11px;
   font-weight: 500;
   cursor: pointer;
@@ -2946,7 +2956,7 @@ nav .active {
 
 .page-title p,
 .panel-head p {
-    color: #7d6bff;
+    color: var(--arena-accent);
     font-size: 11px;
     font-weight: 800;
     letter-spacing: 1.3px;
@@ -2959,7 +2969,7 @@ nav .active {
 }
 
 .page-title span {
-    color: #93a0b9;
+    color: var(--arena-text-secondary);
 }
 
 .metrics {
@@ -2972,9 +2982,10 @@ nav .active {
 .metric,
 .panel,
 .team-card {
-    background: #111a30;
-    border: 1px solid #222d49;
+    background: var(--arena-card);
+    border: 1px solid rgba(255, 255, 255, 0.06);
     border-radius: 12px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
 }
 
 .metric {
@@ -2994,7 +3005,7 @@ nav .active {
 }
 
 .metric small {
-    color: #66738e;
+    color: var(--arena-text-secondary);
     font-size: 12px;
 }
 
@@ -3245,11 +3256,11 @@ nav .active {
 .form input,
 .form select,
 .search input {
-    background: #0b1224;
-    border: 1px solid #293653;
-    color: #f0f2f9;
-    padding: 11px;
-    border-radius: 7px;
+    background: var(--arena-bg);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: var(--arena-text);
+    padding: 10px 14px;
+    border-radius: 8px;
     font: inherit;
     width: 100%;
     outline: none;
@@ -3257,7 +3268,7 @@ nav .active {
 
 .form input:focus,
 .form select:focus {
-    border-color: #8273ee;
+    border-color: var(--arena-accent);
 }
 
 .cards {
@@ -3448,9 +3459,9 @@ nav .active {
   gap: 6px;
   padding: 4px 10px;
   background: transparent;
-  color: #94a3b8; /* Cor neutra/discreta no estado normal */
-  border: 1px solid transparent;
-  border-radius: 6px;
+  color: #ff5c5c;
+  border: 1px solid #ff5c5c;
+  border-radius: 8px;
   font-size: 11px;
   font-weight: 500;
   cursor: pointer;

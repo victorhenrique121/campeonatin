@@ -31,7 +31,7 @@ export const ARENA_PALETTES: ArenaPalette[] = [
     id: "violeta-arena",
     name: "Violeta Arena",
     description: "A aparência padrão atual do FC Arena.",
-    dark: { accent: "#8872ff", background: "#0a0f1f", text: "#f4f6ff" },
+    dark: { accent: "#7e5ff0", background: "#0a0c10", text: "#f4f6ff" },
     light: { accent: "#6346d9", background: "#f5f7fc", text: "#182033" },
   },
   {

@@ -111,8 +111,8 @@ const applyStoredAppearance = () => {
   const colors = palette
     ? getArenaPaletteVariant(palette, theme)
     : {
-        accent: localStorage.getItem("arena-accent") ?? "#8872ff",
-        background: localStorage.getItem("arena-background") ?? "#0a0f1f",
+        accent: localStorage.getItem("arena-accent") ?? "#7e5ff0",
+        background: localStorage.getItem("arena-background") ?? "#0a0c10",
       };
 
   document.documentElement.style.setProperty("--arena-accent", colors.accent);
@@ -3074,11 +3074,11 @@ function SettingsPage({ reload }: { reload: () => Promise<void> }) {
   ];
 
   const [accent, setAccent] = useState(
-    () => localStorage.getItem("arena-accent") ?? "#8872ff",
+    () => localStorage.getItem("arena-accent") ?? "#7e5ff0",
   );
 
   const [background, setBackground] = useState(
-    () => localStorage.getItem("arena-background") ?? "#0a0f1f",
+    () => localStorage.getItem("arena-background") ?? "#0a0c10",
   );
 
   const [paletteId, setPaletteId] = useState<ArenaPalette["id"] | "custom">(() => {
@@ -3089,9 +3089,9 @@ function SettingsPage({ reload }: { reload: () => Promise<void> }) {
 
     const theme: ArenaTheme =
       localStorage.getItem("arena-theme") === "light" ? "light" : "dark";
-    const currentAccent = localStorage.getItem("arena-accent") ?? "#8872ff";
+    const currentAccent = localStorage.getItem("arena-accent") ?? "#7e5ff0";
     const currentBackground =
-      localStorage.getItem("arena-background") ?? "#0a0f1f";
+      localStorage.getItem("arena-background") ?? "#0a0c10";
     const matchingPalette = ARENA_PALETTES.find((palette) => {
       const colors = getArenaPaletteVariant(palette, theme);
       return (
