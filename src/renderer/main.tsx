@@ -1114,6 +1114,80 @@ function TeamPicker({
   );
 }
 
+function RankingPage({ data }: { data: Dashboard }) {
+  const [tab, setTab] = useState<"geral" | "individuais" | "confrontos">("geral");
+  const stats = data.statistics;
+  const largestStreak = stats?.streaks.reduce<(typeof stats.streaks)[number] | null>(
+    (largest, current) => !largest || current.streak > largest.streak ? current : largest,
+    null,
+  );
+  const tabs = [
+    { id: "geral", label: "Classificação Geral" },
+    { id: "individuais", label: "Estatísticas Individuais" },
+    { id: "confrontos", label: "Confrontos Diretos" },
+  ] as const;
+
+  return (
+    <>
+      <section className="page-title">
+        <div>
+          <p>CLASSIFICAÇÃO</p>
+          <h1>Ranking geral</h1>
+        </div>
+      </section>
+      <div className="ranking-tabs" aria-label="Seções do ranking">
+        {tabs.map(({ id, label }) => (
+          <button key={id} type="button" className={tab === id ? "active" : ""} aria-pressed={tab === id} onClick={() => setTab(id)}>
+            {label}
+          </button>
+        ))}
+      </div>
+      {tab !== "geral" ? (
+        <article className="panel"><Empty text="Em breve" /></article>
+      ) : (
+        <>
+          <section className="metrics dashboard-metrics">
+            <article className="metric">
+              <span>ARTILHEIRO</span>
+              <strong>{stats?.topScorer?.name ?? "—"}</strong>
+              {stats?.topScorer && <small>{stats.topScorer.value} gols</small>}
+            </article>
+            <article className="metric">
+              <span>MELHOR APROVEITAMENTO</span>
+              <strong>{stats?.bestWinRate?.name ?? "—"}</strong>
+              {stats?.bestWinRate && <small>{stats.bestWinRate.value}%</small>}
+            </article>
+            <article className="metric">
+              <span>MAIOR SEQUÊNCIA ATUAL</span>
+              <strong>{largestStreak?.streak ? largestStreak.name : "—"}</strong>
+              {!!largestStreak?.streak && <small>{largestStreak.streak} vitórias seguidas</small>}
+            </article>
+          </section>
+          <section className="ranking-layout">
+            <article className="panel">
+              <div className="panel-head"><h2>Classificação Geral</h2></div>
+              <div className="ranking-filters" aria-label="Filtros da classificação">
+                {["Artilharia", "Aproveitamento", "Saldo de gols", "Vitórias"].map((label) => (
+                  <button key={label} type="button" disabled title="Filtro em breve">{label}</button>
+                ))}
+                <small>Filtros em breve.</small>
+              </div>
+              <Ranking rows={data.ranking} />
+            </article>
+            <article className="panel ranking-insights">
+              <div className="panel-head"><h2>Insights</h2></div>
+              <div><span>Jogador Mais Participativo</span><strong>{stats?.mostPlayedPlayer?.name ?? "—"}</strong>{stats?.mostPlayedPlayer && <small>{stats.mostPlayedPlayer.value} partidas</small>}</div>
+              <div><span>Melhor Fase</span><strong>{stats?.bestForm?.name ?? "—"}</strong>{stats?.bestForm && <small>{stats.bestForm.value}% nos últimos jogos</small>}</div>
+              <div><span>Maior Evolução</span><strong>—</strong></div>
+              <div><span>Distribuição de Gols (Top 5)</span><div className="ranking-chart-placeholder">Gráfico em breve</div></div>
+            </article>
+          </section>
+        </>
+      )}
+    </>
+  );
+}
+
 function MatchesPage({
   players,
   teams,
@@ -3616,17 +3690,7 @@ function ArenaApp({ user, onSignOut }: { user: AuthUser; onSignOut: () => void }
     ) : page === "matches" ? (
       <MatchesPage players={players} teams={teams} reload={reload} totalMatches={data.matches} />
     ) : page === "ranking" ? (
-      <>
-        <section className="page-title">
-          <div>
-            <p>CLASSIFICAÇÃO</p>
-            <h1>Ranking geral</h1>
-          </div>
-        </section>
-        <article className="panel">
-          <Ranking rows={data.ranking} />
-        </article>
-      </>
+      <RankingPage data={data} />
     ) : page === "championships" ? (
       <ChampionshipPage players={players} teams={teams} />
     ) : page === "profile" ? (

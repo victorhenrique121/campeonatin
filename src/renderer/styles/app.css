@@ -3345,6 +3345,75 @@ nav .active {
     align-items: start;
 }
 
+.ranking-tabs,
+.ranking-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.ranking-tabs button,
+.ranking-filters button {
+    padding: 10px 14px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--arena-text-secondary);
+}
+
+.ranking-tabs button.active {
+    border-color: var(--arena-accent);
+    background: color-mix(in srgb, var(--arena-accent) 18%, transparent);
+    color: var(--arena-text);
+}
+
+.ranking-filters small {
+    color: var(--arena-text-secondary);
+}
+
+.ranking-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+    gap: 22px;
+    align-items: start;
+}
+
+.ranking-layout > * {
+    min-width: 0;
+}
+
+.ranking-insights {
+    display: grid;
+    gap: 18px;
+}
+
+.ranking-insights > div:not(.panel-head) {
+    display: grid;
+    gap: 6px;
+    overflow-wrap: anywhere;
+}
+
+.ranking-insights span,
+.ranking-insights small {
+    color: var(--arena-text-secondary);
+}
+
+.ranking-chart-placeholder {
+    padding: 24px;
+    border: 1px dashed rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    color: var(--arena-text-secondary);
+    text-align: center;
+}
+
+@media (max-width: 1099px) {
+    .ranking-layout {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
 .matches-layout > * {
     min-width: 0;
 }
