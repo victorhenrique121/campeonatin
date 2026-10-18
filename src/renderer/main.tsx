@@ -3570,6 +3570,8 @@ function ArenaApp({ user, onSignOut }: { user: AuthUser; onSignOut: () => void }
     ) : (
       <TeamsPage teams={teams} />
     );
+  // Oculto até as ações da Central da Arena serem implementadas.
+  const showArenaMenu = false;
   return (
     <div className="shell">
       <aside>
@@ -3667,7 +3669,7 @@ function ArenaApp({ user, onSignOut }: { user: AuthUser; onSignOut: () => void }
         )}
       </div>
 
-      <ArenaTools />
+      {showArenaMenu && <ArenaTools />}
     </div>
   );
 }
