@@ -58,6 +58,56 @@ export function createDatabase(file: string) {
       "ALTER TABLE fixtures ADD COLUMN stage TEXT NOT NULL DEFAULT 'league'",
     );
 
+  const needsDuoMigration = (table: "fixtures" | "matches") => {
+    const columns = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+    return !columns.some((column) => column.name === "team1_duo_id");
+  };
+  if (needsDuoMigration("fixtures") || needsDuoMigration("matches")) {
+    db.pragma("foreign_keys = OFF");
+    try {
+      db.transaction(() => {
+        const rebuild = (table: "fixtures" | "matches", create: string, columns: string) => {
+          if (!needsDuoMigration(table)) return;
+          const existing = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+          const expected = columns.split(", ");
+          if (existing.some(({ name }) => !expected.includes(name))) {
+            throw new Error(`Não foi possível migrar ${table}: existem colunas não previstas.`);
+          }
+          const objects = db.prepare("SELECT sql FROM sqlite_master WHERE tbl_name = ? AND type IN ('index', 'trigger') AND sql IS NOT NULL").all(table) as { sql: string }[];
+          db.exec(create);
+          db.exec(`INSERT INTO ${table}_new (${columns}) SELECT ${columns} FROM ${table}`);
+          db.exec(`DROP TABLE ${table}; ALTER TABLE ${table}_new RENAME TO ${table}`);
+          objects.forEach(({ sql }) => db.exec(sql));
+        };
+        rebuild("fixtures", `CREATE TABLE fixtures_new (
+          id INTEGER PRIMARY KEY, championship_id INTEGER NOT NULL REFERENCES championships(id) ON DELETE CASCADE,
+          round_number INTEGER NOT NULL, stage TEXT NOT NULL DEFAULT 'league',
+          player1_id INTEGER REFERENCES players(id) ON DELETE RESTRICT, player2_id INTEGER REFERENCES players(id) ON DELETE RESTRICT,
+          match_id INTEGER UNIQUE REFERENCES matches(id) ON DELETE SET NULL,
+          team1_duo_id INTEGER REFERENCES teams2v2(id) ON DELETE RESTRICT, team2_duo_id INTEGER REFERENCES teams2v2(id) ON DELETE RESTRICT,
+          UNIQUE(championship_id, player1_id, player2_id),
+          CHECK ((player1_id IS NOT NULL AND player2_id IS NOT NULL AND team1_duo_id IS NULL AND team2_duo_id IS NULL)
+            OR (player1_id IS NULL AND player2_id IS NULL AND team1_duo_id IS NOT NULL AND team2_duo_id IS NOT NULL))
+        )`, "id, championship_id, round_number, stage, player1_id, player2_id, match_id");
+        rebuild("matches", `CREATE TABLE matches_new (
+          id INTEGER PRIMARY KEY, player1_id INTEGER REFERENCES players(id) ON DELETE RESTRICT,
+          player2_id INTEGER REFERENCES players(id) ON DELETE RESTRICT,
+          team1_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE RESTRICT, team2_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE RESTRICT,
+          score1 INTEGER NOT NULL CHECK(score1 >= 0), score2 INTEGER NOT NULL CHECK(score2 >= 0),
+          championship_id INTEGER REFERENCES championships(id) ON DELETE SET NULL, played_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          team1_duo_id INTEGER REFERENCES teams2v2(id) ON DELETE RESTRICT, team2_duo_id INTEGER REFERENCES teams2v2(id) ON DELETE RESTRICT,
+          CHECK(player1_id <> player2_id),
+          CHECK ((player1_id IS NOT NULL AND player2_id IS NOT NULL AND team1_duo_id IS NULL AND team2_duo_id IS NULL)
+            OR (player1_id IS NULL AND player2_id IS NULL AND team1_duo_id IS NOT NULL AND team2_duo_id IS NOT NULL))
+        )`, "id, player1_id, player2_id, team1_id, team2_id, score1, score2, championship_id, played_at");
+        const violations = db.pragma("foreign_key_check") as unknown[];
+        if (violations.length) throw new Error("Não foi possível migrar os dados: existem referências inválidas.");
+      })();
+    } finally {
+      db.pragma("foreign_keys = ON");
+    }
+  }
+
   // Migração: remover campo 'rating' da tabela 'teams' se existir
   const teamsColumns = db.prepare("PRAGMA table_info(teams)").all() as {
     name: string;
