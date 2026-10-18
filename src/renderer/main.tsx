@@ -271,6 +271,11 @@ function RoomsPage() {
     error: string;
   } | null>(null);
   const [copyMessage, setCopyMessage] = useState("");
+  const [memberActionMessage, setMemberActionMessage] = useState("");
+  const [memberActionError, setMemberActionError] = useState("");
+  const [memberActionPending, setMemberActionPending] = useState(false);
+  const selectedRoomRef = useRef<string | null>(null);
+  const selectionVersion = useRef(0);
   const selectedRoom = rooms.find((room) => room.id === selectedRoomId);
 
   useEffect(() => {
@@ -290,6 +295,35 @@ function RoomsPage() {
       setCopyMessage("Código copiado.");
     } catch {
       setCopyMessage("Não foi possível copiar o código.");
+    }
+  };
+
+  const changeMember = async (roomId: string, userId: string, action: "promote" | "remove") => {
+    const version = selectionVersion.current;
+    setMemberActionMessage("");
+    setMemberActionError("");
+    setMemberActionPending(true);
+    try {
+      if (action === "promote") {
+        await window.arena.promoteRoomAdmin(roomId, userId);
+      } else {
+        await window.arena.removeRoomMember(roomId, userId);
+      }
+      if (selectedRoomRef.current !== roomId || selectionVersion.current !== version) return;
+      setMemberActionMessage(action === "promote" ? "Membro promovido a administrador." : "Membro removido da sala.");
+      try {
+        const members = await window.arena.listRoomMembers(roomId);
+        if (selectedRoomRef.current === roomId && selectionVersion.current === version) setMemberResult({ roomId, members, error: "" });
+      } catch {
+        if (selectedRoomRef.current === roomId && selectionVersion.current === version) {
+          setMemberResult({ roomId, members: [], error: "Não foi possível atualizar a lista de membros." });
+          setMemberActionError("A ação foi concluída, mas não foi possível atualizar a lista de membros.");
+        }
+      }
+    } catch (err) {
+      if (selectedRoomRef.current === roomId && selectionVersion.current === version) setMemberActionError(getFriendlyPrivacyError(err));
+    } finally {
+      setMemberActionPending(false);
     }
   };
 
@@ -432,7 +466,13 @@ function RoomsPage() {
                 aria-pressed={selectedRoomId === room.id}
                 onClick={() => {
                   setCopyMessage("");
-                  if (selectedRoomId !== room.id) setMemberResult(null);
+                  setMemberActionMessage("");
+                  setMemberActionError("");
+                  if (selectedRoomId !== room.id) {
+                    selectionVersion.current++;
+                    setMemberResult(null);
+                  }
+                  selectedRoomRef.current = room.id;
                   setSelectedRoomId(room.id);
                 }}
               >
@@ -451,6 +491,8 @@ function RoomsPage() {
           </button>
           {copyMessage && <p role="status">{copyMessage}</p>}
           <h3>Membros</h3>
+          {memberActionMessage && <p role="status">{memberActionMessage}</p>}
+          {memberActionError && <p role="alert">{memberActionError}</p>}
           {memberResult?.roomId !== selectedRoom.id ? (
             <p role="status">Carregando membros...</p>
           ) : memberResult.error ? (
@@ -469,6 +511,18 @@ function RoomsPage() {
                     {member.username && <small>@{member.username}</small>}
                     <small>{member.role === "owner" ? "Proprietário" : member.role === "admin" ? "Administrador" : member.role === "participant" ? "Participante" : "Desconhecido"}</small>
                   </div>
+                  {selectedRoom.role === "owner" && member.role !== "owner" && (
+                    <>
+                      {member.role === "participant" && (
+                        <button type="button" className="secondary-button" disabled={memberActionPending} onClick={() => changeMember(selectedRoom.id, member.userId, "promote")}>
+                          Promover
+                        </button>
+                      )}
+                      <button type="button" className="danger" disabled={memberActionPending} onClick={() => changeMember(selectedRoom.id, member.userId, "remove")}>
+                        Remover
+                      </button>
+                    </>
+                  )}
                 </div>
               ))}
             </div>
