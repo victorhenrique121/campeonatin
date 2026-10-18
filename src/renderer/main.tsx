@@ -2573,6 +2573,8 @@ function ChampionshipPage({
         )}
       </section>
 
+      <div className="championship-overview">
+        <div className="championship-overview-main">
       <section className="season-gallery">
         <div className="section-label">
           <div>
@@ -2620,7 +2622,7 @@ function ChampionshipPage({
               </div>
               <footer>
                 <span>
-                  <Users size={15} /> {c.participants} players
+                  <Users size={15} /> {c.participants} participantes
                 </span>
                 <span>
                   Ver arena <ArrowRight size={15} />
@@ -2648,6 +2650,13 @@ function ChampionshipPage({
                   </button>
                 </div>
               </footer>
+              {detail?.championship.id === c.id && (
+                <div className="season-avatars" aria-label="Avatares dos participantes">
+                  {detail.standing.map((standing) => players.find((player) => player.id === standing.id)).filter((player): player is Player => Boolean(player?.avatar)).map((player) => (
+                    <img key={player.id} src={player.avatar} alt={player.name} title={player.name} />
+                  ))}
+                </div>
+              )}
             </article>
           ))}
         </div>
@@ -2665,6 +2674,15 @@ function ChampionshipPage({
           }}
         />
       )}
+        </div>
+        <article className="panel arena-news">
+          <div className="panel-head"><h2>Notícias da Arena</h2></div>
+          <small>Em breve: notícias geradas automaticamente</small>
+          <div className="arena-news-card"><Trophy size={20} /><div><strong>Goleada da Semana</strong><p>Os destaques da arena aparecerão aqui.</p></div></div>
+          <div className="arena-news-card"><Sparkles size={20} /><div><strong>Virada Épica</strong><p>As reviravoltas ganharão destaque aqui.</p></div></div>
+          <div className="arena-news-card"><Gamepad2 size={20} /><div><strong>Pato do Mês</strong><p>Os momentos divertidos aparecerão aqui.</p></div></div>
+        </article>
+      </div>
       {confirming && (
         <AppModal
           title="Confirmar campeonato"
@@ -2749,6 +2767,17 @@ function ChampionshipDetailView({
         <Ranking rows={detail.standing} />
       </article>
       <article className="panel wide">
+        <div className="upcoming-fixtures">
+          <div className="panel-head"><h2>Próximos jogos</h2></div>
+          {detail.fixtures.some((fixture) => !fixture.matchId) ? (
+            detail.fixtures.filter((fixture) => !fixture.matchId).slice(0, 5).map((fixture) => (
+              <div className="upcoming-fixture" key={fixture.id}>
+                <span>{fixture.player1} × {fixture.player2}</span>
+                <small>{fixture.stage === "league" ? `Rodada ${fixture.round}` : fixture.stage}</small>
+              </div>
+            ))
+          ) : <Empty text="Nenhum próximo jogo." />}
+        </div>
         <div className="panel-head">
           <h2>
             {detail.championship.format === "league" ? "Calendário" : "Chave"}

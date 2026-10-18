@@ -2000,6 +2000,81 @@ body {
     padding-bottom: 25px;
 }
 
+.championship-overview {
+    display: grid;
+    grid-template-columns: minmax(0, 7fr) minmax(0, 3fr);
+    gap: 22px;
+    align-items: start;
+    margin-top: 18px;
+}
+
+.championship-overview-main,
+.arena-news {
+    min-width: 0;
+}
+
+.championship-overview .season-gallery {
+    margin-top: 0;
+}
+
+.championship-overview .season-card {
+    min-height: 150px;
+}
+
+.season-avatars {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-top: 10px;
+}
+
+.season-avatars img {
+    width: 28px;
+    height: 28px;
+    object-fit: cover;
+    border-radius: 50%;
+}
+
+.arena-news > small,
+.arena-news-card p,
+.upcoming-fixture small {
+    color: var(--arena-text-secondary);
+}
+
+.arena-news-card {
+    display: flex;
+    gap: 12px;
+    padding: 16px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.arena-news-card svg {
+    flex-shrink: 0;
+    color: var(--arena-accent);
+}
+
+.arena-news-card p {
+    margin: 6px 0 0;
+}
+
+.upcoming-fixtures {
+    margin-bottom: 24px;
+}
+
+.upcoming-fixture {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+@media (max-width: 1099px) {
+    .championship-overview {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
 .championship-cards {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
