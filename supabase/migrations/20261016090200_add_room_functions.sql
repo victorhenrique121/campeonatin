@@ -82,7 +82,7 @@ create or replace function public.regenerate_room_code(p_room_id uuid)
 returns text language plpgsql security definer set search_path = '' as $$
 declare v_code text; v_try integer;
 begin
-  if public.room_member_role(p_room_id) not in ('owner', 'admin') then raise exception 'Sem permissão para regenerar o código.'; end if;
+  if public.room_member_role(p_room_id) is null or public.room_member_role(p_room_id) not in ('owner', 'admin') then raise exception 'Sem permissão para regenerar o código.'; end if;
   for v_try in 1..10 loop
     v_code := public.room_entry_code();
     begin update public.rooms set entry_code = v_code where id = p_room_id and deleted_at is null; return v_code;
