@@ -88,6 +88,7 @@ import "./styles/HeadToHeadCard.css";
 type Page =
   | "dashboard"
   | "rooms"
+  | "friends"
   | "players"
   | "matches"
   | "ranking"
@@ -95,6 +96,8 @@ type Page =
   | "settings"
   | "profile"
   | "teams";
+// Partidas e ranking voltam quando houver sala ativa.
+const showRoomOnlyTabs = false;
 const date = (value: string) =>
   new Intl.DateTimeFormat("pt-BR", { dateStyle: "medium" }).format(
     new Date(value),
@@ -248,6 +251,17 @@ function Game({
         </button>
       )}
     </div>
+  );
+}
+
+function FriendsPage() {
+  return (
+    <section className="page-title">
+      <div>
+        <h1>Amigos</h1>
+        <span>Em breve: adicionar amigos e convidar para salas.</span>
+      </div>
+    </section>
   );
 }
 
@@ -708,9 +722,11 @@ function DashboardPage({
           <h1>Bem-vindo à Arena</h1>
           <span>Campeonatos, partidas e estatísticas em um único lugar.</span>
         </div>
-        <button className="primary" onClick={() => go("matches")}>
-          <CirclePlus size={18} /> Registrar partida
-        </button>
+        {showRoomOnlyTabs && (
+          <button className="primary" onClick={() => go("matches")}>
+            <CirclePlus size={18} /> Registrar partida
+          </button>
+        )}
       </section>
       <section className="metrics">
         {metrics.map(([label, value]) => (
@@ -3530,17 +3546,19 @@ function ArenaApp({ user, onSignOut }: { user: AuthUser; onSignOut: () => void }
   const nav: [Page, string, React.ElementType][] = [
     ["dashboard", "Visão geral", LayoutDashboard],
     ["rooms", "Salas personalizadas", DoorOpen],
-    ["players", "Jogadores", Users],
-    ["matches", "Partidas", Gamepad2],
-    ["ranking", "Ranking", BarChart3],
+    ...(showRoomOnlyTabs
+      ? ([["matches", "Partidas", Gamepad2], ["ranking", "Ranking", BarChart3]] as [Page, string, React.ElementType][])
+      : []),
     ["championships", "Campeonatos", Trophy],
-    ["teams", "Times", Shield],
+    ["friends", "Amigos", UsersRound],
   ];
   const view =
     page === "dashboard" ? (
       <DashboardPage data={data} go={setPage} reload={reload} />
     ) : page === "rooms" ? (
       <RoomsPage />
+    ) : page === "friends" ? (
+      <FriendsPage />
     ) : page === "players" ? (
       <PlayersPage players={players} reload={reload} />
     ) : page === "matches" ? (
