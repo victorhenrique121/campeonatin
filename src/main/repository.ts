@@ -802,7 +802,7 @@ export function repository(db: Database.Database) {
       );
       const recent = db
         .prepare(
-          `SELECT m.id,m.played_at playedAt,p1.name player1,p2.name player2,t1.name team1,t2.name team2,m.score1 score1,m.score2 score2 FROM matches m JOIN players p1 ON p1.id=m.player1_id JOIN players p2 ON p2.id=m.player2_id JOIN teams t1 ON t1.id=m.team1_id JOIN teams t2 ON t2.id=m.team2_id ORDER BY m.played_at DESC LIMIT 5`,
+          `SELECT m.id,m.played_at playedAt,m.player1_id player1Id,m.player2_id player2Id,p1.name player1,p2.name player2,t1.name team1,t2.name team2,m.score1 score1,m.score2 score2 FROM matches m JOIN players p1 ON p1.id=m.player1_id JOIN players p2 ON p2.id=m.player2_id JOIN teams t1 ON t1.id=m.team1_id JOIN teams t2 ON t2.id=m.team2_id ORDER BY m.played_at DESC LIMIT 5`,
         )
         .all() as Dashboard["recent"];
       const used = db
