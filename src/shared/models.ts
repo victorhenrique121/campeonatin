@@ -34,6 +34,7 @@ export type Match = {
 
   championship?: string;
   championshipId?: number | null;
+  championshipFormat?: string | null;
 };
 export type Standing = {
   id: number;

@@ -3433,6 +3433,21 @@ nav .active {
     font-size: 10px;
 }
 
+.game .badge-casual {
+    background: rgba(139, 148, 158, 0.2);
+    color: #c5cbd1;
+}
+
+.game .badge-league {
+    background: color-mix(in srgb, var(--arena-accent) 20%, transparent);
+    color: var(--arena-text);
+}
+
+.game .badge-cup {
+    background: rgba(255, 215, 0, 0.16);
+    color: #ffd700;
+}
+
 .game .game-actions {
     display: flex;
     gap: 4px;

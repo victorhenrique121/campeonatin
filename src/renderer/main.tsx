@@ -213,6 +213,11 @@ function Game({
 }) {
   const player1 = players.find((player) => player.id === match.player1Id);
   const player2 = players.find((player) => player.id === match.player2Id);
+  const competition = match.championshipFormat === "league"
+    ? { label: "Liga", className: "badge-league" }
+    : match.championshipFormat === "knockout" || match.championshipFormat === "groups_knockout"
+      ? { label: "Copa", className: "badge-cup" }
+      : { label: "Clássico", className: "badge-casual" };
   const avatar = (name: string, player?: Player) => (
     <span className="game-avatar" aria-hidden="true">
       {player?.avatar ? <img src={player.avatar} alt="" /> : name.trim().charAt(0).toUpperCase()}
@@ -222,7 +227,8 @@ function Game({
     <div className="game">
       <div className="game-meta">
         <small>{date(match.playedAt)}</small>
-        {match.championship && <span className="game-competition">{match.championship}</span>}
+        <span className={`game-competition ${competition.className}`}>{competition.label}</span>
+        {match.championship && <small>{match.championship}</small>}
       </div>
       <div className="game-content">
         <div className="game-player">
