@@ -117,10 +117,12 @@ export type Dashboard = {
   statistics?: StatisticsDashboard | null;
 };
 export type MatchInput = {
-  player1Id: number;
-  player2Id: number;
-  team1Id: number;
-  team2Id: number;
+  player1Id?: number | null;
+  player2Id?: number | null;
+  team1DuoId?: number | null;
+  team2DuoId?: number | null;
+  team1Id?: number | null;
+  team2Id?: number | null;
   score1: number;
   score2: number;
   championshipId?: number;

@@ -756,28 +756,40 @@ export function repository(db: Database.Database) {
     },
     saveMatch: (m: MatchInput) => {
       const championshipId = m.championshipId ? Number(m.championshipId) : null;
+      const isDuo = m.team1DuoId != null || m.team2DuoId != null;
+      let team1Id = m.team1Id;
+      let team2Id = m.team2Id;
 
-      if (!m.player1Id || !m.player2Id || !m.team1Id || !m.team2Id)
-        throw new Error("Selecione os dois jogadores e os dois times.");
+      if (isDuo) {
+        if (!m.team1DuoId || !m.team2DuoId || m.team1DuoId === m.team2DuoId)
+          throw new Error("Selecione duas duplas diferentes.");
+        const duoQuery = db.prepare("SELECT team_id FROM teams2v2 WHERE id=?");
+        const duo1 = duoQuery.get(m.team1DuoId) as { team_id: number | null } | undefined;
+        const duo2 = duoQuery.get(m.team2DuoId) as { team_id: number | null } | undefined;
+        if (!duo1 || !duo2) throw new Error("Uma das duplas selecionadas não existe.");
+        if (duo1.team_id == null || duo2.team_id == null)
+          throw new Error("Defina o time da dupla antes de registrar a partida.");
+        team1Id = duo1.team_id;
+        team2Id = duo2.team_id;
+      } else {
+        if (!m.player1Id || !m.player2Id || !team1Id || !team2Id)
+          throw new Error("Selecione os dois jogadores e os dois times.");
 
-      if (m.player1Id === m.player2Id || m.team1Id === m.team2Id)
-        throw new Error("Escolha jogadores e times diferentes.");
+        if (m.player1Id === m.player2Id || team1Id === team2Id)
+          throw new Error("Escolha jogadores e times diferentes.");
 
-      const player1Exists = db
-        .prepare("SELECT 1 FROM players WHERE id=?")
-        .get(m.player1Id);
-      const player2Exists = db
-        .prepare("SELECT 1 FROM players WHERE id=?")
-        .get(m.player2Id);
+        const player1Exists = db.prepare("SELECT 1 FROM players WHERE id=?").get(m.player1Id);
+        const player2Exists = db.prepare("SELECT 1 FROM players WHERE id=?").get(m.player2Id);
+        if (!player1Exists || !player2Exists)
+          throw new Error("Um dos jogadores selecionados não existe.");
+      }
       const team1Exists = db
         .prepare("SELECT 1 FROM teams WHERE id=?")
-        .get(m.team1Id);
+        .get(team1Id);
       const team2Exists = db
         .prepare("SELECT 1 FROM teams WHERE id=?")
-        .get(m.team2Id);
+        .get(team2Id);
 
-      if (!player1Exists || !player2Exists)
-        throw new Error("Um dos jogadores selecionados não existe.");
       if (!team1Exists || !team2Exists)
         throw new Error("Um dos times selecionados não existe.");
 
@@ -792,17 +804,14 @@ export function repository(db: Database.Database) {
       const save = db.transaction(() => {
         let fixture: { id: number; round: number; stage: string } | undefined;
         if (championshipId !== null) {
-          fixture = db
-            .prepare(
-              "SELECT id,round_number round,stage FROM fixtures WHERE championship_id=? AND match_id IS NULL AND ((player1_id=? AND player2_id=?) OR (player1_id=? AND player2_id=?))",
-            )
-            .get(
-              championshipId,
-              m.player1Id,
-              m.player2Id,
-              m.player2Id,
-              m.player1Id,
-            ) as { id: number; round: number; stage: string } | undefined;
+          const firstId = isDuo ? m.team1DuoId : m.player1Id;
+          const secondId = isDuo ? m.team2DuoId : m.player2Id;
+          const fixtureQuery = isDuo
+            ? "SELECT id,round_number round,stage FROM fixtures WHERE championship_id=? AND match_id IS NULL AND ((team1_duo_id=? AND team2_duo_id=?) OR (team1_duo_id=? AND team2_duo_id=?))"
+            : "SELECT id,round_number round,stage FROM fixtures WHERE championship_id=? AND match_id IS NULL AND ((player1_id=? AND player2_id=?) OR (player1_id=? AND player2_id=?))";
+          fixture = db.prepare(fixtureQuery).get(championshipId, firstId, secondId, secondId, firstId) as
+            | { id: number; round: number; stage: string }
+            | undefined;
           if (!fixture)
             throw new Error(
               "Este confronto não está pendente neste campeonato.",
@@ -814,13 +823,15 @@ export function repository(db: Database.Database) {
         }
         const info = db
           .prepare(
-            "INSERT INTO matches(player1_id,player2_id,team1_id,team2_id,score1,score2,championship_id,played_at) VALUES (?,?,?,?,?,?,?,?)",
+            "INSERT INTO matches(player1_id,player2_id,team1_duo_id,team2_duo_id,team1_id,team2_id,score1,score2,championship_id,played_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
           )
           .run(
-            m.player1Id,
-            m.player2Id,
-            m.team1Id,
-            m.team2Id,
+            isDuo ? null : m.player1Id,
+            isDuo ? null : m.player2Id,
+            m.team1DuoId ?? null,
+            m.team2DuoId ?? null,
+            team1Id,
+            team2Id,
             m.score1,
             m.score2,
             championshipId,
@@ -879,12 +890,14 @@ export function repository(db: Database.Database) {
 
       db.prepare(
         `UPDATE matches
-     SET player1_id=?, player2_id=?, team1_id=?, team2_id=?,
+     SET player1_id=?, player2_id=?, team1_duo_id=?, team2_duo_id=?, team1_id=?, team2_id=?,
          score1=?, score2=?, championship_id=?, played_at=?
      WHERE id=?`,
       ).run(
         m.player1Id,
         m.player2Id,
+        m.team1DuoId ?? null,
+        m.team2DuoId ?? null,
         m.team1Id,
         m.team2Id,
         m.score1,
@@ -909,6 +922,8 @@ export function repository(db: Database.Database) {
 
         m.player1_id AS player1Id,
         m.player2_id AS player2Id,
+        m.team1_duo_id AS team1DuoId,
+        m.team2_duo_id AS team2DuoId,
 
         m.team1_id AS team1Id,
         m.team2_id AS team2Id,
@@ -916,8 +931,8 @@ export function repository(db: Database.Database) {
         m.score1 AS score1,
         m.score2 AS score2,
 
-        p1.name AS player1,
-        p2.name AS player2,
+        CASE WHEN m.team1_duo_id IS NOT NULL THEN COALESCE(d1.name, dp11.name || ' & ' || dp12.name) ELSE p1.name END AS player1,
+        CASE WHEN m.team2_duo_id IS NOT NULL THEN COALESCE(d2.name, dp21.name || ' & ' || dp22.name) ELSE p2.name END AS player2,
 
         t1.name AS team1,
         t2.name AS team2,
@@ -928,8 +943,14 @@ export function repository(db: Database.Database) {
 
       FROM matches m
 
-      JOIN players p1 ON p1.id = m.player1_id
-      JOIN players p2 ON p2.id = m.player2_id
+      LEFT JOIN players p1 ON p1.id = m.player1_id
+      LEFT JOIN players p2 ON p2.id = m.player2_id
+      LEFT JOIN teams2v2 d1 ON d1.id = m.team1_duo_id
+      LEFT JOIN teams2v2 d2 ON d2.id = m.team2_duo_id
+      LEFT JOIN players dp11 ON dp11.id = d1.player1_id
+      LEFT JOIN players dp12 ON dp12.id = d1.player2_id
+      LEFT JOIN players dp21 ON dp21.id = d2.player1_id
+      LEFT JOIN players dp22 ON dp22.id = d2.player2_id
 
       JOIN teams t1 ON t1.id = m.team1_id
       JOIN teams t2 ON t2.id = m.team2_id

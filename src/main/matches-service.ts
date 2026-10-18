@@ -14,8 +14,10 @@ type Repository = ReturnType<typeof repository>;
 /** Linha de public.matches no Supabase (snake_case). */
 type SupabaseMatchRow = {
   id: number | string;
-  player1_id: number | string;
-  player2_id: number | string;
+  player1_id: number | string | null;
+  player2_id: number | string | null;
+  team1_duo_id?: number | string | null;
+  team2_duo_id?: number | string | null;
   team1_id: number | string;
   team2_id: number | string;
   score1: number;
@@ -23,6 +25,17 @@ type SupabaseMatchRow = {
   championship_id: number | string | null;
   played_at: string | null;
   created_by?: string | null;
+};
+
+type SupabaseDuoRow = {
+  id: number;
+  room_id: string | null;
+  player1_id: number;
+  player2_id: number;
+  name: string | null;
+  team_id: number | null;
+  created_at: string;
+  updated_at: string;
 };
 
 /** Erro devolvido pelo PostgREST (supabase-js). */
@@ -130,12 +143,17 @@ export function createMatchesService(
   db: Database.Database,
   repo: Repository,
 ): MatchesService {
+  const matchColumns = db.prepare("PRAGMA table_info(matches)").all() as { name: string }[];
+  const hasDuoColumns = ["team1_duo_id", "team2_duo_id"].every((name) =>
+    matchColumns.some((column) => column.name === name),
+  );
   const mirrorUpsert = db.prepare(`
-    INSERT INTO matches(id,player1_id,player2_id,team1_id,team2_id,score1,score2,championship_id,played_at)
-    VALUES (@id,@player1_id,@player2_id,@team1_id,@team2_id,@score1,@score2,@championship_id,@played_at)
+    INSERT INTO matches(id,player1_id,player2_id,team1_id,team2_id,score1,score2,championship_id,played_at${hasDuoColumns ? ",team1_duo_id,team2_duo_id" : ""})
+    VALUES (@id,@player1_id,@player2_id,@team1_id,@team2_id,@score1,@score2,@championship_id,@played_at${hasDuoColumns ? ",@team1_duo_id,@team2_duo_id" : ""})
     ON CONFLICT(id) DO UPDATE SET
       player1_id=excluded.player1_id,
       player2_id=excluded.player2_id,
+      ${hasDuoColumns ? "team1_duo_id=excluded.team1_duo_id, team2_duo_id=excluded.team2_duo_id," : ""}
       team1_id=excluded.team1_id,
       team2_id=excluded.team2_id,
       score1=excluded.score1,
@@ -186,6 +204,21 @@ export function createMatchesService(
   }
 
   function prevalidateSave(m: MatchInput, championshipId: number | null): void {
+    if (m.team1DuoId != null || m.team2DuoId != null) {
+      if (!m.team1DuoId || !m.team2DuoId || m.team1DuoId === m.team2DuoId)
+        throw new Error("Selecione duas duplas diferentes.");
+      if (championshipId !== null) {
+        const fixture = db.prepare(
+          "SELECT id,stage FROM fixtures WHERE championship_id=? AND match_id IS NULL AND ((team1_duo_id=? AND team2_duo_id=?) OR (team1_duo_id=? AND team2_duo_id=?))",
+        ).get(championshipId, m.team1DuoId, m.team2DuoId, m.team2DuoId, m.team1DuoId) as
+          | { id: number; stage: string }
+          | undefined;
+        if (!fixture) throw new Error("Este confronto não está pendente neste campeonato.");
+        if (fixture.stage !== "league" && m.score1 === m.score2)
+          throw new Error("No mata-mata informe um vencedor; empates não são permitidos.");
+      }
+      return;
+    }
     if (!m.player1Id || !m.player2Id || !m.team1Id || !m.team2Id)
       throw new Error("Selecione os dois jogadores e os dois times.");
 
@@ -294,6 +327,22 @@ export function createMatchesService(
     if (!supabase) return repo.saveMatch(m);
 
     const championshipId = m.championshipId ? Number(m.championshipId) : null;
+    const isDuo = m.team1DuoId != null || m.team2DuoId != null;
+    let team1Id = m.team1Id;
+    let team2Id = m.team2Id;
+
+    if (isDuo) {
+      if (!m.team1DuoId || !m.team2DuoId || m.team1DuoId === m.team2DuoId)
+        throw new Error("Selecione duas duplas diferentes.");
+      const query = db.prepare("SELECT team_id FROM teams2v2 WHERE id=?");
+      const duo1 = query.get(m.team1DuoId) as { team_id: number | null } | undefined;
+      const duo2 = query.get(m.team2DuoId) as { team_id: number | null } | undefined;
+      if (!duo1 || !duo2) throw new Error("Uma das duplas selecionadas não existe.");
+      if (duo1.team_id == null || duo2.team_id == null)
+        throw new Error("Defina o time da dupla antes de registrar a partida.");
+      team1Id = duo1.team_id;
+      team2Id = duo2.team_id;
+    }
 
     prevalidateSave(m, championshipId);
 
@@ -306,10 +355,11 @@ export function createMatchesService(
       supabase
         .from("matches")
         .insert({
-          player1_id: m.player1Id,
-          player2_id: m.player2Id,
-          team1_id: m.team1Id,
-          team2_id: m.team2Id,
+          player1_id: isDuo ? null : m.player1Id,
+          player2_id: isDuo ? null : m.player2Id,
+          ...(isDuo ? { team1_duo_id: m.team1DuoId, team2_duo_id: m.team2DuoId } : {}),
+          team1_id: team1Id,
+          team2_id: team2Id,
           score1: m.score1,
           score2: m.score2,
           championship_id: championshipId,
@@ -327,6 +377,8 @@ export function createMatchesService(
       // 2) Executa a gravação e renumeração local
       const localId = repo.saveMatch({
         ...m,
+        team1Id,
+        team2Id,
         championshipId: championshipId ?? undefined,
         playedAt,
       });
@@ -513,7 +565,7 @@ export function createMatchesService(
     try {
       const { data, error } = await supabase
         .from("matches")
-        .select(MATCH_COLUMNS)
+        .select("*")
         .order("id", { ascending: true });
       if (error) throw error;
       rows = (data ?? []) as SupabaseMatchRow[];
@@ -525,17 +577,59 @@ export function createMatchesService(
       return 0;
     }
 
-    if (rows.length === 0) return 0;
+    const hasDuoTable = !!db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='teams2v2'").get();
+    const remoteDuos = new Map<number, SupabaseDuoRow>();
+    if (hasDuoColumns && hasDuoTable) {
+      const { data, error } = await supabase.from("teams2v2").select("*");
+      if (error) {
+        if (error.code !== "PGRST205" && error.code !== "42P01")
+          console.warn(`${LOG_PREFIX} não foi possível sincronizar as duplas:`, error.message);
+      } else {
+        for (const duo of (data ?? []) as SupabaseDuoRow[]) remoteDuos.set(Number(duo.id), duo);
+      }
+    }
+
+    const syncDuo = (id: number): void => {
+      const duo = remoteDuos.get(id);
+      if (!duo) throw new Error("Dupla remota não encontrada.");
+      const local = db.prepare("SELECT room_id, player1_id, player2_id FROM teams2v2 WHERE id=?").get(id) as
+        | { room_id: string | null; player1_id: number; player2_id: number }
+        | undefined;
+      if (local && (local.room_id !== duo.room_id || local.player1_id !== duo.player1_id || local.player2_id !== duo.player2_id))
+        throw new Error("Conflito de ID de dupla no banco local.");
+      db.prepare(`INSERT INTO teams2v2(id,room_id,player1_id,player2_id,name,team_id,created_at,updated_at)
+        VALUES (@id,@room_id,@player1_id,@player2_id,@name,@team_id,@created_at,@updated_at)
+        ON CONFLICT(id) DO UPDATE SET name=excluded.name, team_id=excluded.team_id, updated_at=excluded.updated_at`).run(duo);
+    };
 
     let synced = 0;
     let skipped = 0;
     const apply = db.transaction(() => {
+      const syncedDuos = new Set<number>();
+      for (const id of remoteDuos.keys()) {
+        try {
+          if (!hasDuoColumns || !hasDuoTable) break;
+          syncDuo(id);
+          syncedDuos.add(id);
+        } catch (err) {
+          console.warn(`${LOG_PREFIX} espelho: dupla remota id=${id} ignorada.`, err instanceof Error ? err.message : err);
+        }
+      }
       for (const row of rows) {
         try {
+          const firstDuo = row.team1_duo_id == null ? null : Number(row.team1_duo_id);
+          const secondDuo = row.team2_duo_id == null ? null : Number(row.team2_duo_id);
+          if (firstDuo !== null || secondDuo !== null) {
+            if (!hasDuoColumns || !hasDuoTable || firstDuo === null || secondDuo === null)
+              throw new Error("Partida de dupla incompatível com o banco local.");
+            if (!syncedDuos.has(firstDuo) || !syncedDuos.has(secondDuo))
+              throw new Error("Dupla da partida não está disponível no banco local.");
+          }
           mirrorUpsert.run({
             id: Number(row.id),
-            player1_id: Number(row.player1_id),
-            player2_id: Number(row.player2_id),
+            player1_id: row.player1_id == null ? null : Number(row.player1_id),
+            player2_id: row.player2_id == null ? null : Number(row.player2_id),
+            ...(hasDuoColumns ? { team1_duo_id: firstDuo, team2_duo_id: secondDuo } : {}),
             team1_id: Number(row.team1_id),
             team2_id: Number(row.team2_id),
             score1: Number(row.score1),
