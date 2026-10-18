@@ -76,6 +76,8 @@ A migration adiada `supabase/deferred/20261016090500_enforce_room_scope_after_ph
 
 ### 5.2 Próximos passos
 
+A aba de salas (Blocos 1 e 2) está implementada e commitada. Segundo o teste manual do dono, `createRoom` e `joinRoom` retornaram dados, mas `listMyRooms` mostrou "Algo deu errado. Tente novamente em instantes."; o app aponta para o projeto real, onde as migrations da Fase 4 ainda não foram aplicadas e a função `list_my_rooms` está ausente. A aplicação das migrations necessárias, após testes em desenvolvimento e backup adequado do real, deve permitir o funcionamento da aba, mas isso ainda precisa ser verificado; a mensagem genérica, por si só, não confirma a causa do erro.
+
 1. Revisar as correções da branch e a dívida conhecida antes de qualquer merge.
 2. Resolver a disponibilidade de um projeto de desenvolvimento e testar nele, inclusive o backfill parametrizado, antes de considerar o real.
 3. Obter um backup adequado do projeto real antes de qualquer aplicação nele; exportação CSV é apenas proteção parcial, não restauração completa.
