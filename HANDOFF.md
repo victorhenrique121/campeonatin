@@ -129,6 +129,7 @@ A aba de salas (Blocos 1 e 2) está implementada e commitada. Segundo o teste ma
 - `(create_room()).*` pode chamar a função uma vez por coluna; em testes use `select * from create_room(...)`.
 - A configuração do Vitest no arquivo errado causou TS2769; veja a seção 4.
 - O `AGENTS.md` não estava no repositório durante a Fase 0.
+- Limitações conhecidas da finalização de campeonatos: se a atualização do status falhar após salvar a partida, a operação pode ficar parcialmente aplicada e o campeonato permanecer `active`; é necessário conferir o estado antes de tentar novamente. O caminho sem cliente remoto ainda permite escrita no SQLite, em desacordo com a regra de somente leitura offline; tratar como dívida da Fase 2.
 
 ---
 
