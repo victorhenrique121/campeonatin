@@ -256,7 +256,23 @@ function RoomsPage() {
   const [entryCode, setEntryCode] = useState("");
   const [error, setError] = useState("");
   const [creating, setCreating] = useState(false);
-  const [, setRooms] = useState<Awaited<ReturnType<typeof window.arena.listMyRooms>>>([]);
+  const [rooms, setRooms] = useState<Awaited<ReturnType<typeof window.arena.listMyRooms>>>([]);
+  const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
+  const [loadingRooms, setLoadingRooms] = useState(true);
+  const [roomsError, setRoomsError] = useState("");
+  const roomsRequest = useRef(0);
+
+  useEffect(() => {
+    const request = ++roomsRequest.current;
+    window.arena.listMyRooms().then((result) => {
+      if (request === roomsRequest.current) setRooms(result);
+    }).catch((err: unknown) => {
+      if (request === roomsRequest.current) setRoomsError(getFriendlyPrivacyError(err));
+    }).finally(() => {
+      if (request === roomsRequest.current) setLoadingRooms(false);
+    });
+    return () => { roomsRequest.current++; };
+  }, []);
 
   const create = async (event: FormEvent) => {
     event.preventDefault();
@@ -272,8 +288,15 @@ function RoomsPage() {
       setEntryCode(room.entryCode);
       setName("");
       try {
-        setRooms(await window.arena.listMyRooms());
+        const request = ++roomsRequest.current;
+        const result = await window.arena.listMyRooms();
+        if (request === roomsRequest.current) {
+          setRooms(result);
+          setRoomsError("");
+          setLoadingRooms(false);
+        }
       } catch {
+        setLoadingRooms(false);
         setError("Sala criada, mas não foi possível atualizar a lista.");
       }
     } catch (err) {
@@ -302,6 +325,36 @@ function RoomsPage() {
         </form>
         {entryCode && <p role="status">Código da sala: {entryCode}</p>}
         {error && <p role="alert">{error}</p>}
+      </article>
+      <article className="panel">
+        <h2>Minhas salas</h2>
+        {loadingRooms && <p role="status">Carregando salas...</p>}
+        {roomsError && <p role="alert">{roomsError}</p>}
+        {!loadingRooms && !roomsError && rooms.length === 0 && (
+          <Empty text="Você ainda não participa de nenhuma sala." />
+        )}
+        <div className="cards players-list">
+          {rooms.map((room) => (
+            <div className="player-card" key={room.id}>
+              <div>
+                <b>{room.name}</b>
+                <small>
+                  Papel: {room.role === "owner" ? "Proprietário" : room.role === "admin" ? "Administrador" : room.role === "participant" ? "Participante" : "Desconhecido"}
+                </small>
+                <small>Código: {room.entryCode}</small>
+                <small>Membros: {room.memberCount}</small>
+              </div>
+              <button
+                type="button"
+                className="secondary-button"
+                aria-pressed={selectedRoomId === room.id}
+                onClick={() => setSelectedRoomId(room.id)}
+              >
+                {selectedRoomId === room.id ? "Selecionada" : "Entrar"}
+              </button>
+            </div>
+          ))}
+        </div>
       </article>
     </>
   );
