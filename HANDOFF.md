@@ -130,6 +130,7 @@ A aba de salas (Blocos 1 e 2) está implementada e commitada. Segundo o teste ma
 - A configuração do Vitest no arquivo errado causou TS2769; veja a seção 4.
 - O `AGENTS.md` não estava no repositório durante a Fase 0.
 - Limitações conhecidas da finalização de campeonatos: se a atualização do status falhar após salvar a partida, a operação pode ficar parcialmente aplicada e o campeonato permanecer `active`; é necessário conferir o estado antes de tentar novamente. O caminho sem cliente remoto ainda permite escrita no SQLite, em desacordo com a regra de somente leitura offline; tratar como dívida da Fase 2.
+- Modo Dupla, parte 2a: a sala das duplas ainda não é validada contra a do confronto ou partida; resolver nas Fases 2/3. A exclusão de dupla com partidas vinculadas é recusada (`RESTRICT`); desativação por soft delete fica para o futuro.
 
 ---
 
