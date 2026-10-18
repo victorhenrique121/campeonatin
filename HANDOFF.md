@@ -26,7 +26,7 @@ Stack: Electron 43, React 19, TypeScript 7, Vite 8, `better-sqlite3`, Supabase (
 - **Regras do jogo:** 3/1/0 e mínimo 3 para Melhor Forma, via `repository.gameRules()`.
 - **Fase 0:** CI, ESLint, Vitest e modularização parcial do renderer; PR #8 mergeado no `main`.
 - **Fase 1:** fechada no repositório, na branch `fix/fase-1-salas`; correções e documentação nos commits `40d53c1`, `12c3156`, `ff48de4`, `48fbe5c`, `de38a3f`, `5329b5f` e `332ae81` (**verificado** no histórico). Isso não significa que as migrations foram aplicadas ou aceitas no Supabase.
-- **Verificações no Windows do dono:** typecheck, lint e test, com 8 testes, passam segundo relato do dono (**não verificado nesta atualização**).
+- **Verificações no Windows do dono:** typecheck, lint e test **verificado** pelo dono no PowerShell, com 8 testes passando e saída real.
 
 ---
 
@@ -51,7 +51,7 @@ renderer (React) -> preload (window.arena) -> IPC -> services -> Supabase
 ## 4. Ambiente do dono (Windows)
 
 - Projeto em `C:\Users\Admin\Desktop\campeonatin`. A Área de Trabalho pode ser sincronizada pelo OneDrive e travar arquivos em `node_modules`; `C:\dev\campeonatin` é uma alternativa.
-- Segundo o dono, o Build Tools 2022 está instalado e o app **abre no Windows** (**não verificado nesta atualização**). O dono executa typecheck, lint e test normalmente no PowerShell.
+- O Build Tools 2022 está instalado e o app abre no Windows (**verificado** pelo dono; o app subiu com `npm run dev`). O dono executa typecheck, lint e test normalmente no PowerShell.
 - O erro `EPERM` ao rodar Vitest no sandbox do Codex é do ambiente do Codex, não uma evidência de falha no Windows do dono (**relato; não verificado nesta atualização**).
 - Preserve `vitest.config.ts` separado de `vite.config.ts` e o script `vitest run --root .`; a configuração no arquivo errado já causou TS2769.
 - Preload e processo principal só atualizam ao reiniciar o app. Não reinstale dependências nem rode o app sem autorização e sem conferir as instruções atuais.
@@ -147,7 +147,7 @@ A migration adiada `supabase/deferred/20261016090500_enforce_room_scope_after_ph
 
 - O backup do projeto real pode ser feito? Segundo o dono, o plano atual não permite backup automático nem manual pelo dashboard; avaliar CSV como rede de segurança parcial, não backup completo (**não verificado**).
 - O projeto de desenvolvimento pode ser criado? Segundo o dono, o plano atingiu o limite (**não verificado**).
-- Segundo o dono, a conta de serviço funciona após correção da senha no `.env`, mas o app aponta para o real; quando houver desenvolvimento, o dono deve apontar o `.env` para ele (**não verificado**). Não ler nem expor a credencial.
+- A conta de serviço funciona após correção da senha no `.env` (**verificado** pelo dono; o app conectou e os testes de login, perfil, configurações, ranking, dashboard, lista de partidas e cadastro de jogador/time passaram). O app aponta para o real; quando houver desenvolvimento, o dono deve apontar o `.env` para ele. Não ler nem expor a credencial.
 - O Docker local `fc-arena-test` e o shim `supabase/local_test/00_supabase_shim.sql` servem para testes de migrations. Não devem ir para o Git; o `.gitignore` ainda não cobre o shim e a correção está pendente em commit separado (**verificado**).
 
 ---
