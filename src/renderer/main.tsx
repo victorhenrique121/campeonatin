@@ -25,6 +25,7 @@ import {
   CirclePlus,
   CircleHelp,
   Dices,
+  DoorOpen,
   EyeOff,
   Flag,
   Footprints,
@@ -85,6 +86,7 @@ import "./styles/HeadToHeadCard.css";
 
 type Page =
   | "dashboard"
+  | "rooms"
   | "players"
   | "matches"
   | "ranking"
@@ -245,6 +247,21 @@ function Game({
         </button>
       )}
     </div>
+  );
+}
+
+function RoomsPage() {
+  return (
+    <>
+      <section className="page-title">
+        <div>
+          <h1>Salas personalizadas</h1>
+        </div>
+      </section>
+      <article className="panel">
+        <p>Em breve: criar, entrar e gerenciar salas.</p>
+      </article>
+    </>
   );
 }
 
@@ -3106,6 +3123,7 @@ function ArenaApp({ user, onSignOut }: { user: AuthUser; onSignOut: () => void }
   if (!data) return <main className="loading">Carregando arena…</main>;
   const nav: [Page, string, React.ElementType][] = [
     ["dashboard", "Visão geral", LayoutDashboard],
+    ["rooms", "Salas personalizadas", DoorOpen],
     ["players", "Jogadores", Users],
     ["matches", "Partidas", Gamepad2],
     ["ranking", "Ranking", BarChart3],
@@ -3115,6 +3133,8 @@ function ArenaApp({ user, onSignOut }: { user: AuthUser; onSignOut: () => void }
   const view =
     page === "dashboard" ? (
       <DashboardPage data={data} go={setPage} reload={reload} />
+    ) : page === "rooms" ? (
+      <RoomsPage />
     ) : page === "players" ? (
       <PlayersPage players={players} reload={reload} />
     ) : page === "matches" ? (
