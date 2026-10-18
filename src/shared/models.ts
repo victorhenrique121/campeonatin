@@ -127,7 +127,7 @@ export type MatchInput = {
   playedAt?: string;
 };
 export type DuoInput = { player1Id: number; player2Id: number };
-export type Duo = { id: number; roomId: string | null; player1Id: number; player2Id: number; name: string | null };
+export type Duo = { id: number; roomId: string | null; player1Id: number; player2Id: number; name: string | null; teamId?: number | null };
 export type Championship = {
   id: number;
   name: string;

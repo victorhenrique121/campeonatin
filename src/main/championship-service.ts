@@ -8,49 +8,68 @@ export async function getOrCreateDuoRemote(
   supabase: SupabaseClient,
   player1Id: number,
   player2Id: number,
-  roomId: string | null
+  roomId: string | null,
+  teamId?: number | null
 ): Promise<number> {
   const [firstId, secondId] = [player1Id, player2Id].sort((a, b) => a - b);
   if (firstId === secondId) throw new Error("Uma dupla precisa ter dois jogadores diferentes.");
 
-  const findRemote = async (): Promise<number | null> => {
-    const query = supabase.from("teams2v2").select("id")
+  type RemoteDuo = { id: number; team_id: number | null };
+  const findRemote = async (): Promise<RemoteDuo | null> => {
+    const query = supabase.from("teams2v2").select("id, team_id")
       .eq("player1_id", firstId).eq("player2_id", secondId);
     const { data, error } = await (roomId === null ? query.is("room_id", null) : query.eq("room_id", roomId)).maybeSingle();
     if (error) throw new Error("Não foi possível consultar a dupla. Tente novamente.");
-    return data?.id ?? null;
+    return data ?? null;
   };
 
-  let id = await findRemote();
-  if (id === null) {
+  let remote = await findRemote();
+  if (remote === null) {
     const { data, error } = await supabase.from("teams2v2")
-      .insert({ player1_id: firstId, player2_id: secondId, room_id: roomId })
-      .select("id").single();
+      .insert({ player1_id: firstId, player2_id: secondId, room_id: roomId, team_id: teamId ?? null })
+      .select("id, team_id").single();
     if (error?.code === "23505") {
-      id = await findRemote();
+      remote = await findRemote();
     } else if (error) {
       throw new Error("Não foi possível criar a dupla. Tente novamente.");
     } else {
-      id = data?.id ?? null;
+      remote = data ?? null;
     }
   }
 
-  if (id === null || !Number.isSafeInteger(id) || id <= 0) {
+  if (remote === null || !Number.isSafeInteger(remote.id) || remote.id <= 0) {
     throw new Error("Não foi possível obter a dupla. Tente novamente.");
   }
 
-  const remoteId = id;
+  if (teamId != null && remote.team_id == null) {
+    const { data, error } = await supabase.from("teams2v2")
+      .update({ team_id: teamId }).eq("id", remote.id).is("team_id", null)
+      .select("id, team_id").maybeSingle();
+    if (error) throw new Error("Não foi possível definir o time da dupla. Tente novamente.");
+    remote = data ?? await findRemote();
+    if (!remote) throw new Error("Não foi possível obter a dupla. Tente novamente.");
+  }
+  if (teamId != null && remote.team_id !== teamId) {
+    throw new Error("A dupla já tem um time definido; não é possível alterar.");
+  }
+
+  const { id: remoteId, team_id: remoteTeamId } = remote;
   db.transaction(() => {
-    const local = db.prepare("SELECT room_id, player1_id, player2_id FROM teams2v2 WHERE id = ?")
-      .get(remoteId) as { room_id: string | null; player1_id: number; player2_id: number } | undefined;
+    const local = db.prepare("SELECT room_id, player1_id, player2_id, team_id FROM teams2v2 WHERE id = ?")
+      .get(remoteId) as { room_id: string | null; player1_id: number; player2_id: number; team_id: number | null } | undefined;
     const pair = db.prepare("SELECT id FROM teams2v2 WHERE player1_id = ? AND player2_id = ? AND room_id IS NOT DISTINCT FROM ? AND id <> ?")
       .get(firstId, secondId, roomId, remoteId);
     if (pair || (local && (local.room_id !== roomId || local.player1_id !== firstId || local.player2_id !== secondId))) {
       throw new Error("Conflito de ID de dupla; verifique os dados locais.");
     }
+    if (local?.team_id != null && local.team_id !== remoteTeamId) {
+      throw new Error("A dupla já tem um time definido; não é possível alterar.");
+    }
     if (!local) {
-      db.prepare("INSERT INTO teams2v2 (id, room_id, player1_id, player2_id, created_at, updated_at) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)")
-        .run(remoteId, roomId, firstId, secondId);
+      db.prepare("INSERT INTO teams2v2 (id, room_id, player1_id, player2_id, team_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)")
+        .run(remoteId, roomId, firstId, secondId, remoteTeamId);
+    } else if (local.team_id == null && remoteTeamId != null) {
+      db.prepare("UPDATE teams2v2 SET team_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(remoteTeamId, remoteId);
     }
   })();
   return remoteId;

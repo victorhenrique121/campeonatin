@@ -45,6 +45,10 @@ export function createDatabase(file: string) {
     CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
     CREATE INDEX IF NOT EXISTS idx_matches_played_at ON matches(played_at DESC); CREATE INDEX IF NOT EXISTS idx_matches_players ON matches(player1_id, player2_id);
   `);
+  const duoColumns = db.prepare("PRAGMA table_info(teams2v2)").all() as { name: string }[];
+  if (!duoColumns.some((column) => column.name === "team_id")) {
+    db.exec("ALTER TABLE teams2v2 ADD COLUMN team_id INTEGER REFERENCES teams(id) ON DELETE RESTRICT");
+  }
   const defaultSettings = db.prepare(
     "INSERT OR IGNORE INTO app_settings(key,value) VALUES (?,?)",
   );
@@ -610,20 +614,28 @@ export function repository(db: Database.Database) {
   return {
     gameRules,
     arenaNews,
-    findOrCreateDuo: (player1Id: number, player2Id: number, roomId: string | null): number => {
+    findOrCreateDuo: (player1Id: number, player2Id: number, roomId: string | null, teamId?: number | null): number => {
       if (player1Id === player2Id) throw new Error("Uma dupla precisa de dois jogadores diferentes.");
       const [first, second] = player1Id < player2Id ? [player1Id, player2Id] : [player2Id, player1Id];
       const existing = db.prepare(
-        "SELECT id FROM teams2v2 WHERE player1_id = ? AND player2_id = ? AND room_id IS NOT DISTINCT FROM ?",
-      ).get(first, second, roomId) as { id: number } | undefined;
-      if (existing) return existing.id;
+        "SELECT id, team_id FROM teams2v2 WHERE player1_id = ? AND player2_id = ? AND room_id IS NOT DISTINCT FROM ?",
+      ).get(first, second, roomId) as { id: number; team_id: number | null } | undefined;
+      if (existing) {
+        if (teamId != null && existing.team_id != null && existing.team_id !== teamId) {
+          throw new Error("A dupla já tem um time definido; não é possível alterar.");
+        }
+        if (teamId != null && existing.team_id == null) {
+          db.prepare("UPDATE teams2v2 SET team_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(teamId, existing.id);
+        }
+        return existing.id;
+      }
       const result = db.prepare(
-        "INSERT INTO teams2v2 (room_id, player1_id, player2_id, created_at, updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
-      ).run(roomId, first, second);
+        "INSERT INTO teams2v2 (room_id, player1_id, player2_id, team_id, created_at, updated_at) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+      ).run(roomId, first, second, teamId ?? null);
       return Number(result.lastInsertRowid);
     },
     listDuos: (): Duo[] => db.prepare(
-      "SELECT id, room_id roomId, player1_id player1Id, player2_id player2Id, name FROM teams2v2",
+      "SELECT id, room_id roomId, player1_id player1Id, player2_id player2Id, name, team_id teamId FROM teams2v2",
     ).all() as Duo[],
     getDuoPlayers: (duoId: number): { player1: Player; player2: Player } | null => {
       const duo = db.prepare("SELECT player1_id player1Id, player2_id player2Id FROM teams2v2 WHERE id = ?")
