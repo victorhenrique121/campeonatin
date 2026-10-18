@@ -3497,6 +3497,16 @@ function ArenaApp({ user, onSignOut }: { user: AuthUser; onSignOut: () => void }
     [teams, setTeams] = useState<Team[]>([]),
     [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const accountMenuRef = useRef<HTMLDivElement | null>(null);
+  const [online, setOnline] = useState(navigator.onLine);
+  useEffect(() => {
+    const updateOnline = () => setOnline(navigator.onLine);
+    window.addEventListener("online", updateOnline);
+    window.addEventListener("offline", updateOnline);
+    return () => {
+      window.removeEventListener("online", updateOnline);
+      window.removeEventListener("offline", updateOnline);
+    };
+  }, []);
   const reload = async () => {
     try {
       const [dashboard, playerList, teamList] = await Promise.all([
@@ -3612,6 +3622,10 @@ function ArenaApp({ user, onSignOut }: { user: AuthUser; onSignOut: () => void }
           ))}
         </nav>
         <div className="side-bottom">
+          <div className="sidebar-status" aria-live="polite">
+            <span className={online ? "sidebar-status-dot online" : "sidebar-status-dot"} aria-hidden="true" />
+            {online ? "Online" : "Offline"}
+          </div>
           <small>v0.1.0 · dados locais</small>
         </div>
       </aside>

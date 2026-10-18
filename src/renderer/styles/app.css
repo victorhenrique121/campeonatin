@@ -2235,7 +2235,7 @@ main {
 
 nav {
     display: grid;
-    gap: 5px;
+    gap: 4px;
 }
 
 nav button,
@@ -2248,6 +2248,10 @@ nav button,
     padding: 12px;
     border-radius: 8px;
     text-align: left;
+}
+
+nav button {
+    padding: 10px 14px;
 }
 
 nav button:hover,
@@ -2273,6 +2277,25 @@ nav .active {
 .side-bottom small {
     color: #58627d;
     font-size: 11px;
+}
+
+.sidebar-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--arena-text-secondary);
+    font-size: 12px;
+}
+
+.sidebar-status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--arena-text-secondary);
+}
+
+.sidebar-status-dot.online {
+    background: var(--arena-success);
 }
 
 /* =========================
