@@ -1141,6 +1141,21 @@ function TeamPicker({
 
 function RankingPage({ data, players }: { data: Dashboard; players: Player[] }) {
   const [tab, setTab] = useState<"geral" | "individuais" | "confrontos">("geral");
+  const [sortBy, setSortBy] = useState<"goals" | "winrate" | "goaldiff" | "wins">("goals");
+  const rankingFilters = [
+    { id: "goals", label: "Artilharia" },
+    { id: "winrate", label: "Aproveitamento" },
+    { id: "goaldiff", label: "Saldo de gols" },
+    { id: "wins", label: "Vitórias" },
+  ] as const;
+  const sortedRanking = [...data.ranking].sort((a, b) => {
+    switch (sortBy) {
+      case "goals": return b.goalsFor - a.goalsFor;
+      case "winrate": return b.winRate - a.winRate;
+      case "goaldiff": return (b.goalsFor - b.goalsAgainst) - (a.goalsFor - a.goalsAgainst);
+      case "wins": return b.wins - a.wins;
+    }
+  });
   const stats = data.statistics;
   const largestStreak = stats?.streaks.reduce<(typeof stats.streaks)[number] | null>(
     (largest, current) => !largest || current.streak > largest.streak ? current : largest,
@@ -1198,12 +1213,11 @@ function RankingPage({ data, players }: { data: Dashboard; players: Player[] }) 
             <article className="panel">
               <div className="panel-head"><h2>Classificação Geral</h2></div>
               <div className="ranking-filters" aria-label="Filtros da classificação">
-                {["Artilharia", "Aproveitamento", "Saldo de gols", "Vitórias"].map((label) => (
-                  <button key={label} type="button" disabled title="Filtro em breve">{label}</button>
+                {rankingFilters.map(({ id, label }) => (
+                  <button key={id} type="button" className={sortBy === id ? "active" : ""} aria-pressed={sortBy === id} onClick={() => setSortBy(id)}>{label}</button>
                 ))}
-                <small>Filtros em breve.</small>
               </div>
-              <Ranking rows={data.ranking} />
+              <Ranking rows={sortedRanking} />
             </article>
             <article className="panel ranking-insights">
               <div className="panel-head"><h2>Insights</h2></div>
@@ -1231,6 +1245,9 @@ function MatchesPage({
   totalMatches: number;
 }) {
   const [matches, setMatches] = useState<Match[]>([]);
+  const [competitionFilter, setCompetitionFilter] = useState<"all" | "championship" | "casual">("all");
+  const [periodFilter, setPeriodFilter] = useState<"all" | "30days">("all");
+  const [playerFilter, setPlayerFilter] = useState("");
   const [matchesLoaded, setMatchesLoaded] = useState(false);
   const [editingMatch, setEditingMatch] = useState<Match | null>(null);
   const [showClearModal, setShowClearModal] = useState(false);
@@ -1257,6 +1274,18 @@ function MatchesPage({
 
   const team1 = teams.find((t) => String(t.id) === form.team1Id) ?? null;
   const team2 = teams.find((t) => String(t.id) === form.team2Id) ?? null;
+  const search = playerFilter.trim().toLocaleLowerCase("pt-BR");
+  const now = Date.now();
+  const filteredMatches = matches.filter((match) => {
+    const hasChampionship = Boolean(match.championship);
+    if (competitionFilter === "championship" && !hasChampionship) return false;
+    if (competitionFilter === "casual" && hasChampionship) return false;
+    if (periodFilter === "30days") {
+      const playedAt = new Date(match.playedAt).getTime();
+      if (!Number.isFinite(playedAt) || playedAt < now - 30 * 24 * 60 * 60 * 1000 || playedAt > now) return false;
+    }
+    return !search || match.player1.toLocaleLowerCase("pt-BR").includes(search) || match.player2.toLocaleLowerCase("pt-BR").includes(search);
+  });
   const select = (
     key: keyof typeof form,
     label: string,
@@ -1428,26 +1457,28 @@ function MatchesPage({
             </button>
           </div>
           <div className="matches-filters form">
-            <small>Filtros em breve.</small>
             <label>
               Competição
-              <select disabled title="Filtro em breve">
-                <option>Todas as competições</option>
+              <select value={competitionFilter} onChange={(e) => setCompetitionFilter(e.target.value as typeof competitionFilter)}>
+                <option value="all">Todas as competições</option>
+                <option value="championship">Com campeonato</option>
+                <option value="casual">Sem campeonato</option>
               </select>
             </label>
             <label>
               Período
-              <select disabled title="Filtro em breve">
-                <option>Todos os períodos</option>
+              <select value={periodFilter} onChange={(e) => setPeriodFilter(e.target.value as typeof periodFilter)}>
+                <option value="all">Todos os períodos</option>
+                <option value="30days">Últimos 30 dias</option>
               </select>
             </label>
             <label>
               Busca
-              <input disabled title="Busca em breve" placeholder="Buscar partida" />
+              <input value={playerFilter} onChange={(e) => setPlayerFilter(e.target.value)} placeholder="Buscar jogador" />
             </label>
           </div>
           <div className="games matches-history">
-            {matches.map((m) => (
+            {filteredMatches.map((m) => (
               <Game
                 key={m.id}
                 match={m}
@@ -1460,7 +1491,7 @@ function MatchesPage({
                 }}
               />
             ))}
-            {!matches.length && <Empty text="As partidas aparecerão aqui." />}
+            {!filteredMatches.length && <Empty text="Nenhuma partida encontrada com esses filtros." />}
           </div>
         </article>
       </section>
