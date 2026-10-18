@@ -2087,6 +2087,17 @@ const MUTATORS = [
   },
 ];
 
+function championshipCover(name: string): string {
+  const normalized = name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  if (normalized.includes("libertadores")) return "cover-libertadores";
+  if (normalized.includes("champions")) return "cover-champions";
+  if (normalized.includes("brasileir")) return "cover-brasileirao";
+  if (normalized.includes("copa do mundo") || normalized.includes("world cup")) return "cover-world";
+  if (normalized.includes("premier")) return "cover-premier";
+  if (normalized.includes("mundial")) return "cover-mundial";
+  return "cover-default";
+}
+
 function ChampionshipPage({
   players,
   teams,
@@ -2663,7 +2674,7 @@ function ChampionshipPage({
         <div className="championship-cards">
           {items.map((c, index) => (
             <article
-              className={`season-card ${selected === c.id ? "selected" : ""}`}
+              className={`season-card ${championshipCover(c.name)} ${selected === c.id ? "selected" : ""}`}
               onClick={() => setSelected(c.id)}
               onKeyDown={(event) => {
                 if (event.key === "Enter" || event.key === " ") {

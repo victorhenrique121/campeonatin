@@ -2098,6 +2098,34 @@ body {
     cursor: pointer;
 }
 
+.season-card.cover-libertadores {
+    background-image: linear-gradient(rgba(0, 0, 0, .5), rgba(0, 0, 0, .5)), linear-gradient(135deg, #1a5c3a, #2d8a5e, #1a5c3a);
+}
+
+.season-card.cover-champions {
+    background-image: linear-gradient(rgba(0, 0, 0, .5), rgba(0, 0, 0, .5)), linear-gradient(135deg, #1e3a8a, #3b82f6, #1e3a8a);
+}
+
+.season-card.cover-brasileirao {
+    background-image: linear-gradient(rgba(0, 0, 0, .5), rgba(0, 0, 0, .5)), linear-gradient(135deg, #14532d, #eab308, #14532d);
+}
+
+.season-card.cover-world {
+    background-image: linear-gradient(rgba(0, 0, 0, .5), rgba(0, 0, 0, .5)), linear-gradient(135deg, #92400e, #fbbf24, #92400e);
+}
+
+.season-card.cover-premier {
+    background-image: linear-gradient(rgba(0, 0, 0, .5), rgba(0, 0, 0, .5)), linear-gradient(135deg, #4c1d95, #7c3aed, #4c1d95);
+}
+
+.season-card.cover-mundial {
+    background-image: linear-gradient(rgba(0, 0, 0, .5), rgba(0, 0, 0, .5)), linear-gradient(135deg, #7f1d1d, #dc2626, #7f1d1d);
+}
+
+.season-card.cover-default {
+    background-image: linear-gradient(rgba(0, 0, 0, .5), rgba(0, 0, 0, .5)), linear-gradient(135deg, #161a22, #2a2438, #161a22);
+}
+
 .season-card:hover,
 .season-card.selected {
     transform: translateY(-4px);
