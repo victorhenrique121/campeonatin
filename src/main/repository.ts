@@ -35,6 +35,7 @@ export function createDatabase(file: string) {
   db.pragma("journal_mode = WAL");
   db.exec(`
     CREATE TABLE IF NOT EXISTS players (id INTEGER PRIMARY KEY, name TEXT NOT NULL, nickname TEXT NOT NULL UNIQUE, avatar TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+    CREATE TABLE IF NOT EXISTS teams2v2 (id INTEGER PRIMARY KEY, room_id TEXT, player1_id INTEGER, player2_id INTEGER, name TEXT, created_at TEXT, updated_at TEXT);
     CREATE TABLE IF NOT EXISTS teams (id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE, league TEXT NOT NULL, country TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS championships (id INTEGER PRIMARY KEY, name TEXT NOT NULL, format TEXT NOT NULL CHECK(format IN ('league','knockout','groups_knockout')), mode TEXT NOT NULL DEFAULT 'classic' CHECK(mode IN ('classic','duo','mad')), mutator TEXT, starts_at TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'draft');
     CREATE TABLE IF NOT EXISTS championship_participants (championship_id INTEGER NOT NULL REFERENCES championships(id) ON DELETE CASCADE, player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE RESTRICT, team_id INTEGER REFERENCES teams(id) ON DELETE RESTRICT, PRIMARY KEY(championship_id, player_id));
