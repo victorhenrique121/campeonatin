@@ -100,9 +100,10 @@ Cada fase tem critérios de aceite. Só passa para a próxima com minha aprovaç
 Ordem obrigatória, para os dados atuais não ficarem invisíveis:
 1. Criar `rooms` e `room_members`.
 2. Adicionar `room_id` **nullable** nas tabelas de domínio.
-3. Criar a sala inicial e fazer o **backfill** de `room_id` e `created_by`.
-4. Só então tornar `room_id` NOT NULL e ativar o RLS por sala.
-- Funções com `SECURITY DEFINER` e `search_path` fixo: `is_room_member(room_id)` (usa `auth.uid()`, nunca recebe o usuário como argumento) e uma função de papel.
+3. Fazer o **backfill** de `room_id` e `created_by` pela migration parametrizada `20261016090300_prepare_initial_room_backfill.sql`.
+4. Somar as políticas por sala às políticas atuais pela migration `20261016090400_add_compatible_room_rls.sql`; o app ainda usa a conta de serviço, portanto as políticas globais da migration inicial **não podem ser removidas** nesta fase.
+5. Só por último, depois de concluir as Fases 2 e 3, aplicar `supabase/deferred/20261016090500_enforce_room_scope_after_phase_3.sql`, que torna `room_id` NOT NULL e remove o admin global.
+- Funções com `SECURITY DEFINER` e `search_path` fixo: `is_room_member(room_id)` (usa `auth.uid()`, nunca recebe o usuário como argumento), `room_member_role(room_id)` e `room_member_profiles(room_id)`, que devolve somente `display_name`, `username` e `avatar_url`, sem e-mail.
 - `create_room(name)` e `join_room(code)` como RPC transacional. Código aleatório sem caracteres ambíguos (alfabeto `ABCDEFGHJKMNPQRSTUVWXYZ23456789`), limite de tentativas e mensagem única para código inválido, sem revelar se a sala existe.
 - **Entregáveis:** arquivos de migration **não aplicados**, matriz de testes de RLS (usuário A na sala A, A na sala B, usuário B na sala A, usuário sem sala; SELECT/INSERT/UPDATE/DELETE por papel) e roteiro para testar em projeto de desenvolvimento.
 - **Escopo:** apenas arquivos de migration e testes. Nada é aplicado pelo agente e nenhum código do app muda nesta fase.

@@ -58,3 +58,9 @@ Para `fixtures` e `championship_participants`, use os mesmos quatro verbos com s
 ## Reversão no desenvolvimento
 
 Se uma migration ainda não recebeu dados, reverta no SQL Editor somente no projeto de desenvolvimento: remova primeiro as policies novas, depois funções, tabelas de salas e colunas `room_id`/`created_by`. Se houver dados, restaure o backup em vez de apagar registros. Nunca execute a reversão no projeto real sem um backup testado.
+
+## Dívida conhecida da Fase 1
+
+A conta de serviço (`profiles.role = 'admin'`) consegue ler dados de qualquer sala, mesmo das quais não participa. Isso acontece porque as políticas `*_room_select_gate` incluem a condição `current_user_role() = 'admin'`, necessária para o app atual funcionar enquanto a conta de serviço é a fonte de escrita.
+
+Esse comportamento é intencional nesta fase e será removido na Fase 2, quando a conta de serviço for substituída pela sessão do usuário. Não aplicar a migration adiada (`supabase/deferred/20261016090500`) antes da Fase 3: ela também está incompleta (falta a remoção das políticas de admin global).
