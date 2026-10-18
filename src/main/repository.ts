@@ -501,6 +501,17 @@ export function repository(db: Database.Database) {
   };
   return {
     gameRules,
+    maybeFinishLeagueChampionship: (championshipId: number): boolean => {
+      const championship = db
+        .prepare("SELECT format FROM championships WHERE id=?")
+        .get(championshipId) as { format: string } | undefined;
+      if (championship?.format !== "league") return false;
+
+      const counts = db
+        .prepare("SELECT COUNT(*) total, COUNT(match_id) played FROM fixtures WHERE championship_id=?")
+        .get(championshipId) as { total: number; played: number };
+      return counts.total > 0 && counts.total === counts.played;
+    },
     saveGameRules: (settings: GameRulesSettings) => {
       const validSettings = validateGameRules(settings);
       const save = db.prepare(

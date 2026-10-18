@@ -2,6 +2,35 @@ import type Database from "better-sqlite3";
 import type { Championship } from "../shared/models";
 import { ensureAuthenticated, getSupabase } from "./supabase";
 
+export async function setChampionshipStatus(
+  db: Database.Database,
+  roomId: string | null,
+  championshipId: number,
+  status: "active" | "finished"
+): Promise<void> {
+  // Reservado para o contexto de salas quando o schema antigo for substituído.
+  void roomId;
+
+  const championship = db.prepare("SELECT id FROM championships WHERE id = ?").get(championshipId);
+  if (!championship) throw new Error("Campeonato não encontrado.");
+
+  const auth = await ensureAuthenticated();
+  const supabase = getSupabase();
+  if (!auth.ok || !supabase) throw new Error("Não foi possível atualizar o campeonato. Verifique sua conexão.");
+
+  const { data, error } = await supabase
+    .from("championships")
+    .update({ status })
+    .eq("id", championshipId)
+    .select("id");
+
+  if (error || !data || data.length !== 1) {
+    throw new Error("Não foi possível atualizar o campeonato. Tente novamente.");
+  }
+
+  db.prepare("UPDATE championships SET status = ? WHERE id = ?").run(status, championshipId);
+}
+
 /**
  * Listagem de campeonatos com sincronização Supabase -> SQLite
  */

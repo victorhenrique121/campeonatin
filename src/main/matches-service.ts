@@ -1,6 +1,7 @@
 import type Database from "better-sqlite3";
 
 import type { MatchInput } from "../shared/models";
+import { setChampionshipStatus } from "./championship-service";
 import type { repository } from "./repository";
 import {
   ensureAuthenticated,
@@ -338,18 +339,22 @@ export function createMatchesService(
           .get(remoteId) as { id: number } | undefined;
 
         if (localFixture) {
-          await supabase
+          const { error } = await supabase
             .from("fixtures")
             .update({ match_id: remoteId })
             .eq("id", localFixture.id);
+          if (error) throw toFriendlyError(error);
         }
       }
-
-      return remoteId;
     } catch (err) {
       await compensateRemoteDelete(remoteId);
       throw toLocalSaveError(err);
     }
+
+    if (championshipId !== null && repo.maybeFinishLeagueChampionship(championshipId)) {
+      await setChampionshipStatus(db, null, championshipId, "finished");
+    }
+    return remoteId;
   }
 
   async function update(m: MatchInput & { id: number }): Promise<number> {
@@ -389,6 +394,15 @@ export function createMatchesService(
     const championshipId = m.championshipId
       ? Number(m.championshipId)
       : existing.championship_id;
+
+    if (existing.championship_id !== null) {
+      const championship = db
+        .prepare("SELECT status FROM championships WHERE id=?")
+        .get(existing.championship_id) as { status: string } | undefined;
+      if (championship?.status === "finished") {
+        await setChampionshipStatus(db, null, existing.championship_id, "active");
+      }
+    }
 
     const patched = await execWithAuthRetry<
       SupabaseMatchRow[] | SupabaseMatchRow
@@ -434,11 +448,15 @@ export function createMatchesService(
       );
     }
 
-    return repo.updateMatch({
+    const updatedId = repo.updateMatch({
       ...m,
       championshipId: championshipId ?? undefined,
       playedAt,
     });
+    if (championshipId !== null && repo.maybeFinishLeagueChampionship(championshipId)) {
+      await setChampionshipStatus(db, null, championshipId, "finished");
+    }
+    return updatedId;
   }
 
   async function remove(id: number): Promise<void> {
@@ -448,8 +466,16 @@ export function createMatchesService(
       return;
     }
 
-    const existing = db.prepare("SELECT id FROM matches WHERE id=?").get(id);
+    const existing = db.prepare("SELECT id, championship_id FROM matches WHERE id=?").get(id) as
+      | { id: number; championship_id: number | null }
+      | undefined;
     if (!existing) throw new Error("Partida não encontrada.");
+
+    const championship = existing.championship_id === null
+      ? undefined
+      : db.prepare("SELECT status FROM championships WHERE id=?").get(existing.championship_id) as
+          | { status: string }
+          | undefined;
 
     // Desvincula o match_id da fixture remota antes de excluir a partida
     await execWithAuthRetry(() =>
@@ -467,6 +493,9 @@ export function createMatchesService(
     }
 
     repo.deleteMatch(id);
+    if (existing.championship_id !== null && championship?.status === "finished") {
+      await setChampionshipStatus(db, null, existing.championship_id, "active");
+    }
   }
 
   function clear(): void {
