@@ -285,6 +285,32 @@ export function repository(db: Database.Database) {
   SELECT p.id,p.name,COALESCE(a.played,0) played,COALESCE(a.wins,0) wins,COALESCE(a.draws,0) draws,COALESCE(a.losses,0) losses,COALESCE(a.goals_for,0) goalsFor,COALESCE(a.goals_against,0) goalsAgainst,${pointsExpression(settings)} points,${winRateExpression()} winRate,0 streak FROM players p LEFT JOIN aggregate a ON a.player_id=p.id ORDER BY points DESC,(goalsFor-goalsAgainst) DESC,goalsFor DESC,p.name`;
   const championshipRankingSql = (settings: GameRulesSettings) =>
     `WITH results AS (SELECT player1_id player_id,score1 gf,score2 ga FROM matches WHERE championship_id=? UNION ALL SELECT player2_id,score2,score1 FROM matches WHERE championship_id=?), aggregate AS (SELECT player_id,COUNT(*) played,SUM(gf>ga) wins,SUM(gf=ga) draws,SUM(gf<ga) losses,SUM(gf) goals_for,SUM(ga) goals_against FROM results GROUP BY player_id) SELECT p.id,p.name,COALESCE(a.played,0) played,COALESCE(a.wins,0) wins,COALESCE(a.draws,0) draws,COALESCE(a.losses,0) losses,COALESCE(a.goals_for,0) goalsFor,COALESCE(a.goals_against,0) goalsAgainst,${pointsExpression(settings)} points,${winRateExpression()} winRate,0 streak FROM championship_participants cp JOIN players p ON p.id=cp.player_id LEFT JOIN aggregate a ON a.player_id=p.id WHERE cp.championship_id=? ORDER BY points DESC,(goalsFor-goalsAgainst) DESC,goalsFor DESC,p.name`;
+  const championshipDuoRankingSql = (settings: GameRulesSettings) => `
+    WITH duos AS (
+      SELECT team1_duo_id duo_id FROM fixtures WHERE championship_id = ? AND team1_duo_id IS NOT NULL
+      UNION
+      SELECT team2_duo_id FROM fixtures WHERE championship_id = ? AND team2_duo_id IS NOT NULL
+    ), results AS (
+      SELECT team1_duo_id duo_id, score1 gf, score2 ga FROM matches WHERE championship_id = ? AND team1_duo_id IS NOT NULL
+      UNION ALL
+      SELECT team2_duo_id, score2, score1 FROM matches WHERE championship_id = ? AND team2_duo_id IS NOT NULL
+    ), aggregate AS (
+      SELECT duo_id, COUNT(*) played, SUM(gf > ga) wins, SUM(gf = ga) draws,
+             SUM(gf < ga) losses, SUM(gf) goals_for, SUM(ga) goals_against
+      FROM results GROUP BY duo_id
+    )
+    SELECT d.id, COALESCE(d.name, p1.name || ' & ' || p2.name) name,
+           COALESCE(a.played, 0) played, COALESCE(a.wins, 0) wins,
+           COALESCE(a.draws, 0) draws, COALESCE(a.losses, 0) losses,
+           COALESCE(a.goals_for, 0) goalsFor, COALESCE(a.goals_against, 0) goalsAgainst,
+           ${pointsExpression(settings)} points, ${winRateExpression()} winRate, 0 streak
+    FROM duos
+    JOIN teams2v2 d ON d.id = duos.duo_id
+    JOIN players p1 ON p1.id = d.player1_id
+    JOIN players p2 ON p2.id = d.player2_id
+    LEFT JOIN aggregate a ON a.duo_id = d.id
+    ORDER BY points DESC, (goalsFor - goalsAgainst) DESC, goalsFor DESC, name
+  `;
   const withStreaks = (rows: Standing[]) => {
     const games = db
       .prepare(
@@ -958,14 +984,41 @@ export function repository(db: Database.Database) {
     championshipDetail: (id: number) => {
       const championship = db
         .prepare(
-          `SELECT c.id,c.name,c.format,c.mode,c.mutator,c.starts_at startsAt,c.status,COUNT(cp.player_id) participants FROM championships c LEFT JOIN championship_participants cp ON cp.championship_id=c.id WHERE c.id=? GROUP BY c.id`,
+          `SELECT c.id,c.name,c.format,c.mode,c.mutator,c.starts_at startsAt,c.status,
+            CASE WHEN c.mode = 'duo' THEN (
+              SELECT COUNT(*) FROM (
+                SELECT team1_duo_id FROM fixtures WHERE championship_id = c.id AND team1_duo_id IS NOT NULL
+                UNION
+                SELECT team2_duo_id FROM fixtures WHERE championship_id = c.id AND team2_duo_id IS NOT NULL
+              )
+            ) ELSE COUNT(cp.player_id) END participants
+           FROM championships c LEFT JOIN championship_participants cp ON cp.championship_id=c.id WHERE c.id=? GROUP BY c.id`,
         )
         .get(id) as Championship | undefined;
       if (!championship) throw new Error("Campeonato não encontrado.");
-      const standing = db
-        .prepare(championshipRankingSql(gameRules()))
-        .all(id, id, id);
-      const fixtures = db
+      const standing = championship.mode === "duo"
+        ? db.prepare(championshipDuoRankingSql(gameRules())).all(id, id, id, id) as Standing[]
+        : db.prepare(championshipRankingSql(gameRules())).all(id, id, id) as Standing[];
+      const fixtures = championship.mode === "duo" ? db
+        .prepare(`
+          SELECT f.id, f.round_number round, f.stage,
+                 f.player1_id player1Id, f.player2_id player2Id,
+                 f.team1_duo_id team1DuoId, f.team2_duo_id team2DuoId,
+                 p1.name || ' & ' || p2.name player1,
+                 p3.name || ' & ' || p4.name player2,
+                 f.match_id matchId, m.score1 score1, m.score2 score2
+          FROM fixtures f
+          LEFT JOIN teams2v2 d1 ON d1.id = f.team1_duo_id
+          LEFT JOIN players p1 ON p1.id = d1.player1_id
+          LEFT JOIN players p2 ON p2.id = d1.player2_id
+          LEFT JOIN teams2v2 d2 ON d2.id = f.team2_duo_id
+          LEFT JOIN players p3 ON p3.id = d2.player1_id
+          LEFT JOIN players p4 ON p4.id = d2.player2_id
+          LEFT JOIN matches m ON m.id = f.match_id
+          WHERE f.championship_id = ?
+          ORDER BY f.round_number, f.id
+        `)
+        .all(id) : db
         .prepare(
           `SELECT f.id,f.round_number round,f.stage,f.player1_id player1Id,f.player2_id player2Id,p1.name player1,p2.name player2,f.match_id matchId,m.score1 score1,m.score2 score2,cp1.team_id team1Id,t1.name team1,cp2.team_id team2Id,t2.name team2 FROM fixtures f JOIN players p1 ON p1.id=f.player1_id JOIN players p2 ON p2.id=f.player2_id LEFT JOIN matches m ON m.id=f.match_id LEFT JOIN championship_participants cp1 ON cp1.championship_id=f.championship_id AND cp1.player_id=f.player1_id LEFT JOIN teams t1 ON t1.id=cp1.team_id LEFT JOIN championship_participants cp2 ON cp2.championship_id=f.championship_id AND cp2.player_id=f.player2_id LEFT JOIN teams t2 ON t2.id=cp2.team_id WHERE f.championship_id=? ORDER BY f.round_number,f.id`,
         )
