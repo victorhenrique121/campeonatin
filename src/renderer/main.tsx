@@ -1118,10 +1118,12 @@ function MatchesPage({
   players,
   teams,
   reload,
+  totalMatches,
 }: {
   players: Player[];
   teams: Team[];
   reload: () => Promise<void>;
+  totalMatches: number;
 }) {
   const [matches, setMatches] = useState<Match[]>([]);
   const [matchesLoaded, setMatchesLoaded] = useState(false);
@@ -1246,7 +1248,21 @@ function MatchesPage({
           </span>
         </div>
       </section>
-      <section className="grid">
+      <section className="metrics dashboard-metrics">
+        <article className="metric">
+          <span>PARTIDAS TOTAIS</span>
+          <strong>{totalMatches}</strong>
+        </article>
+        <article className="metric">
+          <span>JOGADORES ATIVOS</span>
+          <strong>—</strong>
+        </article>
+        <article className="metric">
+          <span>COMPETIÇÃO ATUAL</span>
+          <strong>—</strong>
+        </article>
+      </section>
+      <section className="matches-layout">
         <article className="panel">
           <form className="form match-form" onSubmit={submit}>
             <div className="match-lanes">
@@ -1301,10 +1317,29 @@ function MatchesPage({
         </article>
         <article className="panel wide">
           <div className="panel-head">
-            <h2>Histórico</h2>
+            <h2>Últimas partidas</h2>
             <button className="danger" onClick={() => setShowClearModal(true)}>
               Limpar histórico
             </button>
+          </div>
+          <div className="matches-filters form">
+            <small>Filtros em breve.</small>
+            <label>
+              Competição
+              <select disabled title="Filtro em breve">
+                <option>Todas as competições</option>
+              </select>
+            </label>
+            <label>
+              Período
+              <select disabled title="Filtro em breve">
+                <option>Todos os períodos</option>
+              </select>
+            </label>
+            <label>
+              Busca
+              <input disabled title="Busca em breve" placeholder="Buscar partida" />
+            </label>
           </div>
           <div className="games matches-history">
             {matches.map((m) => (
@@ -3579,7 +3614,7 @@ function ArenaApp({ user, onSignOut }: { user: AuthUser; onSignOut: () => void }
     ) : page === "players" ? (
       <PlayersPage players={players} reload={reload} />
     ) : page === "matches" ? (
-      <MatchesPage players={players} teams={teams} reload={reload} />
+      <MatchesPage players={players} teams={teams} reload={reload} totalMatches={data.matches} />
     ) : page === "ranking" ? (
       <>
         <section className="page-title">

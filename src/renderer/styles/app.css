@@ -3338,6 +3338,31 @@ nav .active {
     gap: 10px;
 }
 
+.matches-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+    gap: 22px;
+    align-items: start;
+}
+
+.matches-layout > * {
+    min-width: 0;
+}
+
+.matches-filters {
+    margin-bottom: 18px;
+}
+
+.matches-filters small {
+    color: var(--arena-text-secondary);
+}
+
+@media (max-width: 1099px) {
+    .matches-layout {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
 .matches-history,
 .players-list {
     max-height: min(70vh, 760px);
