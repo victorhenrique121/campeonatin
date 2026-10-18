@@ -43,6 +43,7 @@ const api: Api = {
     signOutOthers: invoke("auth:signout-others"),
   },
   dashboard: invoke("dashboard"),
+  arenaNews: invoke("arena:news"),
   players: invoke("players:list"),
   savePlayer: invoke("players:save"),
   deletePlayer: invoke("players:delete"),

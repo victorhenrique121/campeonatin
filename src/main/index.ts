@@ -118,6 +118,7 @@ app.whenReady().then(() => {
   ipcMain.handle("auth:signout-others", () => endOtherSessions());
 
   ipcMain.handle("dashboard", () => repo.dashboard());
+  ipcMain.handle("arena:news", () => repo.arenaNews());
   ipcMain.handle("players:list", () => players.list());
   ipcMain.handle("players:save", (_, p) => players.save(p));
   ipcMain.handle("players:delete", (_, id) => players.remove(id));

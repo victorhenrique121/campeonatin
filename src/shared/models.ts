@@ -13,6 +13,14 @@ export type Player = {
   country: string;
   shieldUrl?: string;   // novo
 };
+export type ArenaNews = {
+  id: string;
+  type: "goleada" | "sequencia" | "pato";
+  title: string;
+  description: string;
+  playerNames?: string[];
+};
+
 export type Match = {
   id: number;
   playedAt: string;

@@ -2,6 +2,7 @@ import Database from "better-sqlite3";
 import fs from "node:fs";
 
 import type {
+  ArenaNews,
   Championship,
   Dashboard,
   GameRulesSettings,
@@ -244,6 +245,35 @@ export function repository(db: Database.Database) {
       score2: number;
     }>;
     return withWinningStreaks(rows, games);
+  };
+  const arenaNews = (): ArenaNews[] => {
+    const matches = db.prepare(`
+      SELECT m.id, m.played_at AS playedAt, p1.name AS player1, p2.name AS player2,
+        m.score1, m.score2
+      FROM matches m
+      JOIN players p1 ON p1.id = m.player1_id
+      JOIN players p2 ON p2.id = m.player2_id
+      WHERE julianday(m.played_at) >= julianday('now', '-30 days')
+        AND julianday(m.played_at) <= julianday('now')
+      ORDER BY julianday(m.played_at) DESC, m.id DESC
+    `).all() as Array<{ id: number; playedAt: string; player1: string; player2: string; score1: number; score2: number }>;
+    const news: ArenaNews[] = [];
+    const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const goleada = matches.filter((match) => new Date(match.playedAt).getTime() >= sevenDaysAgo && match.score1 !== match.score2)
+      .sort((a, b) => Math.abs(b.score1 - b.score2) - Math.abs(a.score1 - a.score2))[0];
+    if (goleada) {
+      news.push({ id: `goleada-${goleada.id}`, type: "goleada", title: "Goleada da Semana", description: `${goleada.player1} ${goleada.score1} × ${goleada.score2} ${goleada.player2}.`, playerNames: [goleada.player1, goleada.player2] });
+    }
+    const streak = withStreaks(db.prepare(rankingSql(gameRules())).all() as Standing[])
+      .reduce<Standing | null>((best, row) => row.streak > (best?.streak ?? 0) ? row : best, null);
+    if (streak) {
+      news.push({ id: `sequencia-${streak.id}`, type: "sequencia", title: "Maior Sequência", description: `${streak.name} tem ${streak.streak} ${streak.streak === 1 ? "vitória seguida" : "vitórias seguidas"}.`, playerNames: [streak.name] });
+    }
+    const pato = [...matches].sort((a, b) => (b.score1 + b.score2) - (a.score1 + a.score2))[0];
+    if (pato) {
+      news.push({ id: `pato-${pato.id}`, type: "pato", title: "Pato do Mês", description: `${pato.player1} ${pato.score1} × ${pato.score2} ${pato.player2}.`, playerNames: [pato.player1, pato.player2] });
+    }
+    return news;
   };
   const statisticsDashboard = (): StatisticsDashboard => {
     const settings = gameRules();
@@ -501,6 +531,7 @@ export function repository(db: Database.Database) {
   };
   return {
     gameRules,
+    arenaNews,
     maybeFinishLeagueChampionship: (championshipId: number): boolean => {
       const championship = db
         .prepare("SELECT format FROM championships WHERE id=?")

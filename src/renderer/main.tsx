@@ -63,6 +63,7 @@ import {
 } from "lucide-react";
 import type { AuthUser } from "../shared/api";
 import type {
+  ArenaNews,
   Championship,
   ChampionshipDetail,
   Dashboard,
@@ -2093,6 +2094,7 @@ function ChampionshipPage({
   players: Player[];
   teams: Team[];
 }) {
+  const [news, setNews] = useState<ArenaNews[]>([]);
   const [items, setItems] = useState<Championship[]>([]),
     [selected, setSelected] = useState<number>(),
     [detail, setDetail] = useState<ChampionshipDetail>(),
@@ -2122,6 +2124,13 @@ function ChampionshipPage({
   };
   useEffect(() => {
     load();
+  }, []);
+  useEffect(() => {
+    let active = true;
+    window.arena.arenaNews()
+      .then((result) => { if (active) setNews(result); })
+      .catch(() => { if (active) setNews([]); });
+    return () => { active = false; };
   }, []);
   useEffect(() => {
     if (selected) window.arena.championshipDetail(selected).then(setDetail);
@@ -2746,10 +2755,15 @@ function ChampionshipPage({
         </div>
         <article className="panel arena-news">
           <div className="panel-head"><h2>Notícias da Arena</h2></div>
+          {news.length ? news.map((item) => {
+            const Icon = item.type === "goleada" ? Trophy : item.type === "sequencia" ? Sparkles : Gamepad2;
+            return <div className="arena-news-card" key={item.id}><Icon size={20} /><div><strong>{item.title}</strong><p>{item.description}</p></div></div>;
+          }) : <>
           <small>Em breve: notícias geradas automaticamente</small>
           <div className="arena-news-card"><Trophy size={20} /><div><strong>Goleada da Semana</strong><p>Os destaques da arena aparecerão aqui.</p></div></div>
           <div className="arena-news-card"><Sparkles size={20} /><div><strong>Virada Épica</strong><p>As reviravoltas ganharão destaque aqui.</p></div></div>
           <div className="arena-news-card"><Gamepad2 size={20} /><div><strong>Pato do Mês</strong><p>Os momentos divertidos aparecerão aqui.</p></div></div>
+          </>}
         </article>
       </div>
       {confirming && (

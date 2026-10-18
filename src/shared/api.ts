@@ -1,4 +1,5 @@
 import type {
+  ArenaNews,
   Championship,
   ChampionshipDetail,
   Dashboard,
@@ -90,6 +91,7 @@ export type Api = {
     signOutOthers: () => Promise<void>;
   };
   dashboard: () => Promise<Dashboard>;
+  arenaNews: () => Promise<ArenaNews[]>;
   players: () => Promise<Player[]>;
   savePlayer: (player: Partial<Player>) => Promise<Player>;
   deletePlayer: (id: number) => Promise<void>;
