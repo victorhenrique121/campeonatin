@@ -274,6 +274,12 @@ function RoomsPage() {
   const [memberActionMessage, setMemberActionMessage] = useState("");
   const [memberActionError, setMemberActionError] = useState("");
   const [memberActionPending, setMemberActionPending] = useState(false);
+  const [roomActionPending, setRoomActionPending] = useState(false);
+  const [roomActionMessage, setRoomActionMessage] = useState("");
+  const [roomActionError, setRoomActionError] = useState("");
+  const [newOwnerId, setNewOwnerId] = useState("");
+  const [renameValue, setRenameValue] = useState("");
+  const [renaming, setRenaming] = useState(false);
   const selectedRoomRef = useRef<string | null>(null);
   const selectionVersion = useRef(0);
   const selectedRoom = rooms.find((room) => room.id === selectedRoomId);
@@ -324,6 +330,103 @@ function RoomsPage() {
       if (selectedRoomRef.current === roomId && selectionVersion.current === version) setMemberActionError(getFriendlyPrivacyError(err));
     } finally {
       setMemberActionPending(false);
+    }
+  };
+
+  const renameRoom = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!selectedRoom) return;
+    setRoomActionMessage("");
+    setRoomActionError("");
+    const newName = renameValue.trim();
+    if (!newName) {
+      setRoomActionError("O nome da sala não pode ser vazio.");
+      return;
+    }
+    if (newName === selectedRoom.name) return;
+    const roomId = selectedRoom.id;
+    const version = selectionVersion.current;
+    setRenaming(true);
+    try {
+      await window.arena.renameRoom(roomId, renameValue);
+      setRooms((current) => current.map((room) => room.id === roomId ? { ...room, name: newName } : room));
+      if (selectedRoomRef.current === roomId && selectionVersion.current === version) {
+        setRenameValue("");
+        setRoomActionMessage("Sala renomeada.");
+      }
+    } catch (err) {
+      if (selectedRoomRef.current === roomId && selectionVersion.current === version) setRoomActionError(getFriendlyPrivacyError(err));
+    } finally {
+      setRenaming(false);
+    }
+  };
+
+  const changeRoom = async (action: "leave" | "regenerate" | "transfer" | "delete") => {
+    if (!selectedRoom) return;
+    const room = selectedRoom;
+    const version = selectionVersion.current;
+    if (action === "transfer" && !newOwnerId) {
+      setRoomActionError("Escolha um membro para ser o novo proprietário.");
+      return;
+    }
+    if (action === "delete" && !window.confirm("Deseja excluir esta sala?")) return;
+
+    setRoomActionMessage("");
+    setRoomActionError("");
+    setRoomActionPending(true);
+    try {
+      if (action === "leave") await window.arena.leaveRoom(room.id);
+      if (action === "delete") await window.arena.deleteRoom(room.id);
+      if (action === "regenerate") {
+        const newCode = await window.arena.regenerateRoomCode(room.id);
+        setRooms((current) => current.map((item) => item.id === room.id ? { ...item, entryCode: newCode } : item));
+      }
+      if (action === "transfer") {
+        await window.arena.transferRoomOwnership(room.id, newOwnerId);
+        setRooms((current) => current.map((item) => item.id === room.id ? { ...item, role: "admin" } : item));
+      }
+
+      const stillSelected = selectedRoomRef.current === room.id && selectionVersion.current === version;
+      if (stillSelected) {
+        if (action === "leave" || action === "delete") {
+          selectionVersion.current++;
+          selectedRoomRef.current = null;
+          setSelectedRoomId(null);
+          setMemberResult(null);
+        }
+        const messages = {
+          leave: "Você saiu da sala.",
+          regenerate: "Código regenerado.",
+          transfer: "Propriedade transferida.",
+          delete: "Sala excluída.",
+        };
+        setRoomActionMessage(messages[action]);
+        setNewOwnerId("");
+      }
+
+      try {
+        const request = ++roomsRequest.current;
+        const result = await window.arena.listMyRooms();
+        if (request === roomsRequest.current) {
+          setRooms(result);
+          setRoomsError("");
+          setLoadingRooms(false);
+        }
+        if (action === "transfer" && selectedRoomRef.current === room.id && selectionVersion.current === version) {
+          const members = await window.arena.listRoomMembers(room.id);
+          if (selectedRoomRef.current === room.id && selectionVersion.current === version) setMemberResult({ roomId: room.id, members, error: "" });
+        }
+      } catch {
+        if (selectedRoomRef.current === room.id && selectionVersion.current === version && action === "transfer") {
+          setMemberResult({ roomId: room.id, members: [], error: "Não foi possível atualizar a lista de membros." });
+        }
+        setLoadingRooms(false);
+        setRoomActionError("A ação foi concluída, mas não foi possível atualizar os dados da sala.");
+      }
+    } catch (err) {
+      if (selectedRoomRef.current === room.id && selectionVersion.current === version) setRoomActionError(getFriendlyPrivacyError(err));
+    } finally {
+      setRoomActionPending(false);
     }
   };
 
@@ -468,6 +571,10 @@ function RoomsPage() {
                   setCopyMessage("");
                   setMemberActionMessage("");
                   setMemberActionError("");
+                  setRoomActionMessage("");
+                  setRoomActionError("");
+                  setNewOwnerId("");
+                  setRenameValue("");
                   if (selectedRoomId !== room.id) {
                     selectionVersion.current++;
                     setMemberResult(null);
@@ -482,6 +589,8 @@ function RoomsPage() {
           ))}
         </div>
       </article>
+      {roomActionMessage && <p role="status">{roomActionMessage}</p>}
+      {roomActionError && <p role="alert">{roomActionError}</p>}
       {selectedRoom && (
         <article className="panel">
           <h2>{selectedRoom.name}</h2>
@@ -490,6 +599,34 @@ function RoomsPage() {
             Copiar
           </button>
           {copyMessage && <p role="status">{copyMessage}</p>}
+          {selectedRoom.role === "owner" && (
+            <>
+              <form className="form" onSubmit={renameRoom}>
+                <label>
+                  Novo nome
+                  <input value={renameValue} onChange={(event) => setRenameValue(event.target.value)} />
+                </label>
+                <button type="submit" className="secondary-button" disabled={renaming || roomActionPending || memberActionPending}>
+                  {renaming ? "Renomeando..." : "Confirmar renomeação"}
+                </button>
+              </form>
+              <button type="button" className="secondary-button" disabled={renaming || roomActionPending || memberActionPending} onClick={() => changeRoom("regenerate")}>Regenerar código</button>
+              <label>
+                Novo proprietário
+                <select value={newOwnerId} onChange={(event) => setNewOwnerId(event.target.value)} disabled={renaming || roomActionPending || memberActionPending}>
+                  <option value="">Escolha um membro</option>
+                  {memberResult?.roomId === selectedRoom.id && memberResult.members.filter((member) => member.role !== "owner").map((member) => (
+                    <option key={member.userId} value={member.userId}>{member.displayName}{member.username ? ` (@${member.username})` : ""}</option>
+                  ))}
+                </select>
+              </label>
+              <button type="button" className="secondary-button" disabled={renaming || roomActionPending || memberActionPending || !newOwnerId} onClick={() => changeRoom("transfer")}>Transferir propriedade</button>
+              <button type="button" className="danger" disabled={renaming || roomActionPending || memberActionPending} onClick={() => changeRoom("delete")}>Excluir sala</button>
+            </>
+          )}
+          {(selectedRoom.role !== "owner" || (memberResult?.roomId === selectedRoom.id && !memberResult.error && memberResult.members.length > 1)) && (
+            <button type="button" className="secondary-button" disabled={renaming || roomActionPending || memberActionPending} onClick={() => changeRoom("leave")}>Sair da sala</button>
+          )}
           <h3>Membros</h3>
           {memberActionMessage && <p role="status">{memberActionMessage}</p>}
           {memberActionError && <p role="alert">{memberActionError}</p>}
@@ -514,11 +651,11 @@ function RoomsPage() {
                   {selectedRoom.role === "owner" && member.role !== "owner" && (
                     <>
                       {member.role === "participant" && (
-                        <button type="button" className="secondary-button" disabled={memberActionPending} onClick={() => changeMember(selectedRoom.id, member.userId, "promote")}>
+                        <button type="button" className="secondary-button" disabled={renaming || memberActionPending || roomActionPending} onClick={() => changeMember(selectedRoom.id, member.userId, "promote")}>
                           Promover
                         </button>
                       )}
-                      <button type="button" className="danger" disabled={memberActionPending} onClick={() => changeMember(selectedRoom.id, member.userId, "remove")}>
+                      <button type="button" className="danger" disabled={renaming || memberActionPending || roomActionPending} onClick={() => changeMember(selectedRoom.id, member.userId, "remove")}>
                         Remover
                       </button>
                     </>
