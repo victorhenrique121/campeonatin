@@ -63,6 +63,9 @@ export type AuthSignUpResult = {
 };
 
 export type Api = {
+  createRoom: (name: string) => Promise<{ id: string; name: string; entryCode: string }>;
+  listMyRooms: () => Promise<Array<{ id: string; name: string; role: string; entryCode: string; memberCount: number }>>;
+  joinRoom: (code: string) => Promise<{ roomId: string | null }>;
   getProfile: () => Promise<UserProfile>;
   isUsernameAvailable: (username: string) => Promise<boolean>;
   updateProfile: (input: UpdateProfileInput) => Promise<UserProfile>;

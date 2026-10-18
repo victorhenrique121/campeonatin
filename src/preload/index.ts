@@ -4,7 +4,21 @@ const invoke =
   (channel: string) =>
   (...args: unknown[]) =>
     ipcRenderer.invoke(channel, ...args);
+const invokeRoom = (channel: string) => async (...args: unknown[]) => {
+  try {
+    return await ipcRenderer.invoke(channel, ...args);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (message.includes("Sua sessão expirou. Entre novamente para continuar.")) {
+      throw new Error("Sua sessão expirou. Entre novamente para continuar.");
+    }
+    throw new Error("Algo deu errado. Tente novamente em instantes.");
+  }
+};
 const api: Api = {
+  createRoom: invokeRoom("rooms:create"),
+  listMyRooms: invokeRoom("rooms:list-mine"),
+  joinRoom: invokeRoom("rooms:join"),
   getProfile: invoke("profile:get"),
   isUsernameAvailable: invoke("profile:username-available"),
   updateProfile: invoke("profile:update"),

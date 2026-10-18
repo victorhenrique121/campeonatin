@@ -288,6 +288,43 @@ function getUserAuthClient(): SupabaseClient | null {
   return userAuthClient;
 }
 
+async function roomSessionClient(): Promise<SupabaseClient> {
+  const client = getUserAuthClient();
+  if (!client) throw new Error("Algo deu errado. Tente novamente em instantes.");
+  const { data, error } = await client.auth.getSession();
+  if (error || !data.session) {
+    throw new Error("Sua sessão expirou. Entre novamente para continuar.");
+  }
+  return client;
+}
+
+export async function createRoom(name: string): Promise<{ id: string; name: string; entryCode: string }> {
+  const client = await roomSessionClient();
+  const { data, error } = await client.rpc("create_room", { p_name: name });
+  if (error || !data) throw new Error("Algo deu errado. Tente novamente em instantes.");
+  return { id: data.id, name: data.name, entryCode: data.entry_code };
+}
+
+export async function listMyRooms(): Promise<Array<{ id: string; name: string; role: string; entryCode: string; memberCount: number }>> {
+  const client = await roomSessionClient();
+  const { data, error } = await client.rpc("list_my_rooms");
+  if (error || !data) throw new Error("Algo deu errado. Tente novamente em instantes.");
+  return data.map((room: { id: string; name: string; role: string; entry_code: string; member_count: number }) => ({
+    id: room.id,
+    name: room.name,
+    role: room.role,
+    entryCode: room.entry_code,
+    memberCount: room.member_count,
+  }));
+}
+
+export async function joinRoom(code: string): Promise<{ roomId: string | null }> {
+  const client = await roomSessionClient();
+  const { data, error } = await client.rpc("join_room", { p_code: code });
+  if (error) throw new Error("Algo deu errado. Tente novamente em instantes.");
+  return { roomId: data };
+}
+
 function normalizeAuthError(
   error: { message?: string; code?: string; status?: number } | null,
   context: "default" | "password-change" | "email-change" | "session-management" = "default",

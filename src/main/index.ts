@@ -8,6 +8,9 @@ import { createMatchesService } from "./matches-service";
 import {
   changeEmail,
   changePassword,
+  createRoom,
+  listMyRooms,
+  joinRoom,
   getAuthSession,
   getEmailSettings,
   getProfile,
@@ -67,6 +70,9 @@ app.whenReady().then(() => {
   const matches = createMatchesService(db, repo);
 
   ipcMain.handle("auth:session", () => getAuthSession());
+  ipcMain.handle("rooms:create", (_, name: string) => createRoom(name));
+  ipcMain.handle("rooms:list-mine", () => listMyRooms());
+  ipcMain.handle("rooms:join", (_, code: string) => joinRoom(code));
   ipcMain.handle("profile:get", () => getProfile());
   ipcMain.handle("profile:username-available", (_, username) =>
     isUsernameAvailable(username),

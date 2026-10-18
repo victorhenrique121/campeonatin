@@ -4,6 +4,7 @@ import { PasswordSettings } from "./settings/PasswordSettings";
 import { EmailSettings } from "./settings/EmailSettings";
 import { NotificationsSettings } from "./settings/NotificationsSettings";
 import { PrivacySettings } from "./settings/PrivacySettings";
+import { getFriendlyPrivacyError } from "./settings/auth-error";
 import {
   ARENA_PALETTES,
   DEFAULT_PALETTE_ID,
@@ -251,6 +252,37 @@ function Game({
 }
 
 function RoomsPage() {
+  const [name, setName] = useState("");
+  const [entryCode, setEntryCode] = useState("");
+  const [error, setError] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [, setRooms] = useState<Awaited<ReturnType<typeof window.arena.listMyRooms>>>([]);
+
+  const create = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!name.trim()) {
+      setError("O nome da sala não pode ser vazio.");
+      return;
+    }
+
+    setError("");
+    setCreating(true);
+    try {
+      const room = await window.arena.createRoom(name);
+      setEntryCode(room.entryCode);
+      setName("");
+      try {
+        setRooms(await window.arena.listMyRooms());
+      } catch {
+        setError("Sala criada, mas não foi possível atualizar a lista.");
+      }
+    } catch (err) {
+      setError(getFriendlyPrivacyError(err));
+    } finally {
+      setCreating(false);
+    }
+  };
+
   return (
     <>
       <section className="page-title">
@@ -259,7 +291,17 @@ function RoomsPage() {
         </div>
       </section>
       <article className="panel">
-        <p>Em breve: criar, entrar e gerenciar salas.</p>
+        <form className="form" onSubmit={create}>
+          <label>
+            Nome da sala
+            <input value={name} onChange={(event) => setName(event.target.value)} />
+          </label>
+          <button className="primary" type="submit" disabled={creating}>
+            {creating ? "Criando sala..." : "Criar sala"}
+          </button>
+        </form>
+        {entryCode && <p role="status">Código da sala: {entryCode}</p>}
+        {error && <p role="alert">{error}</p>}
       </article>
     </>
   );
