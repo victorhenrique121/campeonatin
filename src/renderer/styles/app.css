@@ -932,6 +932,67 @@ body {
   box-shadow: 0 15px 40px rgba(0, 0, 0, 0.45);
 }
 
+.arena-tools-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: transparent;
+  border: none;
+  color: var(--arena-text-secondary);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.arena-tools-close:hover {
+  color: var(--arena-text);
+}
+
+.roulette-panel {
+  text-align: center;
+}
+
+.roulette-frame {
+  position: relative;
+  width: 210px;
+  margin: 16px auto 8px;
+}
+
+.roulette {
+  position: relative;
+  width: 210px;
+  height: 210px;
+  overflow: hidden;
+  border: 2px solid var(--arena-accent);
+  border-radius: 50%;
+  background: repeating-conic-gradient(from -22.5deg, #302554 0deg 45deg, #1c1d34 45deg 90deg);
+  transition: transform 2s cubic-bezier(.15, .7, .2, 1);
+}
+
+.roulette-item {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 72px;
+  overflow: hidden;
+  color: #fff;
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.roulette-pointer {
+  position: absolute;
+  top: -12px;
+  left: 50%;
+  z-index: 1;
+  color: #ffd700;
+  transform: translateX(-50%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .roulette { transition: none; }
+}
+
 .arena-tools-popover > b {
   display: block;
   margin-bottom: 10px;

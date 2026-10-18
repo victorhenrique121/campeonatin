@@ -1,5 +1,6 @@
 import { Dices, Goal, Route, Shuffle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import type { Team } from "../../shared/models";
 
 type ArenaToolResult = { title: string; text: string };
 
@@ -12,27 +13,19 @@ const challenges: ArenaToolResult[] = [
   { title: "Jogue com um time aleatório", text: "Escolha seu time aleatoriamente antes da partida." },
 ];
 
-const rules: ArenaToolResult[] = [
-  { title: "Partida valendo o dobro", text: "Combine com os jogadores que esta partida vale o dobro." },
-  { title: "Jogar com time aleatório", text: "Escolha o time aleatoriamente antes da partida." },
-  { title: "Jogar com um jogador a menos", text: "Jogue a partida com um jogador a menos." },
-  { title: "Gols de fora da área valem 2", text: "Conte em dobro os gols marcados de fora da área." },
-  { title: "Sem faltas", text: "Evite cometer faltas durante a partida." },
-  { title: "Jogo com duração reduzida", text: "Combine uma duração menor antes de começar." },
-  { title: "Time espelhado", text: "Os dois jogadores usam o mesmo time." },
-  { title: "Pênalti no início", text: "Comece a partida com um pênalti combinado entre os jogadores." },
-];
-
 function drawResult<T>(items: readonly T[], previous: T | null): T | null {
   const choices = items.length > 1 ? items.filter((item) => item !== previous) : items;
   return choices[Math.floor(Math.random() * choices.length)] ?? null;
 }
 
-export function ArenaTools({ mutators }: { mutators: Array<{ title: string; text: string }> }) {
+export function ArenaTools({ mutators, teams }: { mutators: Array<{ title: string; text: string }>; teams: Team[] }) {
   const [open, setOpen] = useState(false);
   const [mutator, setMutator] = useState<ArenaToolResult | null>(null);
   const [challenge, setChallenge] = useState<ArenaToolResult | null>(null);
-  const [rule, setRule] = useState<ArenaToolResult | null>(null);
+  const [rouletteOpen, setRouletteOpen] = useState(false);
+  const [rouletteTeams, setRouletteTeams] = useState<Team[]>([]);
+  const [winner, setWinner] = useState<Team | null>(null);
+  const [rotation, setRotation] = useState(0);
   const [spinning, setSpinning] = useState(false);
   const spinTimer = useRef<number | null>(null);
 
@@ -40,12 +33,43 @@ export function ArenaTools({ mutators }: { mutators: Array<{ title: string; text
     if (spinTimer.current !== null) window.clearTimeout(spinTimer.current);
   }, []);
 
+  const closePanel = () => {
+    if (spinTimer.current !== null) window.clearTimeout(spinTimer.current);
+    spinTimer.current = null;
+    setSpinning(false);
+    setRouletteOpen(false);
+    setOpen(false);
+  };
+
+  const toggleRoulette = () => {
+    if (spinning) return;
+    if (rouletteOpen) {
+      setRouletteOpen(false);
+      return;
+    }
+    const shuffled = [...new Map(teams.map((team) => [team.id, team])).values()];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    setRouletteTeams(shuffled.slice(0, 8));
+    setWinner(null);
+    setRotation(0);
+    setRouletteOpen(true);
+  };
+
   const spin = () => {
-    if (spinTimer.current !== null) return;
-    const result = drawResult(rules, rule);
+    if (spinTimer.current !== null || rouletteTeams.length === 0) return;
+    const index = Math.floor(Math.random() * rouletteTeams.length);
+    const result = rouletteTeams[index];
+    const target = (360 - index * 360 / rouletteTeams.length) % 360;
+    const current = ((rotation % 360) + 360) % 360;
+    const nextRotation = rotation + 5 * 360 + ((target - current + 360) % 360);
+    setWinner(null);
     setSpinning(true);
+    setRotation(nextRotation);
     spinTimer.current = window.setTimeout(() => {
-      setRule(result);
+      setWinner(result);
       setSpinning(false);
       spinTimer.current = null;
     }, 2000);
@@ -56,7 +80,7 @@ export function ArenaTools({ mutators }: { mutators: Array<{ title: string; text
       <button
         type="button"
         className="arena-tools-fab"
-        onClick={() => setOpen(!open)}
+        onClick={() => open ? closePanel() : setOpen(true)}
         aria-label="Abrir ferramentas da Arena"
       >
         <Route size={18} />
@@ -65,6 +89,9 @@ export function ArenaTools({ mutators }: { mutators: Array<{ title: string; text
       {open && (
         <div className="arena-tools-popover">
           <b>Central da Arena</b>
+          <button type="button" className="arena-tools-close" onClick={closePanel} aria-label="Fechar Central da Arena">
+            Fechar
+          </button>
 
           <button
             type="button"
@@ -96,16 +123,31 @@ export function ArenaTools({ mutators }: { mutators: Array<{ title: string; text
           <button
             type="button"
             className="arena-tool-button"
-            onClick={spin}
+            onClick={toggleRoulette}
             disabled={spinning}
           >
-            <Shuffle size={17} className={spinning ? "spinning" : undefined} />
+            <Shuffle size={17} />
             <span>
               <strong>Roleta da Arena</strong>
-              <small>{spinning ? "Sorteando..." : "Deixe a sorte decidir"}</small>
+              <small>Sortear um time</small>
             </span>
           </button>
-          {!spinning && rule && <div className="panel" aria-live="polite"><strong>{rule.title}</strong><p>{rule.text}</p></div>}
+          {rouletteOpen && (
+            <div className="roulette-panel">
+              {rouletteTeams.length ? <>
+                <div className="roulette-frame">
+                  <span className="roulette-pointer" aria-hidden="true">▼</span>
+                  <div className="roulette" style={{ transform: `rotate(${rotation}deg)` }} aria-label="Times sorteados para a roleta">
+                    {rouletteTeams.map((team, index) => (
+                      <span className="roulette-item" key={team.id} style={{ transform: `translate(-50%, -50%) rotate(${index * 360 / rouletteTeams.length}deg) translateY(-78px)` }} title={team.name}>{team.name}</span>
+                    ))}
+                  </div>
+                </div>
+                <button type="button" onClick={spin} disabled={spinning}>Girar</button>
+                <p aria-live="polite">{spinning ? "Sorteando..." : winner ? `Time sorteado: ${winner.name}` : "Gire para sortear um time."}</p>
+              </> : <p>Nenhum time disponível para sortear.</p>}
+            </div>
+          )}
         </div>
       )}
     </div>

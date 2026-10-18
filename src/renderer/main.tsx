@@ -3930,7 +3930,7 @@ function ArenaApp({ user, onSignOut }: { user: AuthUser; onSignOut: () => void }
         )}
       </div>
 
-      {showArenaMenu && <ArenaTools mutators={MUTATORS} />}
+      {showArenaMenu && <ArenaTools mutators={MUTATORS} teams={teams} />}
     </div>
   );
 }
