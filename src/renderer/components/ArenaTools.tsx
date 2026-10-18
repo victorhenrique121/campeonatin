@@ -1,5 +1,5 @@
 import { Dices, Goal, Route, Shuffle } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type ArenaToolResult = { title: string; text: string };
 
@@ -33,6 +33,23 @@ export function ArenaTools({ mutators }: { mutators: Array<{ title: string; text
   const [mutator, setMutator] = useState<ArenaToolResult | null>(null);
   const [challenge, setChallenge] = useState<ArenaToolResult | null>(null);
   const [rule, setRule] = useState<ArenaToolResult | null>(null);
+  const [spinning, setSpinning] = useState(false);
+  const spinTimer = useRef<number | null>(null);
+
+  useEffect(() => () => {
+    if (spinTimer.current !== null) window.clearTimeout(spinTimer.current);
+  }, []);
+
+  const spin = () => {
+    if (spinTimer.current !== null) return;
+    const result = drawResult(rules, rule);
+    setSpinning(true);
+    spinTimer.current = window.setTimeout(() => {
+      setRule(result);
+      setSpinning(false);
+      spinTimer.current = null;
+    }, 2000);
+  };
 
   return (
     <div className="arena-tools">
@@ -79,15 +96,16 @@ export function ArenaTools({ mutators }: { mutators: Array<{ title: string; text
           <button
             type="button"
             className="arena-tool-button"
-            onClick={() => setRule(drawResult(rules, rule))}
+            onClick={spin}
+            disabled={spinning}
           >
-            <Shuffle size={17} />
+            <Shuffle size={17} className={spinning ? "spinning" : undefined} />
             <span>
               <strong>Roleta da Arena</strong>
-              <small>Deixe a sorte decidir</small>
+              <small>{spinning ? "Sorteando..." : "Deixe a sorte decidir"}</small>
             </span>
           </button>
-          {rule && <div className="panel" aria-live="polite"><strong>{rule.title}</strong><p>{rule.text}</p></div>}
+          {!spinning && rule && <div className="panel" aria-live="polite"><strong>{rule.title}</strong><p>{rule.text}</p></div>}
         </div>
       )}
     </div>

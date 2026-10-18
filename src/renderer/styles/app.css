@@ -976,6 +976,19 @@ body {
   color: var(--arena-accent, #8872ff);
 }
 
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.arena-tool-button .spinning {
+  animation: spin 0.5s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .arena-tool-button .spinning { animation: none; }
+}
+
 .arena-tool-button span {
   display: flex;
   flex-direction: column;
