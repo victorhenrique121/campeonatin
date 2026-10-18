@@ -190,46 +190,62 @@ function useToast() {
   useEffect(() => () => window.clearTimeout(timer.current), []);
   return { toast, showToast };
 }
+function HighlightAvatar({ name, player }: { name: string; player?: Player }) {
+  return (
+    <span className="highlight-avatar" aria-hidden="true">
+      {player?.avatar ? <img src={player.avatar} alt="" /> : name.trim().charAt(0).toUpperCase()}
+    </span>
+  );
+}
+
 function Game({
   match,
+  players,
   onEdit,
   onDelete,
   onShare,
 }: {
   match: Match;
+  players: Player[];
   onEdit: (match: Match) => void;
   onDelete?: (match: Match) => void;
   onShare?: (match: Match) => void;
 }) {
+  const player1 = players.find((player) => player.id === match.player1Id);
+  const player2 = players.find((player) => player.id === match.player2Id);
+  const avatar = (name: string, player?: Player) => (
+    <span className="game-avatar" aria-hidden="true">
+      {player?.avatar ? <img src={player.avatar} alt="" /> : name.trim().charAt(0).toUpperCase()}
+    </span>
+  );
   return (
     <div className="game">
-      <small>
-        {date(match.playedAt)}{" "}
-        {match.championship ? `· ${match.championship}` : ""}
-      </small>
-
-      <div>
-        <span>
-          {match.player1}
-          <em>{match.team1}</em>
-        </span>
-
-        <b>
+      <div className="game-meta">
+        <small>{date(match.playedAt)}</small>
+        {match.championship && <span className="game-competition">{match.championship}</span>}
+      </div>
+      <div className="game-content">
+        <div className="game-player">
+          {avatar(match.player1, player1)}
+          <span>{match.player1}<em>{match.team1}</em></span>
+        </div>
+        <b className="game-score">
           {match.score1} <i>×</i> {match.score2}
         </b>
-
-        <span>
-          {match.player2}
-          <em>{match.team2}</em>
-        </span>
+        <div className="game-player game-player-right">
+          <span>{match.player2}<em>{match.team2}</em></span>
+          {avatar(match.player2, player2)}
+        </div>
       </div>
-
+      <div className="game-actions">
       <button
         type="button"
         className="edit-match-btn"
         onClick={() => onEdit(match)}
+        aria-label={`Editar partida entre ${match.player1} e ${match.player2}`}
+        title="Editar resultado"
       >
-        Editar resultado
+        <SquarePen size={15} />
       </button>
       {onDelete && (
         <button
@@ -238,7 +254,7 @@ function Game({
           onClick={() => onDelete(match)}
           aria-label={`Apagar partida entre ${match.player1} e ${match.player2}`}
         >
-          <Trash2 size={15} /> Apagar
+          <Trash2 size={15} />
         </button>
       )}
       {onShare && (
@@ -246,10 +262,13 @@ function Game({
           type="button"
           className="share-match-btn"
           onClick={() => onShare(match)}
+          aria-label={`Compartilhar partida entre ${match.player1} e ${match.player2}`}
+          title="Compartilhar no WhatsApp"
         >
-          <Clipboard size={14} /> WhatsApp
+          <Clipboard size={15} />
         </button>
       )}
+      </div>
     </div>
   );
 }
@@ -686,10 +705,12 @@ function RoomsPage() {
 
 function DashboardPage({
   data,
+  players,
   go,
   reload,
 }: {
   data: Dashboard;
+  players: Player[];
   go: (page: Page) => void;
   reload: () => Promise<void>;
 }) {
@@ -735,8 +756,12 @@ function DashboardPage({
         {metrics.map(({ label, value, detail }) => (
           <article className="metric" key={label}>
             <span>{label}</span>
-            <strong>{value}</strong>
-            <small>{detail}</small>
+            <div className="highlight-details">
+              {label === "LÍDER DA TEMPORADA" && data.leader && (
+                <HighlightAvatar name={data.leader.name} player={players.find((player) => player.id === data.leader?.id)} />
+              )}
+              <div><strong>{value}</strong><small>{detail}</small></div>
+            </div>
           </article>
         ))}
       </section>
@@ -853,9 +878,9 @@ function DashboardPage({
             <div className="games">
               {data.recent.map((m) => (
                 <div key={m.id} className="dashboard-recent-match">
-                  <span className="dashboard-competition">{m.championship ?? "Competição não informada"}</span>
                   <Game
                     match={m}
+                    players={players}
                     onEdit={setEditingMatch}
                     onShare={async (match) => {
                       await copyMatchSummary(match);
@@ -1114,7 +1139,7 @@ function TeamPicker({
   );
 }
 
-function RankingPage({ data }: { data: Dashboard }) {
+function RankingPage({ data, players }: { data: Dashboard; players: Player[] }) {
   const [tab, setTab] = useState<"geral" | "individuais" | "confrontos">("geral");
   const stats = data.statistics;
   const largestStreak = stats?.streaks.reduce<(typeof stats.streaks)[number] | null>(
@@ -1149,18 +1174,24 @@ function RankingPage({ data }: { data: Dashboard }) {
           <section className="metrics dashboard-metrics">
             <article className="metric">
               <span>ARTILHEIRO</span>
-              <strong>{stats?.topScorer?.name ?? "—"}</strong>
-              {stats?.topScorer && <small>{stats.topScorer.value} gols</small>}
+              <div className="highlight-details">
+                {stats?.topScorer && <HighlightAvatar name={stats.topScorer.name} player={players.find((player) => player.id === stats.topScorer?.id)} />}
+                <div><strong>{stats?.topScorer?.name ?? "—"}</strong>{stats?.topScorer && <small>{stats.topScorer.value} gols</small>}</div>
+              </div>
             </article>
             <article className="metric">
               <span>MELHOR APROVEITAMENTO</span>
-              <strong>{stats?.bestWinRate?.name ?? "—"}</strong>
-              {stats?.bestWinRate && <small>{stats.bestWinRate.value}%</small>}
+              <div className="highlight-details">
+                {stats?.bestWinRate && <HighlightAvatar name={stats.bestWinRate.name} player={players.find((player) => player.id === stats.bestWinRate?.id)} />}
+                <div><strong>{stats?.bestWinRate?.name ?? "—"}</strong>{stats?.bestWinRate && <small>{stats.bestWinRate.value}%</small>}</div>
+              </div>
             </article>
             <article className="metric">
               <span>MAIOR SEQUÊNCIA ATUAL</span>
-              <strong>{largestStreak?.streak ? largestStreak.name : "—"}</strong>
-              {!!largestStreak?.streak && <small>{largestStreak.streak} vitórias seguidas</small>}
+              <div className="highlight-details">
+                {!!largestStreak?.streak && <HighlightAvatar name={largestStreak.name} player={players.find((player) => player.id === largestStreak.playerId)} />}
+                <div><strong>{largestStreak?.streak ? largestStreak.name : "—"}</strong>{!!largestStreak?.streak && <small>{largestStreak.streak} vitórias seguidas</small>}</div>
+              </div>
             </article>
           </section>
           <section className="ranking-layout">
@@ -1420,6 +1451,7 @@ function MatchesPage({
               <Game
                 key={m.id}
                 match={m}
+                players={players}
                 onEdit={setEditingMatch}
                 onDelete={setDeletingMatch}
                 onShare={async (match) => {
@@ -3709,7 +3741,7 @@ function ArenaApp({ user, onSignOut }: { user: AuthUser; onSignOut: () => void }
   ];
   const view =
     page === "dashboard" ? (
-      <DashboardPage data={data} go={setPage} reload={reload} />
+      <DashboardPage data={data} players={players} go={setPage} reload={reload} />
     ) : page === "rooms" ? (
       <RoomsPage />
     ) : page === "friends" ? (
@@ -3719,7 +3751,7 @@ function ArenaApp({ user, onSignOut }: { user: AuthUser; onSignOut: () => void }
     ) : page === "matches" ? (
       <MatchesPage players={players} teams={teams} reload={reload} totalMatches={data.matches} />
     ) : page === "ranking" ? (
-      <RankingPage data={data} />
+      <RankingPage data={data} players={players} />
     ) : page === "championships" ? (
       <ChampionshipPage players={players} teams={teams} />
     ) : page === "profile" ? (
