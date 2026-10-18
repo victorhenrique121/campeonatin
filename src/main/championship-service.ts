@@ -1,6 +1,60 @@
 import type Database from "better-sqlite3";
-import type { Championship } from "../shared/models";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Championship, DuoInput } from "../shared/models";
 import { ensureAuthenticated, getSupabase } from "./supabase";
+
+export async function getOrCreateDuoRemote(
+  db: Database.Database,
+  supabase: SupabaseClient,
+  player1Id: number,
+  player2Id: number,
+  roomId: string | null
+): Promise<number> {
+  const [firstId, secondId] = [player1Id, player2Id].sort((a, b) => a - b);
+  if (firstId === secondId) throw new Error("Uma dupla precisa ter dois jogadores diferentes.");
+
+  const findRemote = async (): Promise<number | null> => {
+    const query = supabase.from("teams2v2").select("id")
+      .eq("player1_id", firstId).eq("player2_id", secondId);
+    const { data, error } = await (roomId === null ? query.is("room_id", null) : query.eq("room_id", roomId)).maybeSingle();
+    if (error) throw new Error("Não foi possível consultar a dupla. Tente novamente.");
+    return data?.id ?? null;
+  };
+
+  let id = await findRemote();
+  if (id === null) {
+    const { data, error } = await supabase.from("teams2v2")
+      .insert({ player1_id: firstId, player2_id: secondId, room_id: roomId })
+      .select("id").single();
+    if (error?.code === "23505") {
+      id = await findRemote();
+    } else if (error) {
+      throw new Error("Não foi possível criar a dupla. Tente novamente.");
+    } else {
+      id = data?.id ?? null;
+    }
+  }
+
+  if (id === null || !Number.isSafeInteger(id) || id <= 0) {
+    throw new Error("Não foi possível obter a dupla. Tente novamente.");
+  }
+
+  const remoteId = id;
+  db.transaction(() => {
+    const local = db.prepare("SELECT room_id, player1_id, player2_id FROM teams2v2 WHERE id = ?")
+      .get(remoteId) as { room_id: string | null; player1_id: number; player2_id: number } | undefined;
+    const pair = db.prepare("SELECT id FROM teams2v2 WHERE player1_id = ? AND player2_id = ? AND room_id IS NOT DISTINCT FROM ? AND id <> ?")
+      .get(firstId, secondId, roomId, remoteId);
+    if (pair || (local && (local.room_id !== roomId || local.player1_id !== firstId || local.player2_id !== secondId))) {
+      throw new Error("Conflito de ID de dupla; verifique os dados locais.");
+    }
+    if (!local) {
+      db.prepare("INSERT INTO teams2v2 (id, room_id, player1_id, player2_id, created_at, updated_at) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)")
+        .run(remoteId, roomId, firstId, secondId);
+    }
+  })();
+  return remoteId;
+}
 
 export async function setChampionshipStatus(
   db: Database.Database,
@@ -154,23 +208,38 @@ export async function saveChampionship(
     status?: "draft" | "active" | "finished";
     participantIds: number[];
     participantTeamIds?: (number | null)[];
+    participantDuos?: DuoInput[];
   }
 ): Promise<Championship> {
   const name = payload.name.trim();
   if (!name) throw new Error("Informe o nome do campeonato.");
-  if (!payload.participantIds || payload.participantIds.length < 2) {
+  const duos = payload.participantDuos ?? [];
+  const isDuo = duos.length > 0;
+  if (isDuo ? duos.length < 2 : !payload.participantIds || payload.participantIds.length < 2) {
     throw new Error("Selecione ao menos 2 participantes.");
+  }
+  if (isDuo) {
+    const pairs = duos.map(({ player1Id, player2Id }) => [player1Id, player2Id].sort((a, b) => a - b).join(":"));
+    if (new Set(pairs).size !== pairs.length) throw new Error("Não é possível repetir uma dupla no campeonato.");
+    if (duos.some(({ player1Id, player2Id }) => player1Id === player2Id)) {
+      throw new Error("Uma dupla precisa ter dois jogadores diferentes.");
+    }
   }
 
   const id = Date.now();
   const startsAt = payload.startsAt || new Date().toISOString();
-  const mode = payload.mode || "classic";
+  const mode = isDuo ? "duo" : payload.mode || "classic";
   const status = payload.status || "draft";
 
   const auth = await ensureAuthenticated();
   const supabase = getSupabase();
   if (!auth.ok || !supabase) {
     throw new Error("Não foi possível salvar o campeonato. Verifique sua conexão.");
+  }
+
+  const duoIds: number[] = [];
+  for (const duo of duos) {
+    duoIds.push(await getOrCreateDuoRemote(db, supabase, duo.player1Id, duo.player2Id, null));
   }
 
   const { error: champErr } = await supabase.from("championships").insert({
@@ -189,28 +258,49 @@ export async function saveChampionship(
     player_id: playerId,
     team_id: payload.participantTeamIds?.[index] ?? null,
   }));
-  const { error: partErr } = await supabase
-    .from("championship_participants")
-    .insert(participantsToInsert);
-  if (partErr) {
-    throw new Error("Não foi possível salvar os participantes. O campeonato pode estar incompleto; confira antes de tentar novamente.");
+  if (!isDuo) {
+    const { error: partErr } = await supabase
+      .from("championship_participants")
+      .insert(participantsToInsert);
+    if (partErr) {
+      throw new Error("Não foi possível salvar os participantes. O campeonato pode estar incompleto; confira antes de tentar novamente.");
+    }
   }
 
-  const fixtures: Array<{ championship_id: number; stage: string; round_number: number; player1_id: number; player2_id: number }> = [];
-  const p = payload.participantIds;
+  const fixtures: Array<{ championship_id: number; stage: string; round_number: number; player1_id: number | null; player2_id: number | null; team1_duo_id?: number; team2_duo_id?: number }> = [];
+  const p = isDuo ? duoIds : payload.participantIds;
   let roundNum = 1;
   for (let i = 0; i < p.length; i++) {
     for (let j = i + 1; j < p.length; j++) {
-      fixtures.push({ championship_id: id, stage: "league", round_number: roundNum, player1_id: p[i], player2_id: p[j] });
+      fixtures.push(isDuo
+        ? { championship_id: id, stage: "league", round_number: roundNum, player1_id: null, player2_id: null, team1_duo_id: p[i], team2_duo_id: p[j] }
+        : { championship_id: id, stage: "league", round_number: roundNum, player1_id: p[i], player2_id: p[j] });
       roundNum++;
     }
   }
-  const { data: savedFixtures, error: fixErr } = await supabase
-    .from("fixtures")
-    .insert(fixtures)
-    .select("id, stage, round_number, player1_id, player2_id");
-  if (fixErr || !savedFixtures || savedFixtures.length !== fixtures.length) {
-    throw new Error("Não foi possível salvar os confrontos. O campeonato pode estar incompleto; confira antes de tentar novamente.");
+  let savedFixtures: Array<{
+    id: number;
+    stage: string;
+    round_number: number;
+    player1_id: number | null;
+    player2_id: number | null;
+    team1_duo_id?: number | null;
+    team2_duo_id?: number | null;
+  }>;
+  if (isDuo) {
+    const { data, error } = await supabase.from("fixtures").insert(fixtures)
+      .select("id, stage, round_number, player1_id, player2_id, team1_duo_id, team2_duo_id");
+    if (error || !data || data.length !== fixtures.length) {
+      throw new Error("Não foi possível salvar os confrontos. O campeonato pode estar incompleto; confira antes de tentar novamente.");
+    }
+    savedFixtures = data;
+  } else {
+    const { data, error } = await supabase.from("fixtures").insert(fixtures)
+      .select("id, stage, round_number, player1_id, player2_id");
+    if (error || !data || data.length !== fixtures.length) {
+      throw new Error("Não foi possível salvar os confrontos. O campeonato pode estar incompleto; confira antes de tentar novamente.");
+    }
+    savedFixtures = data;
   }
 
   db.transaction(() => {
@@ -223,16 +313,18 @@ export async function saveChampionship(
       INSERT INTO championship_participants (championship_id, player_id, team_id)
       VALUES (?, ?, ?)
     `);
-    payload.participantIds.forEach((playerId, index) => {
-      partStmt.run(id, playerId, payload.participantTeamIds?.[index] ?? null);
-    });
+    if (!isDuo) {
+      payload.participantIds.forEach((playerId, index) => {
+        partStmt.run(id, playerId, payload.participantTeamIds?.[index] ?? null);
+      });
+    }
 
     const fixStmt = db.prepare(`
-      INSERT INTO fixtures (id, championship_id, stage, round_number, player1_id, player2_id)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO fixtures (id, championship_id, stage, round_number, player1_id, player2_id, team1_duo_id, team2_duo_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `);
     for (const fixture of savedFixtures) {
-      fixStmt.run(fixture.id, id, fixture.stage, fixture.round_number, fixture.player1_id, fixture.player2_id);
+      fixStmt.run(fixture.id, id, fixture.stage, fixture.round_number, fixture.player1_id, fixture.player2_id, fixture.team1_duo_id ?? null, fixture.team2_duo_id ?? null);
     }
   })();
 
@@ -244,6 +336,6 @@ export async function saveChampionship(
     mutator: payload.mutator || null,
     startsAt,
     status,
-    participants: payload.participantIds.length,
+    participants: isDuo ? duoIds.length : payload.participantIds.length,
   };
 }

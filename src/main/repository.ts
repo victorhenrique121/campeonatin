@@ -944,7 +944,15 @@ export function repository(db: Database.Database) {
     championships: () =>
       db
         .prepare(
-          `SELECT c.id,c.name,c.format,c.mode,c.mutator,c.starts_at startsAt,c.status,COUNT(cp.player_id) participants FROM championships c LEFT JOIN championship_participants cp ON cp.championship_id=c.id GROUP BY c.id ORDER BY c.starts_at DESC`,
+          `SELECT c.id,c.name,c.format,c.mode,c.mutator,c.starts_at startsAt,c.status,
+            CASE WHEN c.mode = 'duo' THEN (
+              SELECT COUNT(*) FROM (
+                SELECT team1_duo_id FROM fixtures WHERE championship_id = c.id AND team1_duo_id IS NOT NULL
+                UNION
+                SELECT team2_duo_id FROM fixtures WHERE championship_id = c.id AND team2_duo_id IS NOT NULL
+              )
+            ) ELSE COUNT(cp.player_id) END participants
+           FROM championships c LEFT JOIN championship_participants cp ON cp.championship_id=c.id GROUP BY c.id ORDER BY c.starts_at DESC`,
         )
         .all() as Championship[],
     championshipDetail: (id: number) => {
