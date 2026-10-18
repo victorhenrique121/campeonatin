@@ -141,7 +141,7 @@ export async function updateChampionshipName(
 }
 
 /**
- * Salva novo campeonato no SQLite e sincroniza no Supabase
+ * Salva novo campeonato no Supabase e atualiza o espelho SQLite.
  */
 export async function saveChampionship(
   db: Database.Database,
@@ -153,6 +153,7 @@ export async function saveChampionship(
     startsAt?: string;
     status?: "draft" | "active" | "finished";
     participantIds: number[];
+    participantTeamIds?: (number | null)[];
   }
 ): Promise<Championship> {
   const name = payload.name.trim();
@@ -166,7 +167,52 @@ export async function saveChampionship(
   const mode = payload.mode || "classic";
   const status = payload.status || "draft";
 
-  // 1. Salva localmente no SQLite
+  const auth = await ensureAuthenticated();
+  const supabase = getSupabase();
+  if (!auth.ok || !supabase) {
+    throw new Error("Não foi possível salvar o campeonato. Verifique sua conexão.");
+  }
+
+  const { error: champErr } = await supabase.from("championships").insert({
+    id,
+    name,
+    format: payload.format,
+    mode,
+    mutator: payload.mutator || null,
+    starts_at: startsAt,
+    status,
+  });
+  if (champErr) throw new Error("Não foi possível salvar o campeonato. Tente novamente.");
+
+  const participantsToInsert = payload.participantIds.map((playerId, index) => ({
+    championship_id: id,
+    player_id: playerId,
+    team_id: payload.participantTeamIds?.[index] ?? null,
+  }));
+  const { error: partErr } = await supabase
+    .from("championship_participants")
+    .insert(participantsToInsert);
+  if (partErr) {
+    throw new Error("Não foi possível salvar os participantes. O campeonato pode estar incompleto; confira antes de tentar novamente.");
+  }
+
+  const fixtures: Array<{ championship_id: number; stage: string; round_number: number; player1_id: number; player2_id: number }> = [];
+  const p = payload.participantIds;
+  let roundNum = 1;
+  for (let i = 0; i < p.length; i++) {
+    for (let j = i + 1; j < p.length; j++) {
+      fixtures.push({ championship_id: id, stage: "league", round_number: roundNum, player1_id: p[i], player2_id: p[j] });
+      roundNum++;
+    }
+  }
+  const { data: savedFixtures, error: fixErr } = await supabase
+    .from("fixtures")
+    .insert(fixtures)
+    .select("id, stage, round_number, player1_id, player2_id");
+  if (fixErr || !savedFixtures || savedFixtures.length !== fixtures.length) {
+    throw new Error("Não foi possível salvar os confrontos. O campeonato pode estar incompleto; confira antes de tentar novamente.");
+  }
+
   db.transaction(() => {
     db.prepare(`
       INSERT INTO championships (id, name, format, mode, mutator, starts_at, status)
@@ -174,102 +220,21 @@ export async function saveChampionship(
     `).run(id, name, payload.format, mode, payload.mutator || null, startsAt, status);
 
     const partStmt = db.prepare(`
-      INSERT INTO championship_participants (championship_id, player_id)
-      VALUES (?, ?)
+      INSERT INTO championship_participants (championship_id, player_id, team_id)
+      VALUES (?, ?, ?)
     `);
-    for (const playerId of payload.participantIds) {
-      partStmt.run(id, playerId);
-    }
+    payload.participantIds.forEach((playerId, index) => {
+      partStmt.run(id, playerId, payload.participantTeamIds?.[index] ?? null);
+    });
 
     const fixStmt = db.prepare(`
-      INSERT INTO fixtures (championship_id, stage, round_number, player1_id, player2_id)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO fixtures (id, championship_id, stage, round_number, player1_id, player2_id)
+      VALUES (?, ?, ?, ?, ?, ?)
     `);
-
-    const p = payload.participantIds;
-    let roundNum = 1;
-    for (let i = 0; i < p.length; i++) {
-      for (let j = i + 1; j < p.length; j++) {
-        fixStmt.run(id, "league", roundNum, p[i], p[j]);
-        roundNum++;
-      }
+    for (const fixture of savedFixtures) {
+      fixStmt.run(fixture.id, id, fixture.stage, fixture.round_number, fixture.player1_id, fixture.player2_id);
     }
   })();
-
-  // 2. Sincroniza com o Supabase
-  const auth = await ensureAuthenticated();
-  const supabase = getSupabase();
-
-  if (auth.ok && supabase) {
-    try {
-      // Inserção do campeonato
-      const { error: champErr } = await supabase.from("championships").insert({
-        id,
-        name,
-        format: payload.format,
-        mode,
-        mutator: payload.mutator || null,
-        starts_at: startsAt,
-        status,
-      });
-
-      if (champErr) {
-        console.error(`[championship-service] ❌ Erro ao salvar campeonato no Supabase:`, champErr.message);
-        return {
-          id,
-          name,
-          format: payload.format,
-          mode,
-          mutator: payload.mutator || null,
-          startsAt,
-          status,
-          participants: payload.participantIds.length,
-        };
-      }
-
-      // Inserção dos participantes
-      const participantsToInsert = payload.participantIds.map((pId) => ({
-        championship_id: id,
-        player_id: pId,
-      }));
-
-      const { error: partErr } = await supabase
-        .from("championship_participants")
-        .insert(participantsToInsert);
-
-      if (partErr) {
-        console.error(`[championship-service] ❌ Erro ao salvar participantes no Supabase:`, partErr.message);
-      }
-
-      // Inserção dos confrontos (fixtures)
-      const generatedFixtures = db
-        .prepare("SELECT * FROM fixtures WHERE championship_id = ?")
-        .all(id) as Array<{ id: number; stage: string; round_number: number; player1_id: number; player2_id: number }>;
-
-      if (generatedFixtures.length > 0) {
-        const { error: fixErr } = await supabase.from("fixtures").insert(
-          generatedFixtures.map((f) => ({
-            id: f.id,
-            championship_id: id,
-            stage: f.stage,
-            round_number: f.round_number,
-            player1_id: f.player1_id,
-            player2_id: f.player2_id,
-          }))
-        );
-
-        if (fixErr) {
-          console.error(`[championship-service] ❌ Erro ao salvar confrontos no Supabase:`, fixErr.message);
-        }
-      }
-
-      console.info(`[championship-service] ✅ Campeonato ${id} sincronizado com sucesso no Supabase!`);
-    } catch (err) {
-      console.warn(`[championship-service] Exceção ao sincronizar com Supabase:`, err);
-    }
-  } else {
-    console.warn(`[championship-service] Sincronização ignorada. Auth OK: ${auth.ok}, Motivo: ${auth.message}`);
-  }
 
   return {
     id,

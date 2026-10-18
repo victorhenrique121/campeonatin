@@ -2827,6 +2827,8 @@ function FixtureResultModal({
   async function submit() {
     const goals1 = Number(score1);
     const goals2 = Number(score2);
+    const team1Id = fixture.team1Id ?? team1?.id;
+    const team2Id = fixture.team2Id ?? team2?.id;
     if (
       !Number.isInteger(goals1) ||
       goals1 < 0 ||
@@ -2836,11 +2838,11 @@ function FixtureResultModal({
       setError("Informe um placar válido (inteiros maiores ou iguais a zero).");
       return;
     }
-    if (!team1 || !team2) {
+    if (team1Id == null || team2Id == null) {
       setError("Selecione os dois times.");
       return;
     }
-    if (team1.id === team2.id) {
+    if (team1Id === team2Id) {
       setError("Escolha times diferentes.");
       return;
     }
@@ -2850,8 +2852,8 @@ function FixtureResultModal({
       await window.arena.saveMatch({
         player1Id: fixture.player1Id,
         player2Id: fixture.player2Id,
-        team1Id: team1.id,
-        team2Id: team2.id,
+        team1Id,
+        team2Id,
         score1: goals1,
         score2: goals2,
         championshipId: championship.id,
@@ -2906,7 +2908,7 @@ function FixtureResultModal({
         <div className="edit-scoreboard">
           <div className="edit-player">
             <strong>{fixture.player1}</strong>
-            <span>{team1?.name ?? "Sem time"}</span>
+            <span>{fixture.team1 ?? team1?.name ?? "Sem time"}</span>
           </div>
 
           <div className="edit-score">
@@ -2932,23 +2934,31 @@ function FixtureResultModal({
 
           <div className="edit-player edit-player-right">
             <strong>{fixture.player2}</strong>
-            <span>{team2?.name ?? "Sem time"}</span>
+            <span>{fixture.team2 ?? team2?.name ?? "Sem time"}</span>
           </div>
         </div>
 
         <div className="fixture-teams">
-          <TeamPicker
-            label={`Time de ${fixture.player1}`}
-            teams={teams}
-            value={team1}
-            onChange={setTeam1}
-          />
-          <TeamPicker
-            label={`Time de ${fixture.player2}`}
-            teams={teams}
-            value={team2}
-            onChange={setTeam2}
-          />
+          {fixture.team1Id != null ? (
+            <div>Time de {fixture.player1}: {fixture.team1 ?? team1?.name ?? "Time indisponível"}</div>
+          ) : (
+            <TeamPicker
+              label={`Time de ${fixture.player1}`}
+              teams={teams}
+              value={team1}
+              onChange={setTeam1}
+            />
+          )}
+          {fixture.team2Id != null ? (
+            <div>Time de {fixture.player2}: {fixture.team2 ?? team2?.name ?? "Time indisponível"}</div>
+          ) : (
+            <TeamPicker
+              label={`Time de ${fixture.player2}`}
+              teams={teams}
+              value={team2}
+              onChange={setTeam2}
+            />
+          )}
         </div>
 
         {error && <div className="edit-error">{error}</div>}
