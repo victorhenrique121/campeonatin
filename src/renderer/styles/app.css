@@ -3721,6 +3721,25 @@ nav .active {
 }
 
 .matches-history,
+.rooms-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+    gap: 22px;
+    align-items: start;
+}
+
+.rooms-sidebar,
+.rooms-detail {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    gap: 16px;
+}
+
+@media (max-width: 1000px) {
+    .rooms-layout { grid-template-columns: minmax(0, 1fr); }
+}
+
 .players-list {
     max-height: min(70vh, 760px);
     overflow-y: auto;
