@@ -3079,7 +3079,25 @@ function FixtureResultModal({
   const knockout = fixture.stage !== "league";
   const stageLabel = knockout ? fixture.stage : `Rodada ${fixture.round}`;
 
+  const { player1Id, player2Id } = fixture;
+  if (player1Id == null || player2Id == null) {
+    return (
+      <div className="edit-modal-backdrop" onMouseDown={onClose}>
+        <div className="edit-modal" onMouseDown={(event) => event.stopPropagation()}>
+          <div className="panel"><p>Registro de dupla em breve.</p></div>
+          <button type="button" onClick={onClose}>Fechar</button>
+        </div>
+      </div>
+    );
+  }
+
   async function submit() {
+    if (fixture.player1Id == null || fixture.player2Id == null) {
+      setError("Registro de dupla em breve.");
+      return;
+    }
+    const player1Id = fixture.player1Id;
+    const player2Id = fixture.player2Id;
     const goals1 = Number(score1);
     const goals2 = Number(score2);
     const team1Id = fixture.team1Id ?? team1?.id;
@@ -3105,8 +3123,8 @@ function FixtureResultModal({
     setError("");
     try {
       await window.arena.saveMatch({
-        player1Id: fixture.player1Id,
-        player2Id: fixture.player2Id,
+        player1Id,
+        player2Id,
         team1Id,
         team2Id,
         score1: goals1,

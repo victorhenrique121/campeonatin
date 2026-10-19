@@ -163,13 +163,13 @@ app.whenReady().then(() => {
       log(`[supabase] Teste de conexão (${status.reason}): ${status.message}`);
       
       if (status.ok && status.authenticated) {
-        // Sincronização em cadeia no boot: Players -> Matches -> Championships
+        // Sincronização em cadeia no boot: jogadores -> campeonatos -> duplas e partidas.
         void players
           .syncMirror()
-          .then(() => matches.syncMirror())
           .then(() => getChampionships(db))
           .then((champs) => {
             console.info(`[championships] espelho local sincronizado com o Supabase: ${champs.length} campeonato(s).`);
+            return matches.syncMirror();
           })
           .catch((err) => {
             console.warn(
