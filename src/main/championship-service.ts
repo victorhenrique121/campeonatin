@@ -1,7 +1,28 @@
 import type Database from "better-sqlite3";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Championship, DuoInput } from "../shared/models";
+import type { repository } from "./repository";
 import { ensureAuthenticated, getSupabase } from "./supabase";
+
+export async function deleteChampionship(
+  repo: Pick<ReturnType<typeof repository>, "deleteChampionship">,
+  id: number,
+): Promise<void> {
+  const failureMessage = "Não foi possível excluir o campeonato. Verifique sua conexão.";
+  try {
+    const auth = await ensureAuthenticated();
+    const supabase = getSupabase();
+    if (!auth.ok || !supabase) throw new Error(failureMessage);
+
+    const { data, error } = await supabase.from("championships")
+      .delete().eq("id", id).select("id");
+    if (error || !data || data.length !== 1) throw new Error(failureMessage);
+  } catch {
+    throw new Error(failureMessage);
+  }
+
+  repo.deleteChampionship(id);
+}
 
 export async function getOrCreateDuoRemote(
   db: Database.Database,
@@ -307,17 +328,35 @@ export async function saveChampionship(
     team2_duo_id?: number | null;
   }>;
   if (isDuo) {
-    const { data, error } = await supabase.from("fixtures").insert(fixtures)
-      .select("id, stage, round_number, player1_id, player2_id, team1_duo_id, team2_duo_id");
-    if (error || !data || data.length !== fixtures.length) {
+    const { error } = await supabase.from("fixtures").insert(fixtures);
+    if (error) {
+      if (error.code === "23505") throw new Error("Este confronto já existe neste campeonato.");
+      if (error.code === "42703" && /team[12]_duo_id/i.test(error.message)) {
+        throw new Error("O banco remoto não tem as colunas de dupla. Aplique as migrations pendentes.");
+      }
       throw new Error("Não foi possível salvar os confrontos. O campeonato pode estar incompleto; confira antes de tentar novamente.");
+    }
+    const { data, error: readError } = await supabase.from("fixtures")
+      .select("id, stage, round_number, player1_id, player2_id, team1_duo_id, team2_duo_id")
+      .eq("championship_id", id);
+    if (readError || !data) {
+      if (readError?.code === "42703" && /team[12]_duo_id/i.test(readError.message)) {
+        throw new Error("O banco remoto não tem as colunas de dupla. Aplique as migrations pendentes.");
+      }
+      throw new Error("Não foi possível carregar os confrontos salvos. Confira o campeonato antes de tentar novamente.");
     }
     savedFixtures = data;
   } else {
-    const { data, error } = await supabase.from("fixtures").insert(fixtures)
-      .select("id, stage, round_number, player1_id, player2_id");
-    if (error || !data || data.length !== fixtures.length) {
+    const { error } = await supabase.from("fixtures").insert(fixtures);
+    if (error) {
+      if (error.code === "23505") throw new Error("Este confronto já existe neste campeonato.");
       throw new Error("Não foi possível salvar os confrontos. O campeonato pode estar incompleto; confira antes de tentar novamente.");
+    }
+    const { data, error: readError } = await supabase.from("fixtures")
+      .select("id, stage, round_number, player1_id, player2_id")
+      .eq("championship_id", id);
+    if (readError || !data) {
+      throw new Error("Não foi possível carregar os confrontos salvos. Confira o campeonato antes de tentar novamente.");
     }
     savedFixtures = data;
   }

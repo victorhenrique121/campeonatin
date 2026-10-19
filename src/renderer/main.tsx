@@ -97,8 +97,6 @@ type Page =
   | "settings"
   | "profile"
   | "teams";
-// Partidas e ranking voltam quando houver sala ativa.
-const showRoomOnlyTabs = false;
 const date = (value: string) =>
   new Intl.DateTimeFormat("pt-BR", { dateStyle: "medium" }).format(
     new Date(value),
@@ -291,7 +289,10 @@ function FriendsPage() {
   );
 }
 
-function RoomsPage() {
+function RoomsPage({ activeRoomId, setActiveRoomId }: {
+  activeRoomId: string | null;
+  setActiveRoomId: React.Dispatch<React.SetStateAction<string | null>>;
+}) {
   const [name, setName] = useState("");
   const [entryCode, setEntryCode] = useState("");
   const [error, setError] = useState("");
@@ -301,7 +302,6 @@ function RoomsPage() {
   const [joinSuccess, setJoinSuccess] = useState("");
   const [joining, setJoining] = useState(false);
   const [rooms, setRooms] = useState<Awaited<ReturnType<typeof window.arena.listMyRooms>>>([]);
-  const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
   const [loadingRooms, setLoadingRooms] = useState(true);
   const [roomsError, setRoomsError] = useState("");
   const roomsRequest = useRef(0);
@@ -320,20 +320,20 @@ function RoomsPage() {
   const [newOwnerId, setNewOwnerId] = useState("");
   const [renameValue, setRenameValue] = useState("");
   const [renaming, setRenaming] = useState(false);
-  const selectedRoomRef = useRef<string | null>(null);
+  const selectedRoomRef = useRef<string | null>(activeRoomId);
   const selectionVersion = useRef(0);
-  const selectedRoom = rooms.find((room) => room.id === selectedRoomId);
+  const selectedRoom = rooms.find((room) => room.id === activeRoomId);
 
   useEffect(() => {
-    if (!selectedRoomId) return;
+    if (!activeRoomId) return;
     let current = true;
-    window.arena.listRoomMembers(selectedRoomId).then((members) => {
-      if (current) setMemberResult({ roomId: selectedRoomId, members, error: "" });
+    window.arena.listRoomMembers(activeRoomId).then((members) => {
+      if (current) setMemberResult({ roomId: activeRoomId, members, error: "" });
     }).catch((err: unknown) => {
-      if (current) setMemberResult({ roomId: selectedRoomId, members: [], error: getFriendlyPrivacyError(err) });
+      if (current) setMemberResult({ roomId: activeRoomId, members: [], error: getFriendlyPrivacyError(err) });
     });
     return () => { current = false; };
-  }, [selectedRoomId]);
+  }, [activeRoomId]);
 
   const copyRoomCode = async (roomCode: string) => {
     try {
@@ -431,7 +431,7 @@ function RoomsPage() {
         if (action === "leave" || action === "delete") {
           selectionVersion.current++;
           selectedRoomRef.current = null;
-          setSelectedRoomId(null);
+          setActiveRoomId(null);
           setMemberResult(null);
         }
         const messages = {
@@ -559,6 +559,8 @@ function RoomsPage() {
           <h1>Salas personalizadas</h1>
         </div>
       </section>
+      <div className="rooms-layout">
+      <div className="rooms-sidebar">
       <article className="panel">
         <form className="form" onSubmit={create}>
           <label>
@@ -606,7 +608,7 @@ function RoomsPage() {
               <button
                 type="button"
                 className="secondary-button"
-                aria-pressed={selectedRoomId === room.id}
+                aria-pressed={activeRoomId === room.id}
                 onClick={() => {
                   setCopyMessage("");
                   setMemberActionMessage("");
@@ -615,20 +617,22 @@ function RoomsPage() {
                   setRoomActionError("");
                   setNewOwnerId("");
                   setRenameValue("");
-                  if (selectedRoomId !== room.id) {
+                  if (activeRoomId !== room.id) {
                     selectionVersion.current++;
                     setMemberResult(null);
                   }
                   selectedRoomRef.current = room.id;
-                  setSelectedRoomId(room.id);
+                  setActiveRoomId(room.id);
                 }}
               >
-                {selectedRoomId === room.id ? "Selecionada" : "Entrar"}
+                {activeRoomId === room.id ? "Selecionada" : "Entrar"}
               </button>
             </div>
           ))}
         </div>
       </article>
+      </div>
+      <div className="rooms-detail">
       {roomActionMessage && <p role="status">{roomActionMessage}</p>}
       {roomActionError && <p role="alert">{roomActionError}</p>}
       {selectedRoom && (
@@ -706,6 +710,8 @@ function RoomsPage() {
           )}
         </article>
       )}
+      </div>
+      </div>
     </>
   );
 }
@@ -715,11 +721,13 @@ function DashboardPage({
   players,
   go,
   reload,
+  showRoomOnlyTabs,
 }: {
   data: Dashboard;
   players: Player[];
   go: (page: Page) => void;
   reload: () => Promise<void>;
+  showRoomOnlyTabs: boolean;
 }) {
   const [editingMatch, setEditingMatch] = useState<Match | null>(null);
   const { toast, showToast } = useToast();
@@ -2797,8 +2805,10 @@ function ChampionshipPage({
           onClose={() => setDeletingChampionship(null)}
           onConfirm={async () => {
             await window.arena.deleteChampionship(deletingChampionship.id);
-            setDetail(undefined);
-            setSelected(undefined);
+            if (selected === deletingChampionship.id) {
+              setDetail(undefined);
+              setSelected(undefined);
+            }
             await load();
           }}
         />
@@ -3079,25 +3089,13 @@ function FixtureResultModal({
   const knockout = fixture.stage !== "league";
   const stageLabel = knockout ? fixture.stage : `Rodada ${fixture.round}`;
 
-  const { player1Id, player2Id } = fixture;
-  if (player1Id == null || player2Id == null) {
-    return (
-      <div className="edit-modal-backdrop" onMouseDown={onClose}>
-        <div className="edit-modal" onMouseDown={(event) => event.stopPropagation()}>
-          <div className="panel"><p>Registro de dupla em breve.</p></div>
-          <button type="button" onClick={onClose}>Fechar</button>
-        </div>
-      </div>
-    );
-  }
+  const isDuo = fixture.team1DuoId != null;
 
   async function submit() {
-    if (fixture.player1Id == null || fixture.player2Id == null) {
-      setError("Registro de dupla em breve.");
+    if (isDuo ? fixture.team2DuoId == null : fixture.player1Id == null || fixture.player2Id == null) {
+      setError("Os participantes do confronto estão incompletos.");
       return;
     }
-    const player1Id = fixture.player1Id;
-    const player2Id = fixture.player2Id;
     const goals1 = Number(score1);
     const goals2 = Number(score2);
     const team1Id = fixture.team1Id ?? team1?.id;
@@ -3111,11 +3109,11 @@ function FixtureResultModal({
       setError("Informe um placar válido (inteiros maiores ou iguais a zero).");
       return;
     }
-    if (team1Id == null || team2Id == null) {
+    if (!isDuo && (team1Id == null || team2Id == null)) {
       setError("Selecione os dois times.");
       return;
     }
-    if (team1Id === team2Id) {
+    if (!isDuo && team1Id === team2Id) {
       setError("Escolha times diferentes.");
       return;
     }
@@ -3123,10 +3121,9 @@ function FixtureResultModal({
     setError("");
     try {
       await window.arena.saveMatch({
-        player1Id,
-        player2Id,
-        team1Id,
-        team2Id,
+        ...(isDuo
+          ? { team1DuoId: fixture.team1DuoId, team2DuoId: fixture.team2DuoId }
+          : { player1Id: fixture.player1Id, player2Id: fixture.player2Id, team1Id, team2Id }),
         score1: goals1,
         score2: goals2,
         championshipId: championship.id,
@@ -3212,7 +3209,7 @@ function FixtureResultModal({
         </div>
 
         <div className="fixture-teams">
-          {fixture.team1Id != null ? (
+          {isDuo || fixture.team1Id != null ? (
             <div>Time de {fixture.player1}: {fixture.team1 ?? team1?.name ?? "Time indisponível"}</div>
           ) : (
             <TeamPicker
@@ -3222,7 +3219,7 @@ function FixtureResultModal({
               onChange={setTeam1}
             />
           )}
-          {fixture.team2Id != null ? (
+          {isDuo || fixture.team2Id != null ? (
             <div>Time de {fixture.player2}: {fixture.team2 ?? team2?.name ?? "Time indisponível"}</div>
           ) : (
             <TeamPicker
@@ -3747,6 +3744,8 @@ function SettingsPage({ reload }: { reload: () => Promise<void> }) {
 }
 
 function ArenaApp({ user, onSignOut }: { user: AuthUser; onSignOut: () => void }) {
+  const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
+  const showRoomOnlyTabs = activeRoomId !== null;
   const [page, setPage] = useState<Page>("dashboard"),
     [data, setData] = useState<Dashboard>(),
     [loadError, setLoadError] = useState(""),
@@ -3821,9 +3820,9 @@ function ArenaApp({ user, onSignOut }: { user: AuthUser; onSignOut: () => void }
   ];
   const view =
     page === "dashboard" ? (
-      <DashboardPage data={data} players={players} go={setPage} reload={reload} />
+      <DashboardPage data={data} players={players} go={setPage} reload={reload} showRoomOnlyTabs={showRoomOnlyTabs} />
     ) : page === "rooms" ? (
-      <RoomsPage />
+      <RoomsPage activeRoomId={activeRoomId} setActiveRoomId={setActiveRoomId} />
     ) : page === "friends" ? (
       <FriendsPage />
     ) : page === "players" ? (
