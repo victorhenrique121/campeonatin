@@ -307,17 +307,39 @@ export async function saveChampionship(
     team2_duo_id?: number | null;
   }>;
   if (isDuo) {
-    const { data, error } = await supabase.from("fixtures").insert(fixtures)
-      .select("id, stage, round_number, player1_id, player2_id, team1_duo_id, team2_duo_id");
-    if (error || !data || data.length !== fixtures.length) {
+    const { error } = await supabase.from("fixtures").upsert(fixtures, {
+      onConflict: "championship_id,player1_id,player2_id",
+      ignoreDuplicates: true,
+    });
+    if (error) {
+      if (error.code === "42703" && /team[12]_duo_id/i.test(error.message)) {
+        throw new Error("O banco remoto não tem as colunas de dupla. Aplique as migrations pendentes.");
+      }
       throw new Error("Não foi possível salvar os confrontos. O campeonato pode estar incompleto; confira antes de tentar novamente.");
+    }
+    const { data, error: readError } = await supabase.from("fixtures")
+      .select("id, stage, round_number, player1_id, player2_id, team1_duo_id, team2_duo_id")
+      .eq("championship_id", id);
+    if (readError || !data) {
+      if (readError?.code === "42703" && /team[12]_duo_id/i.test(readError.message)) {
+        throw new Error("O banco remoto não tem as colunas de dupla. Aplique as migrations pendentes.");
+      }
+      throw new Error("Não foi possível carregar os confrontos salvos. Confira o campeonato antes de tentar novamente.");
     }
     savedFixtures = data;
   } else {
-    const { data, error } = await supabase.from("fixtures").insert(fixtures)
-      .select("id, stage, round_number, player1_id, player2_id");
-    if (error || !data || data.length !== fixtures.length) {
+    const { error } = await supabase.from("fixtures").upsert(fixtures, {
+      onConflict: "championship_id,player1_id,player2_id",
+      ignoreDuplicates: true,
+    });
+    if (error) {
       throw new Error("Não foi possível salvar os confrontos. O campeonato pode estar incompleto; confira antes de tentar novamente.");
+    }
+    const { data, error: readError } = await supabase.from("fixtures")
+      .select("id, stage, round_number, player1_id, player2_id")
+      .eq("championship_id", id);
+    if (readError || !data) {
+      throw new Error("Não foi possível carregar os confrontos salvos. Confira o campeonato antes de tentar novamente.");
     }
     savedFixtures = data;
   }
