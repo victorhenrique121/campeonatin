@@ -8,6 +8,17 @@ import { createMatchesService } from "./matches-service";
 import {
   changeEmail,
   changePassword,
+  createRoom,
+  listRoomMembers,
+  promoteRoomAdmin,
+  removeRoomMember,
+  renameRoom,
+  regenerateRoomCode,
+  transferRoomOwnership,
+  deleteRoom,
+  leaveRoom,
+  listMyRooms,
+  joinRoom,
   getAuthSession,
   getEmailSettings,
   getProfile,
@@ -67,6 +78,17 @@ app.whenReady().then(() => {
   const matches = createMatchesService(db, repo);
 
   ipcMain.handle("auth:session", () => getAuthSession());
+  ipcMain.handle("rooms:create", (_, name: string) => createRoom(name));
+  ipcMain.handle("rooms:list-mine", () => listMyRooms());
+  ipcMain.handle("rooms:join", (_, code: string) => joinRoom(code));
+  ipcMain.handle("rooms:list-members", (_, roomId: string) => listRoomMembers(roomId));
+  ipcMain.handle("rooms:promote-admin", (_, roomId: string, userId: string) => promoteRoomAdmin(roomId, userId));
+  ipcMain.handle("rooms:remove-member", (_, roomId: string, userId: string) => removeRoomMember(roomId, userId));
+  ipcMain.handle("rooms:rename", (_, roomId: string, name: string) => renameRoom(roomId, name));
+  ipcMain.handle("rooms:regenerate-code", (_, roomId: string) => regenerateRoomCode(roomId));
+  ipcMain.handle("rooms:transfer-ownership", (_, roomId: string, newOwnerId: string) => transferRoomOwnership(roomId, newOwnerId));
+  ipcMain.handle("rooms:delete", (_, roomId: string) => deleteRoom(roomId));
+  ipcMain.handle("rooms:leave", (_, roomId: string) => leaveRoom(roomId));
   ipcMain.handle("profile:get", () => getProfile());
   ipcMain.handle("profile:username-available", (_, username) =>
     isUsernameAvailable(username),
@@ -96,6 +118,7 @@ app.whenReady().then(() => {
   ipcMain.handle("auth:signout-others", () => endOtherSessions());
 
   ipcMain.handle("dashboard", () => repo.dashboard());
+  ipcMain.handle("arena:news", () => repo.arenaNews());
   ipcMain.handle("players:list", () => players.list());
   ipcMain.handle("players:save", (_, p) => players.save(p));
   ipcMain.handle("players:delete", (_, id) => players.remove(id));
@@ -140,13 +163,13 @@ app.whenReady().then(() => {
       log(`[supabase] Teste de conexão (${status.reason}): ${status.message}`);
       
       if (status.ok && status.authenticated) {
-        // Sincronização em cadeia no boot: Players -> Matches -> Championships
+        // Sincronização em cadeia no boot: jogadores -> campeonatos -> duplas e partidas.
         void players
           .syncMirror()
-          .then(() => matches.syncMirror())
           .then(() => getChampionships(db))
           .then((champs) => {
             console.info(`[championships] espelho local sincronizado com o Supabase: ${champs.length} campeonato(s).`);
+            return matches.syncMirror();
           })
           .catch((err) => {
             console.warn(

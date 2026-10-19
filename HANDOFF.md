@@ -76,6 +76,8 @@ A migration adiada `supabase/deferred/20261016090500_enforce_room_scope_after_ph
 
 ### 5.2 Próximos passos
 
+A aba de salas (Blocos 1 e 2) está implementada e commitada. Segundo o teste manual do dono, `createRoom` e `joinRoom` retornaram dados, mas `listMyRooms` mostrou "Algo deu errado. Tente novamente em instantes."; o app aponta para o projeto real, onde as migrations da Fase 4 ainda não foram aplicadas e a função `list_my_rooms` está ausente. A aplicação das migrations necessárias, após testes em desenvolvimento e backup adequado do real, deve permitir o funcionamento da aba, mas isso ainda precisa ser verificado; a mensagem genérica, por si só, não confirma a causa do erro.
+
 1. Revisar as correções da branch e a dívida conhecida antes de qualquer merge.
 2. Resolver a disponibilidade de um projeto de desenvolvimento e testar nele, inclusive o backfill parametrizado, antes de considerar o real.
 3. Obter um backup adequado do projeto real antes de qualquer aplicação nele; exportação CSV é apenas proteção parcial, não restauração completa.
@@ -127,6 +129,8 @@ A migration adiada `supabase/deferred/20261016090500_enforce_room_scope_after_ph
 - `(create_room()).*` pode chamar a função uma vez por coluna; em testes use `select * from create_room(...)`.
 - A configuração do Vitest no arquivo errado causou TS2769; veja a seção 4.
 - O `AGENTS.md` não estava no repositório durante a Fase 0.
+- Limitações conhecidas da finalização de campeonatos: se a atualização do status falhar após salvar a partida, a operação pode ficar parcialmente aplicada e o campeonato permanecer `active`; é necessário conferir o estado antes de tentar novamente. O caminho sem cliente remoto ainda permite escrita no SQLite, em desacordo com a regra de somente leitura offline; tratar como dívida da Fase 2.
+- Modo Dupla, parte 2a: a sala das duplas ainda não é validada contra a do confronto ou partida; resolver nas Fases 2/3. A exclusão de dupla com partidas vinculadas é recusada (`RESTRICT`); desativação por soft delete fica para o futuro.
 
 ---
 

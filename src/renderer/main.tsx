@@ -4,6 +4,7 @@ import { PasswordSettings } from "./settings/PasswordSettings";
 import { EmailSettings } from "./settings/EmailSettings";
 import { NotificationsSettings } from "./settings/NotificationsSettings";
 import { PrivacySettings } from "./settings/PrivacySettings";
+import { getFriendlyPrivacyError } from "./settings/auth-error";
 import {
   ARENA_PALETTES,
   DEFAULT_PALETTE_ID,
@@ -25,6 +26,7 @@ import {
   CirclePlus,
   CircleHelp,
   Dices,
+  DoorOpen,
   EyeOff,
   Flag,
   Footprints,
@@ -61,6 +63,7 @@ import {
 } from "lucide-react";
 import type { AuthUser } from "../shared/api";
 import type {
+  ArenaNews,
   Championship,
   ChampionshipDetail,
   Dashboard,
@@ -85,6 +88,8 @@ import "./styles/HeadToHeadCard.css";
 
 type Page =
   | "dashboard"
+  | "rooms"
+  | "friends"
   | "players"
   | "matches"
   | "ranking"
@@ -92,6 +97,8 @@ type Page =
   | "settings"
   | "profile"
   | "teams";
+// Partidas e ranking voltam quando houver sala ativa.
+const showRoomOnlyTabs = false;
 const date = (value: string) =>
   new Intl.DateTimeFormat("pt-BR", { dateStyle: "medium" }).format(
     new Date(value),
@@ -105,8 +112,8 @@ const applyStoredAppearance = () => {
   const colors = palette
     ? getArenaPaletteVariant(palette, theme)
     : {
-        accent: localStorage.getItem("arena-accent") ?? "#8872ff",
-        background: localStorage.getItem("arena-background") ?? "#0a0f1f",
+        accent: localStorage.getItem("arena-accent") ?? "#7e5ff0",
+        background: localStorage.getItem("arena-background") ?? "#0a0c10",
       };
 
   document.documentElement.style.setProperty("--arena-accent", colors.accent);
@@ -184,46 +191,68 @@ function useToast() {
   useEffect(() => () => window.clearTimeout(timer.current), []);
   return { toast, showToast };
 }
+function HighlightAvatar({ name, player }: { name: string; player?: Player }) {
+  return (
+    <span className="highlight-avatar" aria-hidden="true">
+      {player?.avatar ? <img src={player.avatar} alt="" /> : name.trim().charAt(0).toUpperCase()}
+    </span>
+  );
+}
+
 function Game({
   match,
+  players,
   onEdit,
   onDelete,
   onShare,
 }: {
   match: Match;
+  players: Player[];
   onEdit: (match: Match) => void;
   onDelete?: (match: Match) => void;
   onShare?: (match: Match) => void;
 }) {
+  const player1 = players.find((player) => player.id === match.player1Id);
+  const player2 = players.find((player) => player.id === match.player2Id);
+  const competition = match.championshipFormat === "league"
+    ? { label: "Liga", className: "badge-league" }
+    : match.championshipFormat === "knockout" || match.championshipFormat === "groups_knockout"
+      ? { label: "Copa", className: "badge-cup" }
+      : { label: "Clássico", className: "badge-casual" };
+  const avatar = (name: string, player?: Player) => (
+    <span className="game-avatar" aria-hidden="true">
+      {player?.avatar ? <img src={player.avatar} alt="" /> : name.trim().charAt(0).toUpperCase()}
+    </span>
+  );
   return (
     <div className="game">
-      <small>
-        {date(match.playedAt)}{" "}
-        {match.championship ? `· ${match.championship}` : ""}
-      </small>
-
-      <div>
-        <span>
-          {match.player1}
-          <em>{match.team1}</em>
-        </span>
-
-        <b>
+      <div className="game-meta">
+        <small>{date(match.playedAt)}</small>
+        <span className={`game-competition ${competition.className}`}>{competition.label}</span>
+        {match.championship && <small>{match.championship}</small>}
+      </div>
+      <div className="game-content">
+        <div className="game-player">
+          {avatar(match.player1, player1)}
+          <span>{match.player1}<em>{match.team1}</em></span>
+        </div>
+        <b className="game-score">
           {match.score1} <i>×</i> {match.score2}
         </b>
-
-        <span>
-          {match.player2}
-          <em>{match.team2}</em>
-        </span>
+        <div className="game-player game-player-right">
+          <span>{match.player2}<em>{match.team2}</em></span>
+          {avatar(match.player2, player2)}
+        </div>
       </div>
-
+      <div className="game-actions">
       <button
         type="button"
         className="edit-match-btn"
         onClick={() => onEdit(match)}
+        aria-label={`Editar partida entre ${match.player1} e ${match.player2}`}
+        title="Editar resultado"
       >
-        Editar resultado
+        <SquarePen size={15} />
       </button>
       {onDelete && (
         <button
@@ -232,7 +261,7 @@ function Game({
           onClick={() => onDelete(match)}
           aria-label={`Apagar partida entre ${match.player1} e ${match.player2}`}
         >
-          <Trash2 size={15} /> Apagar
+          <Trash2 size={15} />
         </button>
       )}
       {onShare && (
@@ -240,31 +269,469 @@ function Game({
           type="button"
           className="share-match-btn"
           onClick={() => onShare(match)}
+          aria-label={`Compartilhar partida entre ${match.player1} e ${match.player2}`}
+          title="Compartilhar no WhatsApp"
         >
-          <Clipboard size={14} /> WhatsApp
+          <Clipboard size={15} />
         </button>
       )}
+      </div>
     </div>
+  );
+}
+
+function FriendsPage() {
+  return (
+    <section className="page-title">
+      <div>
+        <h1>Amigos</h1>
+        <span>Em breve: adicionar amigos e convidar para salas.</span>
+      </div>
+    </section>
+  );
+}
+
+function RoomsPage() {
+  const [name, setName] = useState("");
+  const [entryCode, setEntryCode] = useState("");
+  const [error, setError] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [code, setCode] = useState("");
+  const [joinError, setJoinError] = useState("");
+  const [joinSuccess, setJoinSuccess] = useState("");
+  const [joining, setJoining] = useState(false);
+  const [rooms, setRooms] = useState<Awaited<ReturnType<typeof window.arena.listMyRooms>>>([]);
+  const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
+  const [loadingRooms, setLoadingRooms] = useState(true);
+  const [roomsError, setRoomsError] = useState("");
+  const roomsRequest = useRef(0);
+  const [memberResult, setMemberResult] = useState<{
+    roomId: string;
+    members: Awaited<ReturnType<typeof window.arena.listRoomMembers>>;
+    error: string;
+  } | null>(null);
+  const [copyMessage, setCopyMessage] = useState("");
+  const [memberActionMessage, setMemberActionMessage] = useState("");
+  const [memberActionError, setMemberActionError] = useState("");
+  const [memberActionPending, setMemberActionPending] = useState(false);
+  const [roomActionPending, setRoomActionPending] = useState(false);
+  const [roomActionMessage, setRoomActionMessage] = useState("");
+  const [roomActionError, setRoomActionError] = useState("");
+  const [newOwnerId, setNewOwnerId] = useState("");
+  const [renameValue, setRenameValue] = useState("");
+  const [renaming, setRenaming] = useState(false);
+  const selectedRoomRef = useRef<string | null>(null);
+  const selectionVersion = useRef(0);
+  const selectedRoom = rooms.find((room) => room.id === selectedRoomId);
+
+  useEffect(() => {
+    if (!selectedRoomId) return;
+    let current = true;
+    window.arena.listRoomMembers(selectedRoomId).then((members) => {
+      if (current) setMemberResult({ roomId: selectedRoomId, members, error: "" });
+    }).catch((err: unknown) => {
+      if (current) setMemberResult({ roomId: selectedRoomId, members: [], error: getFriendlyPrivacyError(err) });
+    });
+    return () => { current = false; };
+  }, [selectedRoomId]);
+
+  const copyRoomCode = async (roomCode: string) => {
+    try {
+      await navigator.clipboard.writeText(roomCode);
+      setCopyMessage("Código copiado.");
+    } catch {
+      setCopyMessage("Não foi possível copiar o código.");
+    }
+  };
+
+  const changeMember = async (roomId: string, userId: string, action: "promote" | "remove") => {
+    const version = selectionVersion.current;
+    setMemberActionMessage("");
+    setMemberActionError("");
+    setMemberActionPending(true);
+    try {
+      if (action === "promote") {
+        await window.arena.promoteRoomAdmin(roomId, userId);
+      } else {
+        await window.arena.removeRoomMember(roomId, userId);
+      }
+      if (selectedRoomRef.current !== roomId || selectionVersion.current !== version) return;
+      setMemberActionMessage(action === "promote" ? "Membro promovido a administrador." : "Membro removido da sala.");
+      try {
+        const members = await window.arena.listRoomMembers(roomId);
+        if (selectedRoomRef.current === roomId && selectionVersion.current === version) setMemberResult({ roomId, members, error: "" });
+      } catch {
+        if (selectedRoomRef.current === roomId && selectionVersion.current === version) {
+          setMemberResult({ roomId, members: [], error: "Não foi possível atualizar a lista de membros." });
+          setMemberActionError("A ação foi concluída, mas não foi possível atualizar a lista de membros.");
+        }
+      }
+    } catch (err) {
+      if (selectedRoomRef.current === roomId && selectionVersion.current === version) setMemberActionError(getFriendlyPrivacyError(err));
+    } finally {
+      setMemberActionPending(false);
+    }
+  };
+
+  const renameRoom = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!selectedRoom) return;
+    setRoomActionMessage("");
+    setRoomActionError("");
+    const newName = renameValue.trim();
+    if (!newName) {
+      setRoomActionError("O nome da sala não pode ser vazio.");
+      return;
+    }
+    if (newName === selectedRoom.name) return;
+    const roomId = selectedRoom.id;
+    const version = selectionVersion.current;
+    setRenaming(true);
+    try {
+      await window.arena.renameRoom(roomId, renameValue);
+      setRooms((current) => current.map((room) => room.id === roomId ? { ...room, name: newName } : room));
+      if (selectedRoomRef.current === roomId && selectionVersion.current === version) {
+        setRenameValue("");
+        setRoomActionMessage("Sala renomeada.");
+      }
+    } catch (err) {
+      if (selectedRoomRef.current === roomId && selectionVersion.current === version) setRoomActionError(getFriendlyPrivacyError(err));
+    } finally {
+      setRenaming(false);
+    }
+  };
+
+  const changeRoom = async (action: "leave" | "regenerate" | "transfer" | "delete") => {
+    if (!selectedRoom) return;
+    const room = selectedRoom;
+    const version = selectionVersion.current;
+    if (action === "transfer" && !newOwnerId) {
+      setRoomActionError("Escolha um membro para ser o novo proprietário.");
+      return;
+    }
+    if (action === "delete" && !window.confirm("Deseja excluir esta sala?")) return;
+
+    setRoomActionMessage("");
+    setRoomActionError("");
+    setRoomActionPending(true);
+    try {
+      if (action === "leave") await window.arena.leaveRoom(room.id);
+      if (action === "delete") await window.arena.deleteRoom(room.id);
+      if (action === "regenerate") {
+        const newCode = await window.arena.regenerateRoomCode(room.id);
+        setRooms((current) => current.map((item) => item.id === room.id ? { ...item, entryCode: newCode } : item));
+      }
+      if (action === "transfer") {
+        await window.arena.transferRoomOwnership(room.id, newOwnerId);
+        setRooms((current) => current.map((item) => item.id === room.id ? { ...item, role: "admin" } : item));
+      }
+
+      const stillSelected = selectedRoomRef.current === room.id && selectionVersion.current === version;
+      if (stillSelected) {
+        if (action === "leave" || action === "delete") {
+          selectionVersion.current++;
+          selectedRoomRef.current = null;
+          setSelectedRoomId(null);
+          setMemberResult(null);
+        }
+        const messages = {
+          leave: "Você saiu da sala.",
+          regenerate: "Código regenerado.",
+          transfer: "Propriedade transferida.",
+          delete: "Sala excluída.",
+        };
+        setRoomActionMessage(messages[action]);
+        setNewOwnerId("");
+      }
+
+      try {
+        const request = ++roomsRequest.current;
+        const result = await window.arena.listMyRooms();
+        if (request === roomsRequest.current) {
+          setRooms(result);
+          setRoomsError("");
+          setLoadingRooms(false);
+        }
+        if (action === "transfer" && selectedRoomRef.current === room.id && selectionVersion.current === version) {
+          const members = await window.arena.listRoomMembers(room.id);
+          if (selectedRoomRef.current === room.id && selectionVersion.current === version) setMemberResult({ roomId: room.id, members, error: "" });
+        }
+      } catch {
+        if (selectedRoomRef.current === room.id && selectionVersion.current === version && action === "transfer") {
+          setMemberResult({ roomId: room.id, members: [], error: "Não foi possível atualizar a lista de membros." });
+        }
+        setLoadingRooms(false);
+        setRoomActionError("A ação foi concluída, mas não foi possível atualizar os dados da sala.");
+      }
+    } catch (err) {
+      if (selectedRoomRef.current === room.id && selectionVersion.current === version) setRoomActionError(getFriendlyPrivacyError(err));
+    } finally {
+      setRoomActionPending(false);
+    }
+  };
+
+  useEffect(() => {
+    const request = ++roomsRequest.current;
+    window.arena.listMyRooms().then((result) => {
+      if (request === roomsRequest.current) setRooms(result);
+    }).catch((err: unknown) => {
+      if (request === roomsRequest.current) setRoomsError(getFriendlyPrivacyError(err));
+    }).finally(() => {
+      if (request === roomsRequest.current) setLoadingRooms(false);
+    });
+    return () => { roomsRequest.current++; };
+  }, []);
+
+  const create = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!name.trim()) {
+      setError("O nome da sala não pode ser vazio.");
+      return;
+    }
+
+    setError("");
+    setCreating(true);
+    try {
+      const room = await window.arena.createRoom(name);
+      setEntryCode(room.entryCode);
+      setName("");
+      try {
+        const request = ++roomsRequest.current;
+        const result = await window.arena.listMyRooms();
+        if (request === roomsRequest.current) {
+          setRooms(result);
+          setRoomsError("");
+          setLoadingRooms(false);
+        }
+      } catch {
+        setLoadingRooms(false);
+        setError("Sala criada, mas não foi possível atualizar a lista.");
+      }
+    } catch (err) {
+      setError(getFriendlyPrivacyError(err));
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const join = async (event: FormEvent) => {
+    event.preventDefault();
+    setJoinSuccess("");
+    if (!code.trim()) {
+      setJoinError("Informe o código da sala.");
+      return;
+    }
+
+    setJoinError("");
+    setJoining(true);
+    try {
+      const { roomId } = await window.arena.joinRoom(code);
+      if (roomId === null) {
+        setJoinError("Código inválido ou limite de tentativas atingido.");
+        return;
+      }
+
+      setJoinSuccess("Você entrou na sala.");
+      setCode("");
+      try {
+        const request = ++roomsRequest.current;
+        const result = await window.arena.listMyRooms();
+        if (request === roomsRequest.current) {
+          setRooms(result);
+          setRoomsError("");
+          setLoadingRooms(false);
+        }
+      } catch {
+        setLoadingRooms(false);
+        setJoinError("Você entrou na sala, mas não foi possível atualizar a lista.");
+      }
+    } catch (err) {
+      setJoinError(getFriendlyPrivacyError(err));
+    } finally {
+      setJoining(false);
+    }
+  };
+
+  return (
+    <>
+      <section className="page-title">
+        <div>
+          <h1>Salas personalizadas</h1>
+        </div>
+      </section>
+      <article className="panel">
+        <form className="form" onSubmit={create}>
+          <label>
+            Nome da sala
+            <input value={name} onChange={(event) => setName(event.target.value)} />
+          </label>
+          <button className="primary" type="submit" disabled={creating || joining}>
+            {creating ? "Criando sala..." : "Criar sala"}
+          </button>
+        </form>
+        {entryCode && <p role="status">Código da sala: {entryCode}</p>}
+        {error && <p role="alert">{error}</p>}
+      </article>
+      <article className="panel">
+        <form className="form" onSubmit={join}>
+          <label>
+            Código da sala
+            <input value={code} onChange={(event) => setCode(event.target.value)} />
+          </label>
+          <button className="primary" type="submit" disabled={joining || creating}>
+            {joining ? "Entrando..." : "Entrar"}
+          </button>
+        </form>
+        {joinSuccess && <p role="status">{joinSuccess}</p>}
+        {joinError && <p role="alert">{joinError}</p>}
+      </article>
+      <article className="panel">
+        <h2>Minhas salas</h2>
+        {loadingRooms && <p role="status">Carregando salas...</p>}
+        {roomsError && <p role="alert">{roomsError}</p>}
+        {!loadingRooms && !roomsError && rooms.length === 0 && (
+          <Empty text="Você ainda não participa de nenhuma sala." />
+        )}
+        <div className="cards players-list">
+          {rooms.map((room) => (
+            <div className="player-card" key={room.id}>
+              <div>
+                <b>{room.name}</b>
+                <small>
+                  Papel: {room.role === "owner" ? "Proprietário" : room.role === "admin" ? "Administrador" : room.role === "participant" ? "Participante" : "Desconhecido"}
+                </small>
+                <small>Código: {room.entryCode}</small>
+                <small>Membros: {room.memberCount}</small>
+              </div>
+              <button
+                type="button"
+                className="secondary-button"
+                aria-pressed={selectedRoomId === room.id}
+                onClick={() => {
+                  setCopyMessage("");
+                  setMemberActionMessage("");
+                  setMemberActionError("");
+                  setRoomActionMessage("");
+                  setRoomActionError("");
+                  setNewOwnerId("");
+                  setRenameValue("");
+                  if (selectedRoomId !== room.id) {
+                    selectionVersion.current++;
+                    setMemberResult(null);
+                  }
+                  selectedRoomRef.current = room.id;
+                  setSelectedRoomId(room.id);
+                }}
+              >
+                {selectedRoomId === room.id ? "Selecionada" : "Entrar"}
+              </button>
+            </div>
+          ))}
+        </div>
+      </article>
+      {roomActionMessage && <p role="status">{roomActionMessage}</p>}
+      {roomActionError && <p role="alert">{roomActionError}</p>}
+      {selectedRoom && (
+        <article className="panel">
+          <h2>{selectedRoom.name}</h2>
+          <p>Código da sala: {selectedRoom.entryCode}</p>
+          <button type="button" className="secondary-button" onClick={() => copyRoomCode(selectedRoom.entryCode)}>
+            Copiar
+          </button>
+          {copyMessage && <p role="status">{copyMessage}</p>}
+          {selectedRoom.role === "owner" && (
+            <>
+              <form className="form" onSubmit={renameRoom}>
+                <label>
+                  Novo nome
+                  <input value={renameValue} onChange={(event) => setRenameValue(event.target.value)} />
+                </label>
+                <button type="submit" className="secondary-button" disabled={renaming || roomActionPending || memberActionPending}>
+                  {renaming ? "Renomeando..." : "Confirmar renomeação"}
+                </button>
+              </form>
+              <button type="button" className="secondary-button" disabled={renaming || roomActionPending || memberActionPending} onClick={() => changeRoom("regenerate")}>Regenerar código</button>
+              <label>
+                Novo proprietário
+                <select value={newOwnerId} onChange={(event) => setNewOwnerId(event.target.value)} disabled={renaming || roomActionPending || memberActionPending}>
+                  <option value="">Escolha um membro</option>
+                  {memberResult?.roomId === selectedRoom.id && memberResult.members.filter((member) => member.role !== "owner").map((member) => (
+                    <option key={member.userId} value={member.userId}>{member.displayName}{member.username ? ` (@${member.username})` : ""}</option>
+                  ))}
+                </select>
+              </label>
+              <button type="button" className="secondary-button" disabled={renaming || roomActionPending || memberActionPending || !newOwnerId} onClick={() => changeRoom("transfer")}>Transferir propriedade</button>
+              <button type="button" className="danger" disabled={renaming || roomActionPending || memberActionPending} onClick={() => changeRoom("delete")}>Excluir sala</button>
+            </>
+          )}
+          {(selectedRoom.role !== "owner" || (memberResult?.roomId === selectedRoom.id && !memberResult.error && memberResult.members.length > 1)) && (
+            <button type="button" className="secondary-button" disabled={renaming || roomActionPending || memberActionPending} onClick={() => changeRoom("leave")}>Sair da sala</button>
+          )}
+          <h3>Membros</h3>
+          {memberActionMessage && <p role="status">{memberActionMessage}</p>}
+          {memberActionError && <p role="alert">{memberActionError}</p>}
+          {memberResult?.roomId !== selectedRoom.id ? (
+            <p role="status">Carregando membros...</p>
+          ) : memberResult.error ? (
+            <p role="alert">{memberResult.error}</p>
+          ) : (
+            <div className="cards players-list">
+              {memberResult.members.map((member) => (
+                <div className="player-card" key={member.userId}>
+                  {member.avatarUrl ? (
+                    <img src={member.avatarUrl} alt="" width={27} height={27} />
+                  ) : (
+                    <i>{member.displayName.slice(0, 1).toUpperCase()}</i>
+                  )}
+                  <div>
+                    <b>{member.displayName}</b>
+                    {member.username && <small>@{member.username}</small>}
+                    <small>{member.role === "owner" ? "Proprietário" : member.role === "admin" ? "Administrador" : member.role === "participant" ? "Participante" : "Desconhecido"}</small>
+                  </div>
+                  {selectedRoom.role === "owner" && member.role !== "owner" && (
+                    <>
+                      {member.role === "participant" && (
+                        <button type="button" className="secondary-button" disabled={renaming || memberActionPending || roomActionPending} onClick={() => changeMember(selectedRoom.id, member.userId, "promote")}>
+                          Promover
+                        </button>
+                      )}
+                      <button type="button" className="danger" disabled={renaming || memberActionPending || roomActionPending} onClick={() => changeMember(selectedRoom.id, member.userId, "remove")}>
+                        Remover
+                      </button>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </article>
+      )}
+    </>
   );
 }
 
 function DashboardPage({
   data,
+  players,
   go,
   reload,
 }: {
   data: Dashboard;
+  players: Player[];
   go: (page: Page) => void;
   reload: () => Promise<void>;
 }) {
   const [editingMatch, setEditingMatch] = useState<Match | null>(null);
   const { toast, showToast } = useToast();
   const stats = data.statistics;
+  const largestStreak = stats?.streaks.reduce<(typeof stats.streaks)[number] | null>(
+    (largest, current) => !largest || current.streak > largest.streak ? current : largest,
+    null,
+  );
   const metrics = [
-    ["PARTIDAS", data.matches],
-    ["JOGADORES", data.players],
-    ["LÍDER", data.leader?.name ?? "—"],
-    ["TIME MAIS USADO", data.mostUsedTeam ?? "—"],
+    { label: "PARTIDAS TOTAIS", value: data.matches, detail: "Partidas registradas" },
+    { label: "LÍDER DA TEMPORADA", value: data.leader?.name ?? "—", detail: data.leader ? `${data.leader.points} pontos no ranking geral` : "Sem líder" },
+    { label: "MAIOR SEQUÊNCIA", value: largestStreak?.streak ?? 0, detail: largestStreak?.streak ? `${largestStreak.name} · sequência atual` : "Nenhuma sequência atual" },
   ];
   const trendPoints = stats?.rankingTrend[0]?.points ?? [];
   const maxTrend = Math.max(...trendPoints.map((point) => point.position), 1);
@@ -286,20 +753,22 @@ function DashboardPage({
           <h1>Bem-vindo à Arena</h1>
           <span>Campeonatos, partidas e estatísticas em um único lugar.</span>
         </div>
-        <button className="primary" onClick={() => go("matches")}>
-          <CirclePlus size={18} /> Registrar partida
-        </button>
+        {showRoomOnlyTabs && (
+          <button className="primary" onClick={() => go("matches")}>
+            <CirclePlus size={18} /> Registrar partida
+          </button>
+        )}
       </section>
-      <section className="metrics">
-        {metrics.map(([label, value]) => (
+      <section className="metrics dashboard-metrics">
+        {metrics.map(({ label, value, detail }) => (
           <article className="metric" key={label}>
             <span>{label}</span>
-            <strong>{value}</strong>
-            <small>
-              {label === "LÍDER" && data.leader
-                ? `${data.leader.points} pontos`
-                : "No servidor"}
-            </small>
+            <div className="highlight-details">
+              {label === "LÍDER DA TEMPORADA" && data.leader && (
+                <HighlightAvatar name={data.leader.name} player={players.find((player) => player.id === data.leader?.id)} />
+              )}
+              <div><strong>{value}</strong><small>{detail}</small></div>
+            </div>
           </article>
         ))}
       </section>
@@ -404,20 +873,28 @@ function DashboardPage({
         </article>
         <article className="panel">
           <div className="panel-head">
+            <h2>Rivalidade da Semana</h2>
+          </div>
+          <Empty text="Sem dados de rivalidade ainda" />
+        </article>
+        <article className="panel dashboard-recent">
+          <div className="panel-head">
             <h2>Últimas partidas</h2>
           </div>
           {data.recent.length ? (
             <div className="games">
               {data.recent.map((m) => (
-                <Game
-                  key={m.id}
-                  match={m}
-                  onEdit={setEditingMatch}
-                  onShare={async (match) => {
-                    await copyMatchSummary(match);
-                    showToast("Resumo copiado para o WhatsApp.");
-                  }}
-                />
+                <div key={m.id} className="dashboard-recent-match">
+                  <Game
+                    match={m}
+                    players={players}
+                    onEdit={setEditingMatch}
+                    onShare={async (match) => {
+                      await copyMatchSummary(match);
+                      showToast("Resumo copiado para o WhatsApp.");
+                    }}
+                  />
+                </div>
               ))}
             </div>
           ) : (
@@ -669,16 +1146,115 @@ function TeamPicker({
   );
 }
 
+function RankingPage({ data, players }: { data: Dashboard; players: Player[] }) {
+  const [tab, setTab] = useState<"geral" | "individuais" | "confrontos">("geral");
+  const [sortBy, setSortBy] = useState<"goals" | "winrate" | "goaldiff" | "wins">("goals");
+  const rankingFilters = [
+    { id: "goals", label: "Artilharia" },
+    { id: "winrate", label: "Aproveitamento" },
+    { id: "goaldiff", label: "Saldo de gols" },
+    { id: "wins", label: "Vitórias" },
+  ] as const;
+  const sortedRanking = [...data.ranking].sort((a, b) => {
+    switch (sortBy) {
+      case "goals": return b.goalsFor - a.goalsFor;
+      case "winrate": return b.winRate - a.winRate;
+      case "goaldiff": return (b.goalsFor - b.goalsAgainst) - (a.goalsFor - a.goalsAgainst);
+      case "wins": return b.wins - a.wins;
+    }
+  });
+  const stats = data.statistics;
+  const largestStreak = stats?.streaks.reduce<(typeof stats.streaks)[number] | null>(
+    (largest, current) => !largest || current.streak > largest.streak ? current : largest,
+    null,
+  );
+  const tabs = [
+    { id: "geral", label: "Classificação Geral" },
+    { id: "individuais", label: "Estatísticas Individuais" },
+    { id: "confrontos", label: "Confrontos Diretos" },
+  ] as const;
+
+  return (
+    <>
+      <section className="page-title">
+        <div>
+          <p>CLASSIFICAÇÃO</p>
+          <h1>Ranking geral</h1>
+        </div>
+      </section>
+      <div className="ranking-tabs" aria-label="Seções do ranking">
+        {tabs.map(({ id, label }) => (
+          <button key={id} type="button" className={tab === id ? "active" : ""} aria-pressed={tab === id} onClick={() => setTab(id)}>
+            {label}
+          </button>
+        ))}
+      </div>
+      {tab !== "geral" ? (
+        <article className="panel"><Empty text="Em breve" /></article>
+      ) : (
+        <>
+          <section className="metrics dashboard-metrics">
+            <article className="metric">
+              <span>ARTILHEIRO</span>
+              <div className="highlight-details">
+                {stats?.topScorer && <HighlightAvatar name={stats.topScorer.name} player={players.find((player) => player.id === stats.topScorer?.id)} />}
+                <div><strong>{stats?.topScorer?.name ?? "—"}</strong>{stats?.topScorer && <small>{stats.topScorer.value} gols</small>}</div>
+              </div>
+            </article>
+            <article className="metric">
+              <span>MELHOR APROVEITAMENTO</span>
+              <div className="highlight-details">
+                {stats?.bestWinRate && <HighlightAvatar name={stats.bestWinRate.name} player={players.find((player) => player.id === stats.bestWinRate?.id)} />}
+                <div><strong>{stats?.bestWinRate?.name ?? "—"}</strong>{stats?.bestWinRate && <small>{stats.bestWinRate.value}%</small>}</div>
+              </div>
+            </article>
+            <article className="metric">
+              <span>MAIOR SEQUÊNCIA ATUAL</span>
+              <div className="highlight-details">
+                {!!largestStreak?.streak && <HighlightAvatar name={largestStreak.name} player={players.find((player) => player.id === largestStreak.playerId)} />}
+                <div><strong>{largestStreak?.streak ? largestStreak.name : "—"}</strong>{!!largestStreak?.streak && <small>{largestStreak.streak} vitórias seguidas</small>}</div>
+              </div>
+            </article>
+          </section>
+          <section className="ranking-layout">
+            <article className="panel">
+              <div className="panel-head"><h2>Classificação Geral</h2></div>
+              <div className="ranking-filters" aria-label="Filtros da classificação">
+                {rankingFilters.map(({ id, label }) => (
+                  <button key={id} type="button" className={sortBy === id ? "active" : ""} aria-pressed={sortBy === id} onClick={() => setSortBy(id)}>{label}</button>
+                ))}
+              </div>
+              <Ranking rows={sortedRanking} />
+            </article>
+            <article className="panel ranking-insights">
+              <div className="panel-head"><h2>Insights</h2></div>
+              <div><span>Jogador Mais Participativo</span><strong>{stats?.mostPlayedPlayer?.name ?? "—"}</strong>{stats?.mostPlayedPlayer && <small>{stats.mostPlayedPlayer.value} partidas</small>}</div>
+              <div><span>Melhor Fase</span><strong>{stats?.bestForm?.name ?? "—"}</strong>{stats?.bestForm && <small>{stats.bestForm.value}% nos últimos jogos</small>}</div>
+              <div><span>Maior Evolução</span><strong>—</strong></div>
+              <div><span>Distribuição de Gols (Top 5)</span><div className="ranking-chart-placeholder">Gráfico em breve</div></div>
+            </article>
+          </section>
+        </>
+      )}
+    </>
+  );
+}
+
 function MatchesPage({
   players,
   teams,
   reload,
+  totalMatches,
 }: {
   players: Player[];
   teams: Team[];
   reload: () => Promise<void>;
+  totalMatches: number;
 }) {
   const [matches, setMatches] = useState<Match[]>([]);
+  const [competitionFilter, setCompetitionFilter] = useState<"all" | "championship" | "casual">("all");
+  const [periodFilter, setPeriodFilter] = useState<"all" | "30days">("all");
+  const [playerFilter, setPlayerFilter] = useState("");
   const [matchesLoaded, setMatchesLoaded] = useState(false);
   const [editingMatch, setEditingMatch] = useState<Match | null>(null);
   const [showClearModal, setShowClearModal] = useState(false);
@@ -705,6 +1281,18 @@ function MatchesPage({
 
   const team1 = teams.find((t) => String(t.id) === form.team1Id) ?? null;
   const team2 = teams.find((t) => String(t.id) === form.team2Id) ?? null;
+  const search = playerFilter.trim().toLocaleLowerCase("pt-BR");
+  const now = Date.now();
+  const filteredMatches = matches.filter((match) => {
+    const hasChampionship = Boolean(match.championship);
+    if (competitionFilter === "championship" && !hasChampionship) return false;
+    if (competitionFilter === "casual" && hasChampionship) return false;
+    if (periodFilter === "30days") {
+      const playedAt = new Date(match.playedAt).getTime();
+      if (!Number.isFinite(playedAt) || playedAt < now - 30 * 24 * 60 * 60 * 1000 || playedAt > now) return false;
+    }
+    return !search || match.player1.toLocaleLowerCase("pt-BR").includes(search) || match.player2.toLocaleLowerCase("pt-BR").includes(search);
+  });
   const select = (
     key: keyof typeof form,
     label: string,
@@ -801,7 +1389,21 @@ function MatchesPage({
           </span>
         </div>
       </section>
-      <section className="grid">
+      <section className="metrics dashboard-metrics">
+        <article className="metric">
+          <span>PARTIDAS TOTAIS</span>
+          <strong>{totalMatches}</strong>
+        </article>
+        <article className="metric">
+          <span>JOGADORES ATIVOS</span>
+          <strong>—</strong>
+        </article>
+        <article className="metric">
+          <span>COMPETIÇÃO ATUAL</span>
+          <strong>—</strong>
+        </article>
+      </section>
+      <section className="matches-layout">
         <article className="panel">
           <form className="form match-form" onSubmit={submit}>
             <div className="match-lanes">
@@ -856,16 +1458,38 @@ function MatchesPage({
         </article>
         <article className="panel wide">
           <div className="panel-head">
-            <h2>Histórico</h2>
+            <h2>Últimas partidas</h2>
             <button className="danger" onClick={() => setShowClearModal(true)}>
               Limpar histórico
             </button>
           </div>
+          <div className="matches-filters form">
+            <label>
+              Competição
+              <select value={competitionFilter} onChange={(e) => setCompetitionFilter(e.target.value as typeof competitionFilter)}>
+                <option value="all">Todas as competições</option>
+                <option value="championship">Com campeonato</option>
+                <option value="casual">Sem campeonato</option>
+              </select>
+            </label>
+            <label>
+              Período
+              <select value={periodFilter} onChange={(e) => setPeriodFilter(e.target.value as typeof periodFilter)}>
+                <option value="all">Todos os períodos</option>
+                <option value="30days">Últimos 30 dias</option>
+              </select>
+            </label>
+            <label>
+              Busca
+              <input value={playerFilter} onChange={(e) => setPlayerFilter(e.target.value)} placeholder="Buscar jogador" />
+            </label>
+          </div>
           <div className="games matches-history">
-            {matches.map((m) => (
+            {filteredMatches.map((m) => (
               <Game
                 key={m.id}
                 match={m}
+                players={players}
                 onEdit={setEditingMatch}
                 onDelete={setDeletingMatch}
                 onShare={async (match) => {
@@ -874,7 +1498,7 @@ function MatchesPage({
                 }}
               />
             ))}
-            {!matches.length && <Empty text="As partidas aparecerão aqui." />}
+            {!filteredMatches.length && <Empty text="Nenhuma partida encontrada com esses filtros." />}
           </div>
         </article>
       </section>
@@ -1463,6 +2087,17 @@ const MUTATORS = [
   },
 ];
 
+function championshipCover(name: string): string {
+  const normalized = name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  if (normalized.includes("libertadores")) return "cover-libertadores";
+  if (normalized.includes("champions")) return "cover-champions";
+  if (normalized.includes("brasileir")) return "cover-brasileirao";
+  if (normalized.includes("copa do mundo") || normalized.includes("world cup")) return "cover-world";
+  if (normalized.includes("premier")) return "cover-premier";
+  if (normalized.includes("mundial")) return "cover-mundial";
+  return "cover-default";
+}
+
 function ChampionshipPage({
   players,
   teams,
@@ -1470,6 +2105,7 @@ function ChampionshipPage({
   players: Player[];
   teams: Team[];
 }) {
+  const [news, setNews] = useState<ArenaNews[]>([]);
   const [items, setItems] = useState<Championship[]>([]),
     [selected, setSelected] = useState<number>(),
     [detail, setDetail] = useState<ChampionshipDetail>(),
@@ -1499,6 +2135,13 @@ function ChampionshipPage({
   };
   useEffect(() => {
     load();
+  }, []);
+  useEffect(() => {
+    let active = true;
+    window.arena.arenaNews()
+      .then((result) => { if (active) setNews(result); })
+      .catch(() => { if (active) setNews([]); });
+    return () => { active = false; };
   }, []);
   useEffect(() => {
     if (selected) window.arena.championshipDetail(selected).then(setDetail);
@@ -1638,15 +2281,6 @@ function ChampionshipPage({
           <Trophy />{" "}
           <span>
             Clássico<small>1v1 competitivo</small>
-          </span>
-        </button>
-        <button
-          className={mode === "duo" ? "active duo" : ""}
-          onClick={() => setMode("duo")}
-        >
-          <UsersRound />{" "}
-          <span>
-            Modo Dupla<small>Co-op · 2v2</small>
           </span>
         </button>
         <button
@@ -2028,6 +2662,8 @@ function ChampionshipPage({
         )}
       </section>
 
+      <div className="championship-overview">
+        <div className="championship-overview-main">
       <section className="season-gallery">
         <div className="section-label">
           <div>
@@ -2038,7 +2674,7 @@ function ChampionshipPage({
         <div className="championship-cards">
           {items.map((c, index) => (
             <article
-              className={`season-card ${selected === c.id ? "selected" : ""}`}
+              className={`season-card ${championshipCover(c.name)} ${selected === c.id ? "selected" : ""}`}
               onClick={() => setSelected(c.id)}
               onKeyDown={(event) => {
                 if (event.key === "Enter" || event.key === " ") {
@@ -2075,7 +2711,7 @@ function ChampionshipPage({
               </div>
               <footer>
                 <span>
-                  <Users size={15} /> {c.participants} players
+                  <Users size={15} /> {c.participants} participantes
                 </span>
                 <span>
                   Ver arena <ArrowRight size={15} />
@@ -2103,6 +2739,13 @@ function ChampionshipPage({
                   </button>
                 </div>
               </footer>
+              {detail?.championship.id === c.id && (
+                <div className="season-avatars" aria-label="Avatares dos participantes">
+                  {detail.standing.map((standing) => players.find((player) => player.id === standing.id)).filter((player): player is Player => Boolean(player?.avatar)).map((player) => (
+                    <img key={player.id} src={player.avatar} alt={player.name} title={player.name} />
+                  ))}
+                </div>
+              )}
             </article>
           ))}
         </div>
@@ -2120,6 +2763,20 @@ function ChampionshipPage({
           }}
         />
       )}
+        </div>
+        <article className="panel arena-news">
+          <div className="panel-head"><h2>Notícias da Arena</h2></div>
+          {news.length ? news.map((item) => {
+            const Icon = item.type === "goleada" ? Trophy : item.type === "sequencia" ? Sparkles : Gamepad2;
+            return <div className="arena-news-card" key={item.id}><Icon size={20} /><div><strong>{item.title}</strong><p>{item.description}</p></div></div>;
+          }) : <>
+          <small>Em breve: notícias geradas automaticamente</small>
+          <div className="arena-news-card"><Trophy size={20} /><div><strong>Goleada da Semana</strong><p>Os destaques da arena aparecerão aqui.</p></div></div>
+          <div className="arena-news-card"><Sparkles size={20} /><div><strong>Virada Épica</strong><p>As reviravoltas ganharão destaque aqui.</p></div></div>
+          <div className="arena-news-card"><Gamepad2 size={20} /><div><strong>Pato do Mês</strong><p>Os momentos divertidos aparecerão aqui.</p></div></div>
+          </>}
+        </article>
+      </div>
       {confirming && (
         <AppModal
           title="Confirmar campeonato"
@@ -2204,6 +2861,17 @@ function ChampionshipDetailView({
         <Ranking rows={detail.standing} />
       </article>
       <article className="panel wide">
+        <div className="upcoming-fixtures">
+          <div className="panel-head"><h2>Próximos jogos</h2></div>
+          {detail.fixtures.some((fixture) => !fixture.matchId) ? (
+            detail.fixtures.filter((fixture) => !fixture.matchId).slice(0, 5).map((fixture) => (
+              <div className="upcoming-fixture" key={fixture.id}>
+                <span>{fixture.player1} × {fixture.player2}</span>
+                <small>{fixture.stage === "league" ? `Rodada ${fixture.round}` : fixture.stage}</small>
+              </div>
+            ))
+          ) : <Empty text="Nenhum próximo jogo." />}
+        </div>
         <div className="panel-head">
           <h2>
             {detail.championship.format === "league" ? "Calendário" : "Chave"}
@@ -2411,9 +3079,29 @@ function FixtureResultModal({
   const knockout = fixture.stage !== "league";
   const stageLabel = knockout ? fixture.stage : `Rodada ${fixture.round}`;
 
+  const { player1Id, player2Id } = fixture;
+  if (player1Id == null || player2Id == null) {
+    return (
+      <div className="edit-modal-backdrop" onMouseDown={onClose}>
+        <div className="edit-modal" onMouseDown={(event) => event.stopPropagation()}>
+          <div className="panel"><p>Registro de dupla em breve.</p></div>
+          <button type="button" onClick={onClose}>Fechar</button>
+        </div>
+      </div>
+    );
+  }
+
   async function submit() {
+    if (fixture.player1Id == null || fixture.player2Id == null) {
+      setError("Registro de dupla em breve.");
+      return;
+    }
+    const player1Id = fixture.player1Id;
+    const player2Id = fixture.player2Id;
     const goals1 = Number(score1);
     const goals2 = Number(score2);
+    const team1Id = fixture.team1Id ?? team1?.id;
+    const team2Id = fixture.team2Id ?? team2?.id;
     if (
       !Number.isInteger(goals1) ||
       goals1 < 0 ||
@@ -2423,11 +3111,11 @@ function FixtureResultModal({
       setError("Informe um placar válido (inteiros maiores ou iguais a zero).");
       return;
     }
-    if (!team1 || !team2) {
+    if (team1Id == null || team2Id == null) {
       setError("Selecione os dois times.");
       return;
     }
-    if (team1.id === team2.id) {
+    if (team1Id === team2Id) {
       setError("Escolha times diferentes.");
       return;
     }
@@ -2435,10 +3123,10 @@ function FixtureResultModal({
     setError("");
     try {
       await window.arena.saveMatch({
-        player1Id: fixture.player1Id,
-        player2Id: fixture.player2Id,
-        team1Id: team1.id,
-        team2Id: team2.id,
+        player1Id,
+        player2Id,
+        team1Id,
+        team2Id,
         score1: goals1,
         score2: goals2,
         championshipId: championship.id,
@@ -2493,7 +3181,7 @@ function FixtureResultModal({
         <div className="edit-scoreboard">
           <div className="edit-player">
             <strong>{fixture.player1}</strong>
-            <span>{team1?.name ?? "Sem time"}</span>
+            <span>{fixture.team1 ?? team1?.name ?? "Sem time"}</span>
           </div>
 
           <div className="edit-score">
@@ -2519,23 +3207,31 @@ function FixtureResultModal({
 
           <div className="edit-player edit-player-right">
             <strong>{fixture.player2}</strong>
-            <span>{team2?.name ?? "Sem time"}</span>
+            <span>{fixture.team2 ?? team2?.name ?? "Sem time"}</span>
           </div>
         </div>
 
         <div className="fixture-teams">
-          <TeamPicker
-            label={`Time de ${fixture.player1}`}
-            teams={teams}
-            value={team1}
-            onChange={setTeam1}
-          />
-          <TeamPicker
-            label={`Time de ${fixture.player2}`}
-            teams={teams}
-            value={team2}
-            onChange={setTeam2}
-          />
+          {fixture.team1Id != null ? (
+            <div>Time de {fixture.player1}: {fixture.team1 ?? team1?.name ?? "Time indisponível"}</div>
+          ) : (
+            <TeamPicker
+              label={`Time de ${fixture.player1}`}
+              teams={teams}
+              value={team1}
+              onChange={setTeam1}
+            />
+          )}
+          {fixture.team2Id != null ? (
+            <div>Time de {fixture.player2}: {fixture.team2 ?? team2?.name ?? "Time indisponível"}</div>
+          ) : (
+            <TeamPicker
+              label={`Time de ${fixture.player2}`}
+              teams={teams}
+              value={team2}
+              onChange={setTeam2}
+            />
+          )}
         </div>
 
         {error && <div className="edit-error">{error}</div>}
@@ -2635,11 +3331,11 @@ function SettingsPage({ reload }: { reload: () => Promise<void> }) {
   ];
 
   const [accent, setAccent] = useState(
-    () => localStorage.getItem("arena-accent") ?? "#8872ff",
+    () => localStorage.getItem("arena-accent") ?? "#7e5ff0",
   );
 
   const [background, setBackground] = useState(
-    () => localStorage.getItem("arena-background") ?? "#0a0f1f",
+    () => localStorage.getItem("arena-background") ?? "#0a0c10",
   );
 
   const [paletteId, setPaletteId] = useState<ArenaPalette["id"] | "custom">(() => {
@@ -2650,9 +3346,9 @@ function SettingsPage({ reload }: { reload: () => Promise<void> }) {
 
     const theme: ArenaTheme =
       localStorage.getItem("arena-theme") === "light" ? "light" : "dark";
-    const currentAccent = localStorage.getItem("arena-accent") ?? "#8872ff";
+    const currentAccent = localStorage.getItem("arena-accent") ?? "#7e5ff0";
     const currentBackground =
-      localStorage.getItem("arena-background") ?? "#0a0f1f";
+      localStorage.getItem("arena-background") ?? "#0a0c10";
     const matchingPalette = ARENA_PALETTES.find((palette) => {
       const colors = getArenaPaletteVariant(palette, theme);
       return (
@@ -3058,6 +3754,16 @@ function ArenaApp({ user, onSignOut }: { user: AuthUser; onSignOut: () => void }
     [teams, setTeams] = useState<Team[]>([]),
     [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const accountMenuRef = useRef<HTMLDivElement | null>(null);
+  const [online, setOnline] = useState(navigator.onLine);
+  useEffect(() => {
+    const updateOnline = () => setOnline(navigator.onLine);
+    window.addEventListener("online", updateOnline);
+    window.addEventListener("offline", updateOnline);
+    return () => {
+      window.removeEventListener("online", updateOnline);
+      window.removeEventListener("offline", updateOnline);
+    };
+  }, []);
   const reload = async () => {
     try {
       const [dashboard, playerList, teamList] = await Promise.all([
@@ -3106,31 +3812,26 @@ function ArenaApp({ user, onSignOut }: { user: AuthUser; onSignOut: () => void }
   if (!data) return <main className="loading">Carregando arena…</main>;
   const nav: [Page, string, React.ElementType][] = [
     ["dashboard", "Visão geral", LayoutDashboard],
-    ["players", "Jogadores", Users],
-    ["matches", "Partidas", Gamepad2],
-    ["ranking", "Ranking", BarChart3],
+    ["rooms", "Salas personalizadas", DoorOpen],
+    ...(showRoomOnlyTabs
+      ? ([["matches", "Partidas", Gamepad2], ["ranking", "Ranking", BarChart3]] as [Page, string, React.ElementType][])
+      : []),
     ["championships", "Campeonatos", Trophy],
-    ["teams", "Times", Shield],
+    ["friends", "Amigos", UsersRound],
   ];
   const view =
     page === "dashboard" ? (
-      <DashboardPage data={data} go={setPage} reload={reload} />
+      <DashboardPage data={data} players={players} go={setPage} reload={reload} />
+    ) : page === "rooms" ? (
+      <RoomsPage />
+    ) : page === "friends" ? (
+      <FriendsPage />
     ) : page === "players" ? (
       <PlayersPage players={players} reload={reload} />
     ) : page === "matches" ? (
-      <MatchesPage players={players} teams={teams} reload={reload} />
+      <MatchesPage players={players} teams={teams} reload={reload} totalMatches={data.matches} />
     ) : page === "ranking" ? (
-      <>
-        <section className="page-title">
-          <div>
-            <p>CLASSIFICAÇÃO</p>
-            <h1>Ranking geral</h1>
-          </div>
-        </section>
-        <article className="panel">
-          <Ranking rows={data.ranking} />
-        </article>
-      </>
+      <RankingPage data={data} players={players} />
     ) : page === "championships" ? (
       <ChampionshipPage players={players} teams={teams} />
     ) : page === "profile" ? (
@@ -3144,6 +3845,8 @@ function ArenaApp({ user, onSignOut }: { user: AuthUser; onSignOut: () => void }
     ) : (
       <TeamsPage teams={teams} />
     );
+  // Oculto até as ações da Central da Arena serem implementadas.
+  const showArenaMenu = false;
   return (
     <div className="shell">
       <aside>
@@ -3166,6 +3869,10 @@ function ArenaApp({ user, onSignOut }: { user: AuthUser; onSignOut: () => void }
           ))}
         </nav>
         <div className="side-bottom">
+          <div className="sidebar-status" aria-live="polite">
+            <span className={online ? "sidebar-status-dot online" : "sidebar-status-dot"} aria-hidden="true" />
+            {online ? "Online" : "Offline"}
+          </div>
           <small>v0.1.0 · dados locais</small>
         </div>
       </aside>
@@ -3241,7 +3948,7 @@ function ArenaApp({ user, onSignOut }: { user: AuthUser; onSignOut: () => void }
         )}
       </div>
 
-      <ArenaTools />
+      {showArenaMenu && <ArenaTools mutators={MUTATORS} teams={teams} />}
     </div>
   );
 }

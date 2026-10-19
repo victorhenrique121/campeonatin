@@ -2,8 +2,10 @@ import Database from "better-sqlite3";
 import fs from "node:fs";
 
 import type {
+  ArenaNews,
   Championship,
   Dashboard,
+  Duo,
   GameRulesSettings,
   MatchInput,
   Player,
@@ -34,6 +36,7 @@ export function createDatabase(file: string) {
   db.pragma("journal_mode = WAL");
   db.exec(`
     CREATE TABLE IF NOT EXISTS players (id INTEGER PRIMARY KEY, name TEXT NOT NULL, nickname TEXT NOT NULL UNIQUE, avatar TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+    CREATE TABLE IF NOT EXISTS teams2v2 (id INTEGER PRIMARY KEY, room_id TEXT, player1_id INTEGER, player2_id INTEGER, name TEXT, created_at TEXT, updated_at TEXT);
     CREATE TABLE IF NOT EXISTS teams (id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE, league TEXT NOT NULL, country TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS championships (id INTEGER PRIMARY KEY, name TEXT NOT NULL, format TEXT NOT NULL CHECK(format IN ('league','knockout','groups_knockout')), mode TEXT NOT NULL DEFAULT 'classic' CHECK(mode IN ('classic','duo','mad')), mutator TEXT, starts_at TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'draft');
     CREATE TABLE IF NOT EXISTS championship_participants (championship_id INTEGER NOT NULL REFERENCES championships(id) ON DELETE CASCADE, player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE RESTRICT, team_id INTEGER REFERENCES teams(id) ON DELETE RESTRICT, PRIMARY KEY(championship_id, player_id));
@@ -42,6 +45,10 @@ export function createDatabase(file: string) {
     CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
     CREATE INDEX IF NOT EXISTS idx_matches_played_at ON matches(played_at DESC); CREATE INDEX IF NOT EXISTS idx_matches_players ON matches(player1_id, player2_id);
   `);
+  const duoColumns = db.prepare("PRAGMA table_info(teams2v2)").all() as { name: string }[];
+  if (!duoColumns.some((column) => column.name === "team_id")) {
+    db.exec("ALTER TABLE teams2v2 ADD COLUMN team_id INTEGER REFERENCES teams(id) ON DELETE RESTRICT");
+  }
   const defaultSettings = db.prepare(
     "INSERT OR IGNORE INTO app_settings(key,value) VALUES (?,?)",
   );
@@ -55,6 +62,56 @@ export function createDatabase(file: string) {
     db.exec(
       "ALTER TABLE fixtures ADD COLUMN stage TEXT NOT NULL DEFAULT 'league'",
     );
+
+  const needsDuoMigration = (table: "fixtures" | "matches") => {
+    const columns = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+    return !columns.some((column) => column.name === "team1_duo_id");
+  };
+  if (needsDuoMigration("fixtures") || needsDuoMigration("matches")) {
+    db.pragma("foreign_keys = OFF");
+    try {
+      db.transaction(() => {
+        const rebuild = (table: "fixtures" | "matches", create: string, columns: string) => {
+          if (!needsDuoMigration(table)) return;
+          const existing = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+          const expected = columns.split(", ");
+          if (existing.some(({ name }) => !expected.includes(name))) {
+            throw new Error(`Não foi possível migrar ${table}: existem colunas não previstas.`);
+          }
+          const objects = db.prepare("SELECT sql FROM sqlite_master WHERE tbl_name = ? AND type IN ('index', 'trigger') AND sql IS NOT NULL").all(table) as { sql: string }[];
+          db.exec(create);
+          db.exec(`INSERT INTO ${table}_new (${columns}) SELECT ${columns} FROM ${table}`);
+          db.exec(`DROP TABLE ${table}; ALTER TABLE ${table}_new RENAME TO ${table}`);
+          objects.forEach(({ sql }) => db.exec(sql));
+        };
+        rebuild("fixtures", `CREATE TABLE fixtures_new (
+          id INTEGER PRIMARY KEY, championship_id INTEGER NOT NULL REFERENCES championships(id) ON DELETE CASCADE,
+          round_number INTEGER NOT NULL, stage TEXT NOT NULL DEFAULT 'league',
+          player1_id INTEGER REFERENCES players(id) ON DELETE RESTRICT, player2_id INTEGER REFERENCES players(id) ON DELETE RESTRICT,
+          match_id INTEGER UNIQUE REFERENCES matches(id) ON DELETE SET NULL,
+          team1_duo_id INTEGER REFERENCES teams2v2(id) ON DELETE RESTRICT, team2_duo_id INTEGER REFERENCES teams2v2(id) ON DELETE RESTRICT,
+          UNIQUE(championship_id, player1_id, player2_id),
+          CHECK ((player1_id IS NOT NULL AND player2_id IS NOT NULL AND team1_duo_id IS NULL AND team2_duo_id IS NULL)
+            OR (player1_id IS NULL AND player2_id IS NULL AND team1_duo_id IS NOT NULL AND team2_duo_id IS NOT NULL))
+        )`, "id, championship_id, round_number, stage, player1_id, player2_id, match_id");
+        rebuild("matches", `CREATE TABLE matches_new (
+          id INTEGER PRIMARY KEY, player1_id INTEGER REFERENCES players(id) ON DELETE RESTRICT,
+          player2_id INTEGER REFERENCES players(id) ON DELETE RESTRICT,
+          team1_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE RESTRICT, team2_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE RESTRICT,
+          score1 INTEGER NOT NULL CHECK(score1 >= 0), score2 INTEGER NOT NULL CHECK(score2 >= 0),
+          championship_id INTEGER REFERENCES championships(id) ON DELETE SET NULL, played_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          team1_duo_id INTEGER REFERENCES teams2v2(id) ON DELETE RESTRICT, team2_duo_id INTEGER REFERENCES teams2v2(id) ON DELETE RESTRICT,
+          CHECK(player1_id <> player2_id),
+          CHECK ((player1_id IS NOT NULL AND player2_id IS NOT NULL AND team1_duo_id IS NULL AND team2_duo_id IS NULL)
+            OR (player1_id IS NULL AND player2_id IS NULL AND team1_duo_id IS NOT NULL AND team2_duo_id IS NOT NULL))
+        )`, "id, player1_id, player2_id, team1_id, team2_id, score1, score2, championship_id, played_at");
+        const violations = db.pragma("foreign_key_check") as unknown[];
+        if (violations.length) throw new Error("Não foi possível migrar os dados: existem referências inválidas.");
+      })();
+    } finally {
+      db.pragma("foreign_keys = ON");
+    }
+  }
 
   // Migração: remover campo 'rating' da tabela 'teams' se existir
   const teamsColumns = db.prepare("PRAGMA table_info(teams)").all() as {
@@ -232,6 +289,32 @@ export function repository(db: Database.Database) {
   SELECT p.id,p.name,COALESCE(a.played,0) played,COALESCE(a.wins,0) wins,COALESCE(a.draws,0) draws,COALESCE(a.losses,0) losses,COALESCE(a.goals_for,0) goalsFor,COALESCE(a.goals_against,0) goalsAgainst,${pointsExpression(settings)} points,${winRateExpression()} winRate,0 streak FROM players p LEFT JOIN aggregate a ON a.player_id=p.id ORDER BY points DESC,(goalsFor-goalsAgainst) DESC,goalsFor DESC,p.name`;
   const championshipRankingSql = (settings: GameRulesSettings) =>
     `WITH results AS (SELECT player1_id player_id,score1 gf,score2 ga FROM matches WHERE championship_id=? UNION ALL SELECT player2_id,score2,score1 FROM matches WHERE championship_id=?), aggregate AS (SELECT player_id,COUNT(*) played,SUM(gf>ga) wins,SUM(gf=ga) draws,SUM(gf<ga) losses,SUM(gf) goals_for,SUM(ga) goals_against FROM results GROUP BY player_id) SELECT p.id,p.name,COALESCE(a.played,0) played,COALESCE(a.wins,0) wins,COALESCE(a.draws,0) draws,COALESCE(a.losses,0) losses,COALESCE(a.goals_for,0) goalsFor,COALESCE(a.goals_against,0) goalsAgainst,${pointsExpression(settings)} points,${winRateExpression()} winRate,0 streak FROM championship_participants cp JOIN players p ON p.id=cp.player_id LEFT JOIN aggregate a ON a.player_id=p.id WHERE cp.championship_id=? ORDER BY points DESC,(goalsFor-goalsAgainst) DESC,goalsFor DESC,p.name`;
+  const championshipDuoRankingSql = (settings: GameRulesSettings) => `
+    WITH duos AS (
+      SELECT team1_duo_id duo_id FROM fixtures WHERE championship_id = ? AND team1_duo_id IS NOT NULL
+      UNION
+      SELECT team2_duo_id FROM fixtures WHERE championship_id = ? AND team2_duo_id IS NOT NULL
+    ), results AS (
+      SELECT team1_duo_id duo_id, score1 gf, score2 ga FROM matches WHERE championship_id = ? AND team1_duo_id IS NOT NULL
+      UNION ALL
+      SELECT team2_duo_id, score2, score1 FROM matches WHERE championship_id = ? AND team2_duo_id IS NOT NULL
+    ), aggregate AS (
+      SELECT duo_id, COUNT(*) played, SUM(gf > ga) wins, SUM(gf = ga) draws,
+             SUM(gf < ga) losses, SUM(gf) goals_for, SUM(ga) goals_against
+      FROM results GROUP BY duo_id
+    )
+    SELECT d.id, COALESCE(d.name, p1.name || ' & ' || p2.name) name,
+           COALESCE(a.played, 0) played, COALESCE(a.wins, 0) wins,
+           COALESCE(a.draws, 0) draws, COALESCE(a.losses, 0) losses,
+           COALESCE(a.goals_for, 0) goalsFor, COALESCE(a.goals_against, 0) goalsAgainst,
+           ${pointsExpression(settings)} points, ${winRateExpression()} winRate, 0 streak
+    FROM duos
+    JOIN teams2v2 d ON d.id = duos.duo_id
+    JOIN players p1 ON p1.id = d.player1_id
+    JOIN players p2 ON p2.id = d.player2_id
+    LEFT JOIN aggregate a ON a.duo_id = d.id
+    ORDER BY points DESC, (goalsFor - goalsAgainst) DESC, goalsFor DESC, name
+  `;
   const withStreaks = (rows: Standing[]) => {
     const games = db
       .prepare(
@@ -244,6 +327,35 @@ export function repository(db: Database.Database) {
       score2: number;
     }>;
     return withWinningStreaks(rows, games);
+  };
+  const arenaNews = (): ArenaNews[] => {
+    const matches = db.prepare(`
+      SELECT m.id, m.played_at AS playedAt, p1.name AS player1, p2.name AS player2,
+        m.score1, m.score2
+      FROM matches m
+      JOIN players p1 ON p1.id = m.player1_id
+      JOIN players p2 ON p2.id = m.player2_id
+      WHERE julianday(m.played_at) >= julianday('now', '-30 days')
+        AND julianday(m.played_at) <= julianday('now')
+      ORDER BY julianday(m.played_at) DESC, m.id DESC
+    `).all() as Array<{ id: number; playedAt: string; player1: string; player2: string; score1: number; score2: number }>;
+    const news: ArenaNews[] = [];
+    const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const goleada = matches.filter((match) => new Date(match.playedAt).getTime() >= sevenDaysAgo && match.score1 !== match.score2)
+      .sort((a, b) => Math.abs(b.score1 - b.score2) - Math.abs(a.score1 - a.score2))[0];
+    if (goleada) {
+      news.push({ id: `goleada-${goleada.id}`, type: "goleada", title: "Goleada da Semana", description: `${goleada.player1} ${goleada.score1} × ${goleada.score2} ${goleada.player2}.`, playerNames: [goleada.player1, goleada.player2] });
+    }
+    const streak = withStreaks(db.prepare(rankingSql(gameRules())).all() as Standing[])
+      .reduce<Standing | null>((best, row) => row.streak > (best?.streak ?? 0) ? row : best, null);
+    if (streak) {
+      news.push({ id: `sequencia-${streak.id}`, type: "sequencia", title: "Maior Sequência", description: `${streak.name} tem ${streak.streak} ${streak.streak === 1 ? "vitória seguida" : "vitórias seguidas"}.`, playerNames: [streak.name] });
+    }
+    const pato = [...matches].sort((a, b) => (b.score1 + b.score2) - (a.score1 + a.score2))[0];
+    if (pato) {
+      news.push({ id: `pato-${pato.id}`, type: "pato", title: "Pato do Mês", description: `${pato.player1} ${pato.score1} × ${pato.score2} ${pato.player2}.`, playerNames: [pato.player1, pato.player2] });
+    }
+    return news;
   };
   const statisticsDashboard = (): StatisticsDashboard => {
     const settings = gameRules();
@@ -283,7 +395,7 @@ export function repository(db: Database.Database) {
       | undefined;
     const recent = db
       .prepare(
-        `SELECT m.id,m.played_at playedAt,p1.name player1,p2.name player2,t1.name team1,t2.name team2,m.score1 score1,m.score2 score2 FROM matches m JOIN players p1 ON p1.id=m.player1_id JOIN players p2 ON p2.id=m.player2_id JOIN teams t1 ON t1.id=m.team1_id JOIN teams t2 ON t2.id=m.team2_id ORDER BY m.played_at DESC LIMIT 5`,
+        `SELECT m.id,m.played_at playedAt,p1.name player1,p2.name player2,t1.name team1,t2.name team2,m.score1 score1,m.score2 score2,c.format championshipFormat FROM matches m JOIN players p1 ON p1.id=m.player1_id JOIN players p2 ON p2.id=m.player2_id JOIN teams t1 ON t1.id=m.team1_id JOIN teams t2 ON t2.id=m.team2_id LEFT JOIN championships c ON c.id=m.championship_id ORDER BY m.played_at DESC LIMIT 5`,
       )
       .all() as Dashboard["recent"];
     const topScorer = [...playedRows].sort(
@@ -501,6 +613,50 @@ export function repository(db: Database.Database) {
   };
   return {
     gameRules,
+    arenaNews,
+    findOrCreateDuo: (player1Id: number, player2Id: number, roomId: string | null, teamId?: number | null): number => {
+      if (player1Id === player2Id) throw new Error("Uma dupla precisa de dois jogadores diferentes.");
+      const [first, second] = player1Id < player2Id ? [player1Id, player2Id] : [player2Id, player1Id];
+      const existing = db.prepare(
+        "SELECT id, team_id FROM teams2v2 WHERE player1_id = ? AND player2_id = ? AND room_id IS NOT DISTINCT FROM ?",
+      ).get(first, second, roomId) as { id: number; team_id: number | null } | undefined;
+      if (existing) {
+        if (teamId != null && existing.team_id != null && existing.team_id !== teamId) {
+          throw new Error("A dupla já tem um time definido; não é possível alterar.");
+        }
+        if (teamId != null && existing.team_id == null) {
+          db.prepare("UPDATE teams2v2 SET team_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(teamId, existing.id);
+        }
+        return existing.id;
+      }
+      const result = db.prepare(
+        "INSERT INTO teams2v2 (room_id, player1_id, player2_id, team_id, created_at, updated_at) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+      ).run(roomId, first, second, teamId ?? null);
+      return Number(result.lastInsertRowid);
+    },
+    listDuos: (): Duo[] => db.prepare(
+      "SELECT id, room_id roomId, player1_id player1Id, player2_id player2Id, name, team_id teamId FROM teams2v2",
+    ).all() as Duo[],
+    getDuoPlayers: (duoId: number): { player1: Player; player2: Player } | null => {
+      const duo = db.prepare("SELECT player1_id player1Id, player2_id player2Id FROM teams2v2 WHERE id = ?")
+        .get(duoId) as { player1Id: number; player2Id: number } | undefined;
+      if (!duo) return null;
+      const query = db.prepare("SELECT id, name, nickname, avatar, created_at createdAt FROM players WHERE id = ?");
+      const player1 = query.get(duo.player1Id) as Player | undefined;
+      const player2 = query.get(duo.player2Id) as Player | undefined;
+      return player1 && player2 ? { player1, player2 } : null;
+    },
+    maybeFinishLeagueChampionship: (championshipId: number): boolean => {
+      const championship = db
+        .prepare("SELECT format FROM championships WHERE id=?")
+        .get(championshipId) as { format: string } | undefined;
+      if (championship?.format !== "league") return false;
+
+      const counts = db
+        .prepare("SELECT COUNT(*) total, COUNT(match_id) played FROM fixtures WHERE championship_id=?")
+        .get(championshipId) as { total: number; played: number };
+      return counts.total > 0 && counts.total === counts.played;
+    },
     saveGameRules: (settings: GameRulesSettings) => {
       const validSettings = validateGameRules(settings);
       const save = db.prepare(
@@ -600,28 +756,40 @@ export function repository(db: Database.Database) {
     },
     saveMatch: (m: MatchInput) => {
       const championshipId = m.championshipId ? Number(m.championshipId) : null;
+      const isDuo = m.team1DuoId != null || m.team2DuoId != null;
+      let team1Id = m.team1Id;
+      let team2Id = m.team2Id;
 
-      if (!m.player1Id || !m.player2Id || !m.team1Id || !m.team2Id)
-        throw new Error("Selecione os dois jogadores e os dois times.");
+      if (isDuo) {
+        if (!m.team1DuoId || !m.team2DuoId || m.team1DuoId === m.team2DuoId)
+          throw new Error("Selecione duas duplas diferentes.");
+        const duoQuery = db.prepare("SELECT team_id FROM teams2v2 WHERE id=?");
+        const duo1 = duoQuery.get(m.team1DuoId) as { team_id: number | null } | undefined;
+        const duo2 = duoQuery.get(m.team2DuoId) as { team_id: number | null } | undefined;
+        if (!duo1 || !duo2) throw new Error("Uma das duplas selecionadas não existe.");
+        if (duo1.team_id == null || duo2.team_id == null)
+          throw new Error("Defina o time da dupla antes de registrar a partida.");
+        team1Id = duo1.team_id;
+        team2Id = duo2.team_id;
+      } else {
+        if (!m.player1Id || !m.player2Id || !team1Id || !team2Id)
+          throw new Error("Selecione os dois jogadores e os dois times.");
 
-      if (m.player1Id === m.player2Id || m.team1Id === m.team2Id)
-        throw new Error("Escolha jogadores e times diferentes.");
+        if (m.player1Id === m.player2Id || team1Id === team2Id)
+          throw new Error("Escolha jogadores e times diferentes.");
 
-      const player1Exists = db
-        .prepare("SELECT 1 FROM players WHERE id=?")
-        .get(m.player1Id);
-      const player2Exists = db
-        .prepare("SELECT 1 FROM players WHERE id=?")
-        .get(m.player2Id);
+        const player1Exists = db.prepare("SELECT 1 FROM players WHERE id=?").get(m.player1Id);
+        const player2Exists = db.prepare("SELECT 1 FROM players WHERE id=?").get(m.player2Id);
+        if (!player1Exists || !player2Exists)
+          throw new Error("Um dos jogadores selecionados não existe.");
+      }
       const team1Exists = db
         .prepare("SELECT 1 FROM teams WHERE id=?")
-        .get(m.team1Id);
+        .get(team1Id);
       const team2Exists = db
         .prepare("SELECT 1 FROM teams WHERE id=?")
-        .get(m.team2Id);
+        .get(team2Id);
 
-      if (!player1Exists || !player2Exists)
-        throw new Error("Um dos jogadores selecionados não existe.");
       if (!team1Exists || !team2Exists)
         throw new Error("Um dos times selecionados não existe.");
 
@@ -636,17 +804,14 @@ export function repository(db: Database.Database) {
       const save = db.transaction(() => {
         let fixture: { id: number; round: number; stage: string } | undefined;
         if (championshipId !== null) {
-          fixture = db
-            .prepare(
-              "SELECT id,round_number round,stage FROM fixtures WHERE championship_id=? AND match_id IS NULL AND ((player1_id=? AND player2_id=?) OR (player1_id=? AND player2_id=?))",
-            )
-            .get(
-              championshipId,
-              m.player1Id,
-              m.player2Id,
-              m.player2Id,
-              m.player1Id,
-            ) as { id: number; round: number; stage: string } | undefined;
+          const firstId = isDuo ? m.team1DuoId : m.player1Id;
+          const secondId = isDuo ? m.team2DuoId : m.player2Id;
+          const fixtureQuery = isDuo
+            ? "SELECT id,round_number round,stage FROM fixtures WHERE championship_id=? AND match_id IS NULL AND ((team1_duo_id=? AND team2_duo_id=?) OR (team1_duo_id=? AND team2_duo_id=?))"
+            : "SELECT id,round_number round,stage FROM fixtures WHERE championship_id=? AND match_id IS NULL AND ((player1_id=? AND player2_id=?) OR (player1_id=? AND player2_id=?))";
+          fixture = db.prepare(fixtureQuery).get(championshipId, firstId, secondId, secondId, firstId) as
+            | { id: number; round: number; stage: string }
+            | undefined;
           if (!fixture)
             throw new Error(
               "Este confronto não está pendente neste campeonato.",
@@ -658,13 +823,15 @@ export function repository(db: Database.Database) {
         }
         const info = db
           .prepare(
-            "INSERT INTO matches(player1_id,player2_id,team1_id,team2_id,score1,score2,championship_id,played_at) VALUES (?,?,?,?,?,?,?,?)",
+            "INSERT INTO matches(player1_id,player2_id,team1_duo_id,team2_duo_id,team1_id,team2_id,score1,score2,championship_id,played_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
           )
           .run(
-            m.player1Id,
-            m.player2Id,
-            m.team1Id,
-            m.team2Id,
+            isDuo ? null : m.player1Id,
+            isDuo ? null : m.player2Id,
+            m.team1DuoId ?? null,
+            m.team2DuoId ?? null,
+            team1Id,
+            team2Id,
             m.score1,
             m.score2,
             championshipId,
@@ -723,12 +890,14 @@ export function repository(db: Database.Database) {
 
       db.prepare(
         `UPDATE matches
-     SET player1_id=?, player2_id=?, team1_id=?, team2_id=?,
+     SET player1_id=?, player2_id=?, team1_duo_id=?, team2_duo_id=?, team1_id=?, team2_id=?,
          score1=?, score2=?, championship_id=?, played_at=?
      WHERE id=?`,
       ).run(
         m.player1Id,
         m.player2Id,
+        m.team1DuoId ?? null,
+        m.team2DuoId ?? null,
         m.team1Id,
         m.team2Id,
         m.score1,
@@ -753,6 +922,8 @@ export function repository(db: Database.Database) {
 
         m.player1_id AS player1Id,
         m.player2_id AS player2Id,
+        m.team1_duo_id AS team1DuoId,
+        m.team2_duo_id AS team2DuoId,
 
         m.team1_id AS team1Id,
         m.team2_id AS team2Id,
@@ -760,19 +931,26 @@ export function repository(db: Database.Database) {
         m.score1 AS score1,
         m.score2 AS score2,
 
-        p1.name AS player1,
-        p2.name AS player2,
+        CASE WHEN m.team1_duo_id IS NOT NULL THEN COALESCE(d1.name, dp11.name || ' & ' || dp12.name) ELSE p1.name END AS player1,
+        CASE WHEN m.team2_duo_id IS NOT NULL THEN COALESCE(d2.name, dp21.name || ' & ' || dp22.name) ELSE p2.name END AS player2,
 
         t1.name AS team1,
         t2.name AS team2,
 
         m.championship_id AS championshipId,
-        c.name AS championship
+        c.name AS championship,
+        c.format AS championshipFormat
 
       FROM matches m
 
-      JOIN players p1 ON p1.id = m.player1_id
-      JOIN players p2 ON p2.id = m.player2_id
+      LEFT JOIN players p1 ON p1.id = m.player1_id
+      LEFT JOIN players p2 ON p2.id = m.player2_id
+      LEFT JOIN teams2v2 d1 ON d1.id = m.team1_duo_id
+      LEFT JOIN teams2v2 d2 ON d2.id = m.team2_duo_id
+      LEFT JOIN players dp11 ON dp11.id = d1.player1_id
+      LEFT JOIN players dp12 ON dp12.id = d1.player2_id
+      LEFT JOIN players dp21 ON dp21.id = d2.player1_id
+      LEFT JOIN players dp22 ON dp22.id = d2.player2_id
 
       JOIN teams t1 ON t1.id = m.team1_id
       JOIN teams t2 ON t2.id = m.team2_id
@@ -791,7 +969,7 @@ export function repository(db: Database.Database) {
       );
       const recent = db
         .prepare(
-          `SELECT m.id,m.played_at playedAt,p1.name player1,p2.name player2,t1.name team1,t2.name team2,m.score1 score1,m.score2 score2 FROM matches m JOIN players p1 ON p1.id=m.player1_id JOIN players p2 ON p2.id=m.player2_id JOIN teams t1 ON t1.id=m.team1_id JOIN teams t2 ON t2.id=m.team2_id ORDER BY m.played_at DESC LIMIT 5`,
+          `SELECT m.id,m.played_at playedAt,m.player1_id player1Id,m.player2_id player2Id,p1.name player1,p2.name player2,t1.name team1,t2.name team2,m.score1 score1,m.score2 score2,c.format championshipFormat FROM matches m JOIN players p1 ON p1.id=m.player1_id JOIN players p2 ON p2.id=m.player2_id JOIN teams t1 ON t1.id=m.team1_id JOIN teams t2 ON t2.id=m.team2_id LEFT JOIN championships c ON c.id=m.championship_id ORDER BY m.played_at DESC LIMIT 5`,
         )
         .all() as Dashboard["recent"];
       const used = db
@@ -825,20 +1003,55 @@ export function repository(db: Database.Database) {
     championships: () =>
       db
         .prepare(
-          `SELECT c.id,c.name,c.format,c.mode,c.mutator,c.starts_at startsAt,c.status,COUNT(cp.player_id) participants FROM championships c LEFT JOIN championship_participants cp ON cp.championship_id=c.id GROUP BY c.id ORDER BY c.starts_at DESC`,
+          `SELECT c.id,c.name,c.format,c.mode,c.mutator,c.starts_at startsAt,c.status,
+            CASE WHEN c.mode = 'duo' THEN (
+              SELECT COUNT(*) FROM (
+                SELECT team1_duo_id FROM fixtures WHERE championship_id = c.id AND team1_duo_id IS NOT NULL
+                UNION
+                SELECT team2_duo_id FROM fixtures WHERE championship_id = c.id AND team2_duo_id IS NOT NULL
+              )
+            ) ELSE COUNT(cp.player_id) END participants
+           FROM championships c LEFT JOIN championship_participants cp ON cp.championship_id=c.id GROUP BY c.id ORDER BY c.starts_at DESC`,
         )
         .all() as Championship[],
     championshipDetail: (id: number) => {
       const championship = db
         .prepare(
-          `SELECT c.id,c.name,c.format,c.mode,c.mutator,c.starts_at startsAt,c.status,COUNT(cp.player_id) participants FROM championships c LEFT JOIN championship_participants cp ON cp.championship_id=c.id WHERE c.id=? GROUP BY c.id`,
+          `SELECT c.id,c.name,c.format,c.mode,c.mutator,c.starts_at startsAt,c.status,
+            CASE WHEN c.mode = 'duo' THEN (
+              SELECT COUNT(*) FROM (
+                SELECT team1_duo_id FROM fixtures WHERE championship_id = c.id AND team1_duo_id IS NOT NULL
+                UNION
+                SELECT team2_duo_id FROM fixtures WHERE championship_id = c.id AND team2_duo_id IS NOT NULL
+              )
+            ) ELSE COUNT(cp.player_id) END participants
+           FROM championships c LEFT JOIN championship_participants cp ON cp.championship_id=c.id WHERE c.id=? GROUP BY c.id`,
         )
         .get(id) as Championship | undefined;
       if (!championship) throw new Error("Campeonato não encontrado.");
-      const standing = db
-        .prepare(championshipRankingSql(gameRules()))
-        .all(id, id, id);
-      const fixtures = db
+      const standing = championship.mode === "duo"
+        ? db.prepare(championshipDuoRankingSql(gameRules())).all(id, id, id, id) as Standing[]
+        : db.prepare(championshipRankingSql(gameRules())).all(id, id, id) as Standing[];
+      const fixtures = championship.mode === "duo" ? db
+        .prepare(`
+          SELECT f.id, f.round_number round, f.stage,
+                 f.player1_id player1Id, f.player2_id player2Id,
+                 f.team1_duo_id team1DuoId, f.team2_duo_id team2DuoId,
+                 p1.name || ' & ' || p2.name player1,
+                 p3.name || ' & ' || p4.name player2,
+                 f.match_id matchId, m.score1 score1, m.score2 score2
+          FROM fixtures f
+          LEFT JOIN teams2v2 d1 ON d1.id = f.team1_duo_id
+          LEFT JOIN players p1 ON p1.id = d1.player1_id
+          LEFT JOIN players p2 ON p2.id = d1.player2_id
+          LEFT JOIN teams2v2 d2 ON d2.id = f.team2_duo_id
+          LEFT JOIN players p3 ON p3.id = d2.player1_id
+          LEFT JOIN players p4 ON p4.id = d2.player2_id
+          LEFT JOIN matches m ON m.id = f.match_id
+          WHERE f.championship_id = ?
+          ORDER BY f.round_number, f.id
+        `)
+        .all(id) : db
         .prepare(
           `SELECT f.id,f.round_number round,f.stage,f.player1_id player1Id,f.player2_id player2Id,p1.name player1,p2.name player2,f.match_id matchId,m.score1 score1,m.score2 score2,cp1.team_id team1Id,t1.name team1,cp2.team_id team2Id,t2.name team2 FROM fixtures f JOIN players p1 ON p1.id=f.player1_id JOIN players p2 ON p2.id=f.player2_id LEFT JOIN matches m ON m.id=f.match_id LEFT JOIN championship_participants cp1 ON cp1.championship_id=f.championship_id AND cp1.player_id=f.player1_id LEFT JOIN teams t1 ON t1.id=cp1.team_id LEFT JOIN championship_participants cp2 ON cp2.championship_id=f.championship_id AND cp2.player_id=f.player2_id LEFT JOIN teams t2 ON t2.id=cp2.team_id WHERE f.championship_id=? ORDER BY f.round_number,f.id`,
         )

@@ -1,6 +1,108 @@
 import type Database from "better-sqlite3";
-import type { Championship } from "../shared/models";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Championship, DuoInput } from "../shared/models";
 import { ensureAuthenticated, getSupabase } from "./supabase";
+
+export async function getOrCreateDuoRemote(
+  db: Database.Database,
+  supabase: SupabaseClient,
+  player1Id: number,
+  player2Id: number,
+  roomId: string | null,
+  teamId?: number | null
+): Promise<number> {
+  const [firstId, secondId] = [player1Id, player2Id].sort((a, b) => a - b);
+  if (firstId === secondId) throw new Error("Uma dupla precisa ter dois jogadores diferentes.");
+
+  type RemoteDuo = { id: number; team_id: number | null };
+  const findRemote = async (): Promise<RemoteDuo | null> => {
+    const query = supabase.from("teams2v2").select("id, team_id")
+      .eq("player1_id", firstId).eq("player2_id", secondId);
+    const { data, error } = await (roomId === null ? query.is("room_id", null) : query.eq("room_id", roomId)).maybeSingle();
+    if (error) throw new Error("Não foi possível consultar a dupla. Tente novamente.");
+    return data ?? null;
+  };
+
+  let remote = await findRemote();
+  if (remote === null) {
+    const { data, error } = await supabase.from("teams2v2")
+      .insert({ player1_id: firstId, player2_id: secondId, room_id: roomId, team_id: teamId ?? null })
+      .select("id, team_id").single();
+    if (error?.code === "23505") {
+      remote = await findRemote();
+    } else if (error) {
+      throw new Error("Não foi possível criar a dupla. Tente novamente.");
+    } else {
+      remote = data ?? null;
+    }
+  }
+
+  if (remote === null || !Number.isSafeInteger(remote.id) || remote.id <= 0) {
+    throw new Error("Não foi possível obter a dupla. Tente novamente.");
+  }
+
+  if (teamId != null && remote.team_id == null) {
+    const { data, error } = await supabase.from("teams2v2")
+      .update({ team_id: teamId }).eq("id", remote.id).is("team_id", null)
+      .select("id, team_id").maybeSingle();
+    if (error) throw new Error("Não foi possível definir o time da dupla. Tente novamente.");
+    remote = data ?? await findRemote();
+    if (!remote) throw new Error("Não foi possível obter a dupla. Tente novamente.");
+  }
+  if (teamId != null && remote.team_id !== teamId) {
+    throw new Error("A dupla já tem um time definido; não é possível alterar.");
+  }
+
+  const { id: remoteId, team_id: remoteTeamId } = remote;
+  db.transaction(() => {
+    const local = db.prepare("SELECT room_id, player1_id, player2_id, team_id FROM teams2v2 WHERE id = ?")
+      .get(remoteId) as { room_id: string | null; player1_id: number; player2_id: number; team_id: number | null } | undefined;
+    const pair = db.prepare("SELECT id FROM teams2v2 WHERE player1_id = ? AND player2_id = ? AND room_id IS NOT DISTINCT FROM ? AND id <> ?")
+      .get(firstId, secondId, roomId, remoteId);
+    if (pair || (local && (local.room_id !== roomId || local.player1_id !== firstId || local.player2_id !== secondId))) {
+      throw new Error("Conflito de ID de dupla; verifique os dados locais.");
+    }
+    if (local?.team_id != null && local.team_id !== remoteTeamId) {
+      throw new Error("A dupla já tem um time definido; não é possível alterar.");
+    }
+    if (!local) {
+      db.prepare("INSERT INTO teams2v2 (id, room_id, player1_id, player2_id, team_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)")
+        .run(remoteId, roomId, firstId, secondId, remoteTeamId);
+    } else if (local.team_id == null && remoteTeamId != null) {
+      db.prepare("UPDATE teams2v2 SET team_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(remoteTeamId, remoteId);
+    }
+  })();
+  return remoteId;
+}
+
+export async function setChampionshipStatus(
+  db: Database.Database,
+  roomId: string | null,
+  championshipId: number,
+  status: "active" | "finished"
+): Promise<void> {
+  // Reservado para o contexto de salas quando o schema antigo for substituído.
+  void roomId;
+
+  const championship = db.prepare("SELECT id FROM championships WHERE id = ?").get(championshipId);
+  if (!championship) throw new Error("Campeonato não encontrado.");
+
+  const auth = await ensureAuthenticated();
+  const supabase = getSupabase();
+  if (!auth.ok || !supabase) throw new Error("Não foi possível atualizar o campeonato. Verifique sua conexão.");
+
+  const { data, error } = await supabase
+    .from("championships")
+    .update({ status })
+    .eq("id", championshipId)
+    .select("id");
+
+  if (error || !data || data.length !== 1) {
+    throw new Error("Não foi possível atualizar o campeonato. Tente novamente.");
+  }
+
+  db.prepare("UPDATE championships SET status = ? WHERE id = ?").run(status, championshipId);
+}
 
 /**
  * Listagem de campeonatos com sincronização Supabase -> SQLite
@@ -112,7 +214,7 @@ export async function updateChampionshipName(
 }
 
 /**
- * Salva novo campeonato no SQLite e sincroniza no Supabase
+ * Salva novo campeonato no Supabase e atualiza o espelho SQLite.
  */
 export async function saveChampionship(
   db: Database.Database,
@@ -124,20 +226,102 @@ export async function saveChampionship(
     startsAt?: string;
     status?: "draft" | "active" | "finished";
     participantIds: number[];
+    participantTeamIds?: (number | null)[];
+    participantDuos?: DuoInput[];
   }
 ): Promise<Championship> {
   const name = payload.name.trim();
   if (!name) throw new Error("Informe o nome do campeonato.");
-  if (!payload.participantIds || payload.participantIds.length < 2) {
+  const duos = payload.participantDuos ?? [];
+  const isDuo = duos.length > 0;
+  if (isDuo ? duos.length < 2 : !payload.participantIds || payload.participantIds.length < 2) {
     throw new Error("Selecione ao menos 2 participantes.");
+  }
+  if (isDuo) {
+    const pairs = duos.map(({ player1Id, player2Id }) => [player1Id, player2Id].sort((a, b) => a - b).join(":"));
+    if (new Set(pairs).size !== pairs.length) throw new Error("Não é possível repetir uma dupla no campeonato.");
+    if (duos.some(({ player1Id, player2Id }) => player1Id === player2Id)) {
+      throw new Error("Uma dupla precisa ter dois jogadores diferentes.");
+    }
   }
 
   const id = Date.now();
   const startsAt = payload.startsAt || new Date().toISOString();
-  const mode = payload.mode || "classic";
+  const mode = isDuo ? "duo" : payload.mode || "classic";
   const status = payload.status || "draft";
 
-  // 1. Salva localmente no SQLite
+  const auth = await ensureAuthenticated();
+  const supabase = getSupabase();
+  if (!auth.ok || !supabase) {
+    throw new Error("Não foi possível salvar o campeonato. Verifique sua conexão.");
+  }
+
+  const duoIds: number[] = [];
+  for (const duo of duos) {
+    duoIds.push(await getOrCreateDuoRemote(db, supabase, duo.player1Id, duo.player2Id, null));
+  }
+
+  const { error: champErr } = await supabase.from("championships").insert({
+    id,
+    name,
+    format: payload.format,
+    mode,
+    mutator: payload.mutator || null,
+    starts_at: startsAt,
+    status,
+  });
+  if (champErr) throw new Error("Não foi possível salvar o campeonato. Tente novamente.");
+
+  const participantsToInsert = payload.participantIds.map((playerId, index) => ({
+    championship_id: id,
+    player_id: playerId,
+    team_id: payload.participantTeamIds?.[index] ?? null,
+  }));
+  if (!isDuo) {
+    const { error: partErr } = await supabase
+      .from("championship_participants")
+      .insert(participantsToInsert);
+    if (partErr) {
+      throw new Error("Não foi possível salvar os participantes. O campeonato pode estar incompleto; confira antes de tentar novamente.");
+    }
+  }
+
+  const fixtures: Array<{ championship_id: number; stage: string; round_number: number; player1_id: number | null; player2_id: number | null; team1_duo_id?: number; team2_duo_id?: number }> = [];
+  const p = isDuo ? duoIds : payload.participantIds;
+  let roundNum = 1;
+  for (let i = 0; i < p.length; i++) {
+    for (let j = i + 1; j < p.length; j++) {
+      fixtures.push(isDuo
+        ? { championship_id: id, stage: "league", round_number: roundNum, player1_id: null, player2_id: null, team1_duo_id: p[i], team2_duo_id: p[j] }
+        : { championship_id: id, stage: "league", round_number: roundNum, player1_id: p[i], player2_id: p[j] });
+      roundNum++;
+    }
+  }
+  let savedFixtures: Array<{
+    id: number;
+    stage: string;
+    round_number: number;
+    player1_id: number | null;
+    player2_id: number | null;
+    team1_duo_id?: number | null;
+    team2_duo_id?: number | null;
+  }>;
+  if (isDuo) {
+    const { data, error } = await supabase.from("fixtures").insert(fixtures)
+      .select("id, stage, round_number, player1_id, player2_id, team1_duo_id, team2_duo_id");
+    if (error || !data || data.length !== fixtures.length) {
+      throw new Error("Não foi possível salvar os confrontos. O campeonato pode estar incompleto; confira antes de tentar novamente.");
+    }
+    savedFixtures = data;
+  } else {
+    const { data, error } = await supabase.from("fixtures").insert(fixtures)
+      .select("id, stage, round_number, player1_id, player2_id");
+    if (error || !data || data.length !== fixtures.length) {
+      throw new Error("Não foi possível salvar os confrontos. O campeonato pode estar incompleto; confira antes de tentar novamente.");
+    }
+    savedFixtures = data;
+  }
+
   db.transaction(() => {
     db.prepare(`
       INSERT INTO championships (id, name, format, mode, mutator, starts_at, status)
@@ -145,102 +329,23 @@ export async function saveChampionship(
     `).run(id, name, payload.format, mode, payload.mutator || null, startsAt, status);
 
     const partStmt = db.prepare(`
-      INSERT INTO championship_participants (championship_id, player_id)
-      VALUES (?, ?)
+      INSERT INTO championship_participants (championship_id, player_id, team_id)
+      VALUES (?, ?, ?)
     `);
-    for (const playerId of payload.participantIds) {
-      partStmt.run(id, playerId);
+    if (!isDuo) {
+      payload.participantIds.forEach((playerId, index) => {
+        partStmt.run(id, playerId, payload.participantTeamIds?.[index] ?? null);
+      });
     }
 
     const fixStmt = db.prepare(`
-      INSERT INTO fixtures (championship_id, stage, round_number, player1_id, player2_id)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO fixtures (id, championship_id, stage, round_number, player1_id, player2_id, team1_duo_id, team2_duo_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `);
-
-    const p = payload.participantIds;
-    let roundNum = 1;
-    for (let i = 0; i < p.length; i++) {
-      for (let j = i + 1; j < p.length; j++) {
-        fixStmt.run(id, "league", roundNum, p[i], p[j]);
-        roundNum++;
-      }
+    for (const fixture of savedFixtures) {
+      fixStmt.run(fixture.id, id, fixture.stage, fixture.round_number, fixture.player1_id, fixture.player2_id, fixture.team1_duo_id ?? null, fixture.team2_duo_id ?? null);
     }
   })();
-
-  // 2. Sincroniza com o Supabase
-  const auth = await ensureAuthenticated();
-  const supabase = getSupabase();
-
-  if (auth.ok && supabase) {
-    try {
-      // Inserção do campeonato
-      const { error: champErr } = await supabase.from("championships").insert({
-        id,
-        name,
-        format: payload.format,
-        mode,
-        mutator: payload.mutator || null,
-        starts_at: startsAt,
-        status,
-      });
-
-      if (champErr) {
-        console.error(`[championship-service] ❌ Erro ao salvar campeonato no Supabase:`, champErr.message);
-        return {
-          id,
-          name,
-          format: payload.format,
-          mode,
-          mutator: payload.mutator || null,
-          startsAt,
-          status,
-          participants: payload.participantIds.length,
-        };
-      }
-
-      // Inserção dos participantes
-      const participantsToInsert = payload.participantIds.map((pId) => ({
-        championship_id: id,
-        player_id: pId,
-      }));
-
-      const { error: partErr } = await supabase
-        .from("championship_participants")
-        .insert(participantsToInsert);
-
-      if (partErr) {
-        console.error(`[championship-service] ❌ Erro ao salvar participantes no Supabase:`, partErr.message);
-      }
-
-      // Inserção dos confrontos (fixtures)
-      const generatedFixtures = db
-        .prepare("SELECT * FROM fixtures WHERE championship_id = ?")
-        .all(id) as Array<{ id: number; stage: string; round_number: number; player1_id: number; player2_id: number }>;
-
-      if (generatedFixtures.length > 0) {
-        const { error: fixErr } = await supabase.from("fixtures").insert(
-          generatedFixtures.map((f) => ({
-            id: f.id,
-            championship_id: id,
-            stage: f.stage,
-            round_number: f.round_number,
-            player1_id: f.player1_id,
-            player2_id: f.player2_id,
-          }))
-        );
-
-        if (fixErr) {
-          console.error(`[championship-service] ❌ Erro ao salvar confrontos no Supabase:`, fixErr.message);
-        }
-      }
-
-      console.info(`[championship-service] ✅ Campeonato ${id} sincronizado com sucesso no Supabase!`);
-    } catch (err) {
-      console.warn(`[championship-service] Exceção ao sincronizar com Supabase:`, err);
-    }
-  } else {
-    console.warn(`[championship-service] Sincronização ignorada. Auth OK: ${auth.ok}, Motivo: ${auth.message}`);
-  }
 
   return {
     id,
@@ -250,6 +355,6 @@ export async function saveChampionship(
     mutator: payload.mutator || null,
     startsAt,
     status,
-    participants: payload.participantIds.length,
+    participants: isDuo ? duoIds.length : payload.participantIds.length,
   };
 }

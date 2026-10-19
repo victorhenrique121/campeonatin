@@ -13,12 +13,22 @@ export type Player = {
   country: string;
   shieldUrl?: string;   // novo
 };
+export type ArenaNews = {
+  id: string;
+  type: "goleada" | "sequencia" | "pato";
+  title: string;
+  description: string;
+  playerNames?: string[];
+};
+
 export type Match = {
   id: number;
   playedAt: string;
 
   player1Id: number;
   player2Id: number;
+  team1DuoId?: number | null;
+  team2DuoId?: number | null;
 
   player1: string;
   player2: string;
@@ -34,6 +44,7 @@ export type Match = {
 
   championship?: string;
   championshipId?: number | null;
+  championshipFormat?: string | null;
 };
 export type Standing = {
   id: number;
@@ -106,15 +117,19 @@ export type Dashboard = {
   statistics?: StatisticsDashboard | null;
 };
 export type MatchInput = {
-  player1Id: number;
-  player2Id: number;
-  team1Id: number;
-  team2Id: number;
+  player1Id?: number | null;
+  player2Id?: number | null;
+  team1DuoId?: number | null;
+  team2DuoId?: number | null;
+  team1Id?: number | null;
+  team2Id?: number | null;
   score1: number;
   score2: number;
   championshipId?: number;
   playedAt?: string;
 };
+export type DuoInput = { player1Id: number; player2Id: number };
+export type Duo = { id: number; roomId: string | null; player1Id: number; player2Id: number; name: string | null; teamId?: number | null };
 export type Championship = {
   id: number;
   name: string;
@@ -129,8 +144,10 @@ export type Fixture = {
   id: number;
   round: number;
   stage: string;
-  player1Id: number;
-  player2Id: number;
+  player1Id?: number | null;
+  player2Id?: number | null;
+  team1DuoId?: number | null;
+  team2DuoId?: number | null;
   player1: string;
   player2: string;
   matchId?: number;
