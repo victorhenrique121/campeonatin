@@ -60,7 +60,7 @@ export type MatchesService = {
   /** Limpeza em massa LOCAL-ONLY. */
   clear(): void;
   /** Sincroniza o espelho local a partir do Supabase (boot). Retorna nº de linhas. */
-  syncMirror(): Promise<number>;
+  syncMirror(roomId: string | null): Promise<number>;
 };
 
 function normalizePlayedAt(value: unknown): string {
@@ -554,18 +554,25 @@ export function createMatchesService(
     repo.clearMatches();
   }
 
-  async function syncMirror(): Promise<number> {
+  async function syncMirror(roomId: string | null): Promise<number> {
     const supabase = getSupabase();
-    if (!supabase) return 0;
+    if (!supabase) {
+      if (roomId !== null) throw new Error("Não foi possível sincronizar as partidas da sala.");
+      return 0;
+    }
 
     const auth = await ensureAuthenticated();
-    if (!auth.ok) return 0;
+    if (!auth.ok) {
+      if (roomId !== null) throw new Error("Não foi possível sincronizar as partidas da sala.");
+      return 0;
+    }
 
     let rows: SupabaseMatchRow[];
     try {
-      const { data, error } = await supabase
+      const query = supabase
         .from("matches")
-        .select("*")
+        .select("*");
+      const { data, error } = await (roomId === null ? query.is("room_id", null) : query.eq("room_id", roomId))
         .order("id", { ascending: true });
       if (error) throw error;
       rows = (data ?? []) as SupabaseMatchRow[];
@@ -574,13 +581,15 @@ export function createMatchesService(
         `${LOG_PREFIX} não foi possível sincronizar o espelho local:`,
         err instanceof Error ? err.message : err,
       );
+      if (roomId !== null) throw new Error("Não foi possível sincronizar as partidas da sala.");
       return 0;
     }
 
     const hasDuoTable = !!db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='teams2v2'").get();
     const remoteDuos = new Map<number, SupabaseDuoRow>();
     if (hasDuoColumns && hasDuoTable) {
-      const { data, error } = await supabase.from("teams2v2").select("*");
+      const query = supabase.from("teams2v2").select("*");
+      const { data, error } = await (roomId === null ? query.is("room_id", null) : query.eq("room_id", roomId));
       if (error) {
         if (error.code !== "PGRST205" && error.code !== "42P01")
           console.warn(`${LOG_PREFIX} não foi possível sincronizar as duplas:`, error.message);

@@ -56,7 +56,7 @@ export type PlayersService = {
   /** Exclui jogador no Supabase (com cascata local de partidas/confrontos). */
   remove(id: number): Promise<void>;
   /** Sincroniza o espelho local a partir do Supabase (boot). Retorna nº de linhas. */
-  syncMirror(): Promise<number>;
+  syncMirror(roomId: string | null): Promise<number>;
 };
 
 /** Normaliza timestamps para o mesmo formato usado pelo SQLite (UTC "YYYY-MM-DD HH:MM:SS"). */
@@ -330,18 +330,25 @@ export function createPlayersService(
     repo.deletePlayer(id);
   }
 
-  async function syncMirror(): Promise<number> {
+  async function syncMirror(roomId: string | null): Promise<number> {
     const supabase = getSupabase();
-    if (!supabase) return 0; // modo legado: espelho É o banco, nada a sincronizar
+    if (!supabase) {
+      if (roomId !== null) throw new Error("Não foi possível sincronizar os jogadores da sala.");
+      return 0;
+    }
 
     const auth = await ensureAuthenticated();
-    if (!auth.ok) return 0; // boot: teste de conexão já logou o motivo
+    if (!auth.ok) {
+      if (roomId !== null) throw new Error("Não foi possível sincronizar os jogadores da sala.");
+      return 0;
+    }
 
     let rows: SupabasePlayerRow[];
     try {
-      const { data, error } = await supabase
+      const query = supabase
         .from("players")
-        .select(PLAYER_COLUMNS)
+        .select(PLAYER_COLUMNS);
+      const { data, error } = await (roomId === null ? query.is("room_id", null) : query.eq("room_id", roomId))
         .order("id", { ascending: true });
       if (error) throw error;
       rows = (data ?? []) as SupabasePlayerRow[];
@@ -350,6 +357,7 @@ export function createPlayersService(
         `${LOG_PREFIX} não foi possível sincronizar o espelho local:`,
         err instanceof Error ? err.message : err,
       );
+      if (roomId !== null) throw new Error("Não foi possível sincronizar os jogadores da sala.");
       return 0;
     }
 

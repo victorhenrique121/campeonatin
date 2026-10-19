@@ -26,6 +26,7 @@ const api: Api = {
   leaveRoom: invokeRoom("rooms:leave"),
   createRoom: invokeRoom("rooms:create"),
   listMyRooms: invokeRoom("rooms:list-mine"),
+  setActiveRoom: invokeRoom("rooms:set-active"),
   joinRoom: invokeRoom("rooms:join"),
   getProfile: invoke("profile:get"),
   isUsernameAvailable: invoke("profile:username-available"),

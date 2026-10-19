@@ -289,9 +289,10 @@ function FriendsPage() {
   );
 }
 
-function RoomsPage({ activeRoomId, setActiveRoomId }: {
+function RoomsPage({ activeRoomId, setActiveRoomId, switchingRoom }: {
   activeRoomId: string | null;
   setActiveRoomId: React.Dispatch<React.SetStateAction<string | null>>;
+  switchingRoom: boolean;
 }) {
   const [name, setName] = useState("");
   const [entryCode, setEntryCode] = useState("");
@@ -608,6 +609,7 @@ function RoomsPage({ activeRoomId, setActiveRoomId }: {
               <button
                 type="button"
                 className="secondary-button"
+                disabled={switchingRoom}
                 aria-pressed={activeRoomId === room.id}
                 onClick={() => {
                   setCopyMessage("");
@@ -625,7 +627,7 @@ function RoomsPage({ activeRoomId, setActiveRoomId }: {
                   setActiveRoomId(room.id);
                 }}
               >
-                {activeRoomId === room.id ? "Selecionada" : "Entrar"}
+                {switchingRoom && activeRoomId === room.id ? "Carregando dados da sala..." : activeRoomId === room.id ? "Selecionada" : "Entrar"}
               </button>
             </div>
           ))}
@@ -3745,6 +3747,9 @@ function SettingsPage({ reload }: { reload: () => Promise<void> }) {
 
 function ArenaApp({ user, onSignOut }: { user: AuthUser; onSignOut: () => void }) {
   const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
+  const [loadedRoomId, setLoadedRoomId] = useState<string | null | undefined>(undefined);
+  const [roomLoadAttempt, setRoomLoadAttempt] = useState(0);
+  const switchingRoom = loadedRoomId !== activeRoomId;
   const showRoomOnlyTabs = activeRoomId !== null;
   const [page, setPage] = useState<Page>("dashboard"),
     [data, setData] = useState<Dashboard>(),
@@ -3783,8 +3788,27 @@ function ArenaApp({ user, onSignOut }: { user: AuthUser; onSignOut: () => void }
     }
   };
   useEffect(() => {
-    void reload();
-  }, []);
+    let current = true;
+    void (async () => {
+      try {
+        await window.arena.setActiveRoom(activeRoomId);
+        const [dashboard, playerList, teamList] = await Promise.all([
+          window.arena.dashboard(), window.arena.players(), window.arena.teams(),
+        ]);
+        if (!current) return;
+        setData(dashboard);
+        setPlayers(playerList);
+        setTeams(teamList);
+        setLoadError("");
+        setLoadedRoomId(activeRoomId);
+      } catch {
+        if (!current) return;
+        setLoadError("Não foi possível carregar os dados da sala.");
+        setData(undefined);
+      }
+    })();
+    return () => { current = false; };
+  }, [activeRoomId, roomLoadAttempt]);
   useEffect(() => {
     const onDocumentClick = (event: MouseEvent) => {
       if (
@@ -3803,7 +3827,7 @@ function ArenaApp({ user, onSignOut }: { user: AuthUser; onSignOut: () => void }
       <main className="error-state">
         <h1>Não foi possível carregar a Arena</h1>
         <p>{loadError}</p>
-        <button className="primary" onClick={() => void reload()}>
+        <button className="primary" onClick={() => setRoomLoadAttempt((attempt) => attempt + 1)}>
           Tentar novamente
         </button>
       </main>
@@ -3819,10 +3843,12 @@ function ArenaApp({ user, onSignOut }: { user: AuthUser; onSignOut: () => void }
     ["friends", "Amigos", UsersRound],
   ];
   const view =
-    page === "dashboard" ? (
+    switchingRoom && page !== "rooms" ? (
+      <main className="loading">Carregando dados da sala...</main>
+    ) : page === "dashboard" ? (
       <DashboardPage data={data} players={players} go={setPage} reload={reload} showRoomOnlyTabs={showRoomOnlyTabs} />
     ) : page === "rooms" ? (
-      <RoomsPage activeRoomId={activeRoomId} setActiveRoomId={setActiveRoomId} />
+      <RoomsPage activeRoomId={activeRoomId} setActiveRoomId={setActiveRoomId} switchingRoom={switchingRoom} />
     ) : page === "friends" ? (
       <FriendsPage />
     ) : page === "players" ? (

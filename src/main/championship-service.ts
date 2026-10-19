@@ -131,19 +131,24 @@ export async function setChampionshipStatus(
 /**
  * Listagem de campeonatos com sincronização Supabase -> SQLite
  */
-export async function getChampionships(db: Database.Database): Promise<Championship[]> {
+export async function getChampionships(db: Database.Database, roomId: string | null): Promise<Championship[]> {
   const auth = await ensureAuthenticated();
   const supabase = getSupabase();
 
+  if (roomId !== null && (!auth.ok || !supabase)) {
+    throw new Error("Não foi possível sincronizar os campeonatos da sala.");
+  }
   if (auth.ok && supabase) {
     try {
       // Usa .select("*") para evitar que o PostgREST confunda a coluna 'mode' com a função SQL mode()
-      const { data: remoteChampionships, error } = await supabase
+      const query = supabase
         .from("championships")
-        .select("*")
+        .select("*");
+      const { data: remoteChampionships, error } = await (roomId === null ? query.is("room_id", null) : query.eq("room_id", roomId))
         .order("id", { ascending: false });
 
       if (error) {
+        if (roomId !== null) throw new Error("Não foi possível sincronizar os campeonatos da sala.");
         console.warn("[championship-service] Erro ao buscar campeonatos no Supabase:", error.message);
       } else if (remoteChampionships) {
         const syncStmt = db.prepare(`
@@ -173,6 +178,7 @@ export async function getChampionships(db: Database.Database): Promise<Champions
         })();
       }
     } catch (err) {
+      if (roomId !== null) throw new Error("Não foi possível sincronizar os campeonatos da sala.");
       console.warn("[championship-service] Supabase indisponível. Utilizando dados locais do SQLite.");
     }
   }
