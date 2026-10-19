@@ -2805,8 +2805,10 @@ function ChampionshipPage({
           onClose={() => setDeletingChampionship(null)}
           onConfirm={async () => {
             await window.arena.deleteChampionship(deletingChampionship.id);
-            setDetail(undefined);
-            setSelected(undefined);
+            if (selected === deletingChampionship.id) {
+              setDetail(undefined);
+              setSelected(undefined);
+            }
             await load();
           }}
         />

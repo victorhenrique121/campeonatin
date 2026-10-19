@@ -34,6 +34,7 @@ import {
   testSupabaseConnection,
 } from "./supabase";
 import {
+  deleteChampionship,
   getChampionships,
   saveChampionship,
   updateChampionshipName,
@@ -145,7 +146,7 @@ app.whenReady().then(() => {
     return repo.championshipDetail(id).championship;
   });
   ipcMain.handle("championships:delete", (_, id) =>
-    repo.deleteChampionship(id),
+    deleteChampionship(repo, id),
   );
 
 
