@@ -114,7 +114,7 @@ export type Api = {
       // participantIds) — persistido, deixa de ser esquecido ao registrar
       // resultados.
       participantTeamIds?: (number | null)[];
-    },
+    }, roomId: string | null,
   ) => Promise<Championship>;
   updateChampionship: (id: number, name: string) => Promise<Championship>;
   deleteChampionship: (id: number) => Promise<void>;

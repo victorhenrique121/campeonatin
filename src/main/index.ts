@@ -192,10 +192,10 @@ app.whenReady().then(async () => {
   ipcMain.handle("championships:detail", (_, id) =>
     withContext(({ repo }) => repo.championshipDetail(id)),
   );
-  ipcMain.handle("championships:save", (_, c) => withContext(async ({ db }) => {
-    ensureRoomGlobalOnly();
+  ipcMain.handle("championships:save", (_, c, roomId: string | null) => withContext(async ({ db, roomId: currentRoomId }) => {
+    if (roomId !== currentRoomId) throw new Error("A sala selecionada foi alterada. Tente novamente.");
     console.log("[IPC] championships:save acionado:", c);
-    return await saveChampionship(db, c);
+    return await saveChampionship(db, c, roomId);
   }));
   ipcMain.handle("championships:update", (_, id, name) => withContext(async ({ db, repo }) => {
     ensureRoomGlobalOnly();

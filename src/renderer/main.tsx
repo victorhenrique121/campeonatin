@@ -2116,9 +2116,11 @@ function championshipCover(name: string): string {
 function ChampionshipPage({
   players,
   teams,
+  activeRoomId,
 }: {
   players: Player[];
   teams: Team[];
+  activeRoomId: string | null;
 }) {
   const [news, setNews] = useState<ArenaNews[]>([]);
   const [items, setItems] = useState<Championship[]>([]),
@@ -2203,7 +2205,7 @@ function ChampionshipPage({
         status: "active",
         participantIds: participants,
         participantTeamIds: teamIdsInOrder,
-      });
+      }, activeRoomId);
       setName("");
       setParticipants([]);
       setSelected(champ.id);
@@ -3864,7 +3866,7 @@ function ArenaApp({ user, onSignOut }: { user: AuthUser; onSignOut: () => void }
     ) : page === "ranking" ? (
       <RankingPage data={data} players={players} />
     ) : page === "championships" ? (
-      <ChampionshipPage players={players} teams={teams} />
+      <ChampionshipPage players={players} teams={teams} activeRoomId={activeRoomId} />
     ) : page === "profile" ? (
       <ProfilePage
         onEditProfile={() => {

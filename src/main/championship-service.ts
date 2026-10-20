@@ -2,7 +2,7 @@ import type Database from "better-sqlite3";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Championship, DuoInput } from "../shared/models";
 import type { repository } from "./repository";
-import { ensureAuthenticated, getSupabase } from "./supabase";
+import { ensureAuthenticated, getSessionUserId, getSupabase, getUserSessionClient } from "./supabase";
 
 export async function deleteChampionship(
   repo: Pick<ReturnType<typeof repository>, "deleteChampionship">,
@@ -132,14 +132,8 @@ export async function setChampionshipStatus(
  * Listagem de campeonatos com sincronização Supabase -> SQLite
  */
 export async function getChampionships(db: Database.Database, roomId: string | null): Promise<Championship[]> {
-  const auth = await ensureAuthenticated();
-  const supabase = getSupabase();
-
-  if (roomId !== null && (!auth.ok || !supabase)) {
-    throw new Error("Não foi possível sincronizar os campeonatos da sala.");
-  }
-  if (auth.ok && supabase) {
-    try {
+  try {
+      const supabase = await getUserSessionClient();
       // Usa .select("*") para evitar que o PostgREST confunda a coluna 'mode' com a função SQL mode()
       const query = supabase
         .from("championships")
@@ -177,10 +171,9 @@ export async function getChampionships(db: Database.Database, roomId: string | n
           }
         })();
       }
-    } catch (err) {
-      if (roomId !== null) throw new Error("Não foi possível sincronizar os campeonatos da sala.");
-      console.warn("[championship-service] Supabase indisponível. Utilizando dados locais do SQLite.");
-    }
+  } catch (err) {
+    if (roomId !== null) throw new Error("Não foi possível sincronizar os campeonatos da sala.");
+    console.warn("[championship-service] Supabase indisponível. Utilizando dados locais do SQLite.");
   }
 
   // Corrigido COUNT(cp.id) para COUNT(cp.player_id)
@@ -255,7 +248,8 @@ export async function saveChampionship(
     participantIds: number[];
     participantTeamIds?: (number | null)[];
     participantDuos?: DuoInput[];
-  }
+  },
+  roomId: string | null,
 ): Promise<Championship> {
   const name = payload.name.trim();
   if (!name) throw new Error("Informe o nome do campeonato.");
@@ -277,15 +271,13 @@ export async function saveChampionship(
   const mode = isDuo ? "duo" : payload.mode || "classic";
   const status = payload.status || "draft";
 
-  const auth = await ensureAuthenticated();
-  const supabase = getSupabase();
-  if (!auth.ok || !supabase) {
-    throw new Error("Não foi possível salvar o campeonato. Verifique sua conexão.");
-  }
+  const supabase = await getUserSessionClient();
+  const userId = await getSessionUserId();
+  if (!userId) throw new Error("Sua sessão expirou. Entre novamente para continuar.");
 
   const duoIds: number[] = [];
   for (const duo of duos) {
-    duoIds.push(await getOrCreateDuoRemote(db, supabase, duo.player1Id, duo.player2Id, null));
+    duoIds.push(await getOrCreateDuoRemote(db, supabase, duo.player1Id, duo.player2Id, roomId));
   }
 
   const { error: champErr } = await supabase.from("championships").insert({
@@ -296,6 +288,8 @@ export async function saveChampionship(
     mutator: payload.mutator || null,
     starts_at: startsAt,
     status,
+    room_id: roomId,
+    created_by: userId,
   });
   if (champErr) throw new Error("Não foi possível salvar o campeonato. Tente novamente.");
 
@@ -303,6 +297,7 @@ export async function saveChampionship(
     championship_id: id,
     player_id: playerId,
     team_id: payload.participantTeamIds?.[index] ?? null,
+    room_id: roomId,
   }));
   if (!isDuo) {
     const { error: partErr } = await supabase
@@ -313,14 +308,14 @@ export async function saveChampionship(
     }
   }
 
-  const fixtures: Array<{ championship_id: number; stage: string; round_number: number; player1_id: number | null; player2_id: number | null; team1_duo_id?: number; team2_duo_id?: number }> = [];
+  const fixtures: Array<{ championship_id: number; room_id: string | null; stage: string; round_number: number; player1_id: number | null; player2_id: number | null; team1_duo_id?: number; team2_duo_id?: number }> = [];
   const p = isDuo ? duoIds : payload.participantIds;
   let roundNum = 1;
   for (let i = 0; i < p.length; i++) {
     for (let j = i + 1; j < p.length; j++) {
       fixtures.push(isDuo
-        ? { championship_id: id, stage: "league", round_number: roundNum, player1_id: null, player2_id: null, team1_duo_id: p[i], team2_duo_id: p[j] }
-        : { championship_id: id, stage: "league", round_number: roundNum, player1_id: p[i], player2_id: p[j] });
+        ? { championship_id: id, room_id: roomId, stage: "league", round_number: roundNum, player1_id: null, player2_id: null, team1_duo_id: p[i], team2_duo_id: p[j] }
+        : { championship_id: id, room_id: roomId, stage: "league", round_number: roundNum, player1_id: p[i], player2_id: p[j] });
       roundNum++;
     }
   }
