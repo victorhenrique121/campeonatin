@@ -140,8 +140,19 @@ export function HeadToHeadCard({
     };
   }, [duels]);
 
-  const name1 = players.find((player) => player.id === id1)?.name ?? "Jogador 1";
-  const name2 = players.find((player) => player.id === id2)?.name ?? "Jogador 2";
+  const player1 = players.find((player) => player.id === id1);
+  const player2 = players.find((player) => player.id === id2);
+  const name1 = player1?.name ?? "Jogador 1";
+  const name2 = player2?.name ?? "Jogador 2";
+  const avatar = (name: string, player?: Player) => (
+    <span className="h2h-avatar" aria-hidden="true">
+      {player?.avatar ? (
+        <img src={player.avatar} alt="" />
+      ) : (
+        name.trim().charAt(0).toUpperCase()
+      )}
+    </span>
+  );
 
   const renderBody = () => {
     if (loading)
@@ -190,8 +201,13 @@ export function HeadToHeadCard({
       <div className="h2h-body">
         <div className="h2h-score">
           <div className="h2h-side">
+            <div className="h2h-player">
+              {avatar(name1, player1)}
+              <span className="h2h-player-copy">
             <strong title={name1}>{name1}</strong>
             <span>{plural(summary.wins1, "vitória", "vitórias")}</span>
+              </span>
+            </div>
           </div>
           <div className="h2h-mid">
             <b>
@@ -205,8 +221,13 @@ export function HeadToHeadCard({
             </small>
           </div>
           <div className="h2h-side is-right">
+            <div className="h2h-player">
+              {avatar(name2, player2)}
+              <span className="h2h-player-copy">
             <strong title={name2}>{name2}</strong>
             <span>{plural(summary.wins2, "vitória", "vitórias")}</span>
+              </span>
+            </div>
           </div>
         </div>
 

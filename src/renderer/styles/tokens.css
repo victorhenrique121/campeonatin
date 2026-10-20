@@ -65,7 +65,13 @@
   --accent-strong: var(--arena-accent, #7e5ff0);
   --text-primary: color-mix(in srgb, var(--surface-canvas) 4%, white);
   --text-secondary: color-mix(in srgb, var(--surface-canvas) 42%, white);
-  --text-muted: color-mix(in srgb, var(--surface-canvas) 58%, white);
+  --text-muted: color-mix(in srgb, var(--surface-canvas) 50%, white);
   --color-danger: hsl(0 82% 64%);
   --color-success: hsl(150 94% 61%);
+}
+
+body.arena-light {
+  --text-primary: color-mix(in srgb, var(--surface-canvas) 8%, black);
+  --text-secondary: color-mix(in srgb, var(--surface-canvas) 45%, black);
+  --text-muted: color-mix(in srgb, var(--surface-canvas) 45%, black);
 }

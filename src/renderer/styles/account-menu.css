@@ -219,51 +219,6 @@
   background: #253148;
 }
 
-.profile-placeholder {
-  max-width: 920px;
-}
-
-.profile-placeholder-card {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  min-height: 120px;
-}
-
-.profile-placeholder-avatar {
-  width: 58px;
-  height: 58px;
-  flex: 0 0 58px;
-  display: grid;
-  place-items: center;
-  border-radius: 16px;
-  background: var(--arena-accent);
-  color: #fff;
-  font-size: 22px;
-  font-weight: 900;
-}
-
-.profile-placeholder-card > div:not(.profile-placeholder-avatar) {
-  min-width: 0;
-  display: grid;
-  gap: 4px;
-}
-
-.profile-placeholder-card strong {
-  color: #edf1f8;
-  font-size: 16px;
-}
-
-.profile-placeholder-card span,
-.profile-placeholder-card small {
-  color: #8e9bb1;
-  font-size: 12px;
-}
-
-.profile-placeholder-card small {
-  margin-left: auto;
-}
-
 body.arena-light .account-menu-trigger,
 body.arena-light .notification-menu-trigger {
   border-color: #dbe2ee;
@@ -323,10 +278,6 @@ body.arena-light .account-menu-divider {
   background: #e1e6ef;
 }
 
-body.arena-light .profile-placeholder-card strong {
-  color: #182033;
-}
-
 @media (max-width: 650px) {
   .account-actions {
     right: 12px;
@@ -344,15 +295,6 @@ body.arena-light .profile-placeholder-card strong {
     width: auto;
   }
 
-  .profile-placeholder-card {
-    align-items: flex-start;
-    flex-wrap: wrap;
-  }
-
-  .profile-placeholder-card small {
-    width: 100%;
-    margin-left: 0;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -10,16 +10,6 @@
    não sobra espaço extra e o card assume a altura do conteúdo.
    ============================================================ */
 
-.match-panel {
-    display: flex;
-    flex-direction: column;
-    gap: 22px;
-}
-
-.match-panel>.match-form {
-    flex: none;
-}
-
 .h2h-card {
     display: flex;
     flex: 1;
@@ -32,6 +22,7 @@
     border-radius: 12px;
     background:
         linear-gradient(180deg, #131d36, #0e1729);
+    margin-top: 20px;
 }
 
 .h2h-head {
@@ -295,10 +286,6 @@
 
 /* --- Responsivo: em 1 coluna o card volta a ter altura natural --- */
 @media (max-width: 950px) {
-    .match-panel {
-        gap: 18px;
-    }
-
     .h2h-card {
         flex: none;
     }

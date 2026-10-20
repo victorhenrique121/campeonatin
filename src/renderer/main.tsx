@@ -660,6 +660,7 @@ function RoomsPage({ activeRoomId, onSelectRoom, switchingRoom, switchingRoomId,
   const [newOwnerId, setNewOwnerId] = useState("");
   const [renameValue, setRenameValue] = useState("");
   const [renaming, setRenaming] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const selectedRoomRef = useRef<string | null>(activeRoomId);
   const selectionVersion = useRef(0);
   const selectedRoom = rooms.find((room) => room.id === activeRoomId);
@@ -749,8 +750,6 @@ function RoomsPage({ activeRoomId, onSelectRoom, switchingRoom, switchingRoomId,
       setRoomActionError("Escolha um membro para ser o novo proprietário.");
       return;
     }
-    if (action === "delete" && !window.confirm("Deseja excluir esta sala?")) return;
-
     setRoomActionMessage("");
     setRoomActionError("");
     setRoomActionPending(true);
@@ -1006,7 +1005,7 @@ function RoomsPage({ activeRoomId, onSelectRoom, switchingRoom, switchingRoomId,
                 </select>
               </label>
               <button type="button" className="secondary-button" disabled={renaming || roomActionPending || memberActionPending || !newOwnerId} onClick={() => changeRoom("transfer")}>Transferir propriedade</button>
-              <button type="button" className="danger" disabled={renaming || roomActionPending || memberActionPending} onClick={() => changeRoom("delete")}>Excluir sala</button>
+              <button type="button" className="danger" disabled={renaming || roomActionPending || memberActionPending} onClick={() => setConfirmingDelete(true)}>Excluir sala</button>
             </>
           )}
           {(selectedRoom.role !== "owner" || (memberResult?.roomId === selectedRoom.id && !memberResult.error && memberResult.members.length > 1)) && (
@@ -1053,6 +1052,16 @@ function RoomsPage({ activeRoomId, onSelectRoom, switchingRoom, switchingRoomId,
       )}
       </div>
       </div>
+      {confirmingDelete && selectedRoom && (
+        <AppModal
+          title="Excluir sala?"
+          message={`A sala ${selectedRoom.name} e seus dados serão excluídos.`}
+          confirmText="Excluir sala"
+          danger
+          onClose={() => setConfirmingDelete(false)}
+          onConfirm={() => changeRoom("delete")}
+        />
+      )}
     </>
   );
 }
@@ -1096,7 +1105,7 @@ function DashboardPage({
         .join(" ")
     : "";
   return (
-    <>
+    <div className="dashboard-page">
       <section className="page-title">
         <div>
           <p>VISÃO GERAL</p>
@@ -1268,7 +1277,7 @@ function DashboardPage({
         />
       )}
       <Toast message={toast} />
-    </>
+    </div>
   );
 }
 function PlayersPage({
@@ -1516,9 +1525,21 @@ function TeamPicker({
   );
 }
 
-function RankingPage({ data, players }: { data: Dashboard; players: Player[] }) {
+function RankingPage({
+  data,
+  players,
+  activeRoomId,
+}: {
+  data: Dashboard;
+  players: Player[];
+  activeRoomId: string | null;
+}) {
   const [tab, setTab] = useState<"geral" | "individuais" | "confrontos">("geral");
   const [sortBy, setSortBy] = useState<"goals" | "winrate" | "goaldiff" | "wins">("goals");
+  const [headToHeadMatches, setHeadToHeadMatches] = useState<Match[]>([]);
+  const [headToHeadLoading, setHeadToHeadLoading] = useState(false);
+  const [headToHeadPlayer1Id, setHeadToHeadPlayer1Id] = useState("");
+  const [headToHeadPlayer2Id, setHeadToHeadPlayer2Id] = useState("");
   const rankingFilters = [
     { id: "goals", label: "Artilharia" },
     { id: "winrate", label: "Aproveitamento" },
@@ -1543,6 +1564,50 @@ function RankingPage({ data, players }: { data: Dashboard; players: Player[] }) 
     { id: "individuais", label: "Estatísticas Individuais" },
     { id: "confrontos", label: "Confrontos Diretos" },
   ] as const;
+  const rankedPlayerIds = new Set(sortedRanking.map((row) => row.id));
+  const orderedPlayers = [
+    ...sortedRanking
+      .map((row) => players.find((player) => player.id === row.id))
+      .filter((player): player is Player => Boolean(player)),
+    ...players.filter((player) => !rankedPlayerIds.has(player.id)),
+  ];
+  const rankingFilterControls = (
+    <div className="ranking-filters" aria-label="Filtros da classificação">
+      {rankingFilters.map(({ id, label }) => (
+        <button
+          key={id}
+          type="button"
+          className={sortBy === id ? "active" : ""}
+          aria-pressed={sortBy === id}
+          onClick={() => setSortBy(id)}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+
+  useEffect(() => {
+    if (tab !== "confrontos") return;
+
+    let active = true;
+    setHeadToHeadLoading(true);
+    void window.arena
+      .matches()
+      .then((items) => {
+        if (active) setHeadToHeadMatches(items);
+      })
+      .catch(() => {
+        if (active) setHeadToHeadMatches([]);
+      })
+      .finally(() => {
+        if (active) setHeadToHeadLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [activeRoomId, tab]);
 
   return (
     <>
@@ -1559,9 +1624,7 @@ function RankingPage({ data, players }: { data: Dashboard; players: Player[] }) 
           </button>
         ))}
       </div>
-      {tab !== "geral" ? (
-        <article className="panel"><Empty text="Em breve" /></article>
-      ) : (
+      {tab === "geral" ? (
         <>
           <section className="metrics dashboard-metrics">
             <article className="metric">
@@ -1589,11 +1652,7 @@ function RankingPage({ data, players }: { data: Dashboard; players: Player[] }) 
           <section className="ranking-layout">
             <article className="panel">
               <div className="panel-head"><h2>Classificação Geral</h2></div>
-              <div className="ranking-filters" aria-label="Filtros da classificação">
-                {rankingFilters.map(({ id, label }) => (
-                  <button key={id} type="button" className={sortBy === id ? "active" : ""} aria-pressed={sortBy === id} onClick={() => setSortBy(id)}>{label}</button>
-                ))}
-              </div>
+              {rankingFilterControls}
               <Ranking rows={sortedRanking} />
             </article>
             <article className="panel ranking-insights">
@@ -1605,6 +1664,62 @@ function RankingPage({ data, players }: { data: Dashboard; players: Player[] }) 
             </article>
           </section>
         </>
+      ) : tab === "individuais" ? (
+        <section className="ranking-layout ranking-individual-layout">
+          <article className="panel">
+            <div className="panel-head">
+              <div>
+                <p>DESEMPENHO</p>
+                <h2>Estatísticas individuais</h2>
+              </div>
+            </div>
+            {rankingFilterControls}
+            <Ranking rows={sortedRanking} />
+          </article>
+          <article className="panel ranking-insights">
+            <div className="panel-head"><h2>Evolução no ranking</h2></div>
+            <div className="ranking-chart-placeholder ranking-evolution-placeholder">
+              <BarChart3 size={28} aria-hidden="true" />
+              <strong>Gráfico em breve</strong>
+              <span>A evolução de cada jogador aparecerá aqui.</span>
+            </div>
+          </article>
+        </section>
+      ) : (
+        <section className="ranking-layout ranking-head-to-head-layout">
+          <article className="panel">
+            <div className="panel-head">
+              <div>
+                <p>RETROSPECTO</p>
+                <h2>Confrontos diretos</h2>
+              </div>
+            </div>
+            {rankingFilterControls}
+            <div className="ranking-h2h-selectors">
+              <label>
+                Jogador 1
+                <select value={headToHeadPlayer1Id} onChange={(event) => setHeadToHeadPlayer1Id(event.target.value)}>
+                  <option value="">Selecione um jogador</option>
+                  {orderedPlayers.map((player) => <option key={player.id} value={player.id}>{player.name}</option>)}
+                </select>
+              </label>
+              <label>
+                Jogador 2
+                <select value={headToHeadPlayer2Id} onChange={(event) => setHeadToHeadPlayer2Id(event.target.value)}>
+                  <option value="">Selecione um jogador</option>
+                  {orderedPlayers.map((player) => <option key={player.id} value={player.id}>{player.name}</option>)}
+                </select>
+              </label>
+            </div>
+          </article>
+          <HeadToHeadCard
+            matches={headToHeadMatches}
+            players={players}
+            player1Id={headToHeadPlayer1Id}
+            player2Id={headToHeadPlayer2Id}
+            loading={headToHeadLoading}
+          />
+        </section>
       )}
     </>
   );
@@ -3653,12 +3768,15 @@ function FixtureResultModal({
     <div className="edit-modal-backdrop" onMouseDown={onClose}>
       <div
         className="edit-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="fixture-result-title"
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="edit-modal-header">
           <div>
             <span>REGISTRAR RESULTADO · {championship.name}</span>
-            <h2>
+            <h2 id="fixture-result-title">
               {fixture.player1} vs {fixture.player2}
             </h2>
           </div>
@@ -4478,11 +4596,12 @@ function ArenaApp({ user, onSignOut, onSessionExpired }: { user: AuthUser; onSig
     ) : page === "matches" ? (
       <MatchesPage players={players} teams={teams} reload={reload} totalMatches={data.matches} activeRoomId={activeRoomId} roomRole={activeRoomRole} />
     ) : page === "ranking" ? (
-      <RankingPage data={data} players={players} />
+      <RankingPage data={data} players={players} activeRoomId={activeRoomId} />
     ) : page === "championships" ? (
       <ChampionshipPage players={players} teams={teams} activeRoomId={activeRoomId} roomRole={activeRoomRole} />
     ) : page === "profile" ? (
       <ProfilePage
+        dashboard={data}
         onEditProfile={() => {
           setPage("settings");
         }}

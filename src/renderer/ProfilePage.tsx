@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
-import { CheckCircle2, Mail, Pencil, UserRound } from "lucide-react";
+import { CheckCircle2, Gamepad2, Pencil, Trophy, UserRound } from "lucide-react";
 import type { UserProfile } from "../shared/api";
+import type { Dashboard } from "../shared/models";
 import "./styles/profile.css";
 
 type ProfilePageProps = {
+  dashboard: Dashboard;
   onEditProfile: () => void;
 };
 
@@ -20,24 +22,13 @@ function getAvatarSrc(profile: UserProfile): string | null {
   return `${profile.avatarUrl}${separator}v=${encodeURIComponent(profile.updatedAt)}`;
 }
 
-function getRoleLabel(role: UserProfile["role"]): string {
-  switch (role) {
-    case "admin":
-      return "Administrador";
-    case "player":
-      return "Jogador";
-    default:
-      return "Visualizador";
-  }
-}
-
 function formatMemberSince(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "—";
   return String(date.getFullYear());
 }
 
-export function ProfilePage({ onEditProfile }: ProfilePageProps) {
+export function ProfilePage({ dashboard, onEditProfile }: ProfilePageProps) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -104,6 +95,20 @@ export function ProfilePage({ onEditProfile }: ProfilePageProps) {
 
   const avatarSrc = getAvatarSrc(profile);
   const showAvatar = Boolean(avatarSrc) && !avatarFailed;
+  const totalGoals = dashboard.statistics?.goalTrend.reduce(
+    (total, point) => total + point.goalsFor + point.goalsAgainst,
+    0,
+  ) ?? 0;
+  const decisiveWins = dashboard.ranking.reduce(
+    (total, row) => total + row.wins,
+    0,
+  );
+  const arenaStats = [
+    { label: "Partidas", value: dashboard.matches },
+    { label: "Gols", value: totalGoals },
+    { label: "Vitórias", value: decisiveWins },
+    { label: "Jogadores", value: dashboard.players },
+  ];
 
   return (
     <section className="page profile-page">
@@ -185,28 +190,51 @@ export function ProfilePage({ onEditProfile }: ProfilePageProps) {
               <span>Membro desde</span>
               <strong>{formatMemberSince(profile.createdAt)}</strong>
             </div>
-
-            <div className="profile-detail-row">
-              <span>Função</span>
-              <span className="profile-role-readonly">
-                {getRoleLabel(profile.role)}
-                <small>Somente leitura</small>
-              </span>
-            </div>
           </div>
         </article>
 
         <article className="profile-card profile-stat-card">
           <div className="profile-card-heading">
-            <span className="profile-card-label">ATIVIDADE</span>
-            <Mail size={19} />
+            <span className="profile-card-label">ESTATÍSTICAS DA ARENA</span>
+            <Trophy size={19} />
           </div>
 
-          <div className="profile-stat-placeholder">
-            <strong>Estatísticas em breve</strong>
-            <span>
-              As estatísticas da Arena serão adicionadas em uma próxima etapa.
-            </span>
+          <div className="profile-stats-grid">
+            {arenaStats.map((stat) => (
+              <div key={stat.label} className="profile-arena-stat">
+                <strong>{stat.value}</strong>
+                <span>{stat.label}</span>
+              </div>
+            ))}
+          </div>
+          <p className="profile-stat-context">Dados gerais da sala atual.</p>
+        </article>
+
+        <article className="profile-card profile-games-card">
+          <div className="profile-card-heading">
+            <span className="profile-card-label">JOGOS</span>
+            <Gamepad2 size={19} />
+          </div>
+
+          <ul className="profile-games-list">
+            <li><strong>eFootball</strong><span>📱 Mobile · 💻 Desktop · 🎮 PSN · Xbox · Nintendo</span></li>
+            <li><strong>FC25</strong><span>📱 Mobile · 💻 Desktop · 🎮 PSN · Xbox · Nintendo</span></li>
+            <li><strong>FC26</strong><span>📱 Mobile · 💻 Desktop · 🎮 PSN · Xbox · Nintendo</span></li>
+            <li><strong>FC27</strong><span>📱 Mobile · 💻 Desktop · 🎮 PSN · Xbox · Nintendo</span></li>
+            <li><strong>FIFA Mobile</strong><span>📱 Mobile</span></li>
+          </ul>
+        </article>
+
+        <article className="profile-card profile-trophies-card">
+          <div className="profile-card-heading">
+            <span className="profile-card-label">TROFÉUS</span>
+            <Trophy size={19} />
+          </div>
+
+          <div className="profile-trophies-placeholder">
+            <Trophy size={24} aria-hidden="true" />
+            <strong>Em breve</strong>
+            <span>As conquistas da Arena aparecerão aqui.</span>
           </div>
         </article>
       </div>
