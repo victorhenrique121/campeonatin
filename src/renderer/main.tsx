@@ -67,6 +67,7 @@ import type {
   Championship,
   ChampionshipDetail,
   Dashboard,
+  DuoInput,
   Fixture,
   Match,
   Player,
@@ -2196,6 +2197,15 @@ function ChampionshipPage({
   const selectorTeams = searchedTeams ?? teams;
   const save = async (e: FormEvent) => {
     e.preventDefault();
+    const participantDuos = participants.reduce<DuoInput[]>((duos, playerId, index) => {
+      if (index % 2 === 0) duos.push({ player1Id: playerId, player2Id: playerId });
+      else duos[duos.length - 1].player2Id = playerId;
+      return duos;
+    }, []);
+    if (mode === "duo" && (participants.length < 4 || participantDuos.some((duo) => duo.player1Id === duo.player2Id))) {
+      setFormError("Forme ao menos duas duplas completas para criar o campeonato.");
+      return;
+    }
     const teamIdsInOrder = participants.map(
       (id) => assignments[id]?.id ?? null,
     );
@@ -2219,11 +2229,13 @@ function ChampionshipPage({
           mode === "mad" && mutator !== null ? MUTATORS[mutator].title : null,
         startsAt: new Date().toISOString(),
         status: "active",
-        participantIds: participants,
-        participantTeamIds: teamIdsInOrder,
+        participantIds: mode === "duo" ? [] : participants,
+        participantDuos: mode === "duo" ? participantDuos : undefined,
+        participantTeamIds: mode === "duo" ? [] : teamIdsInOrder,
       }, activeRoomId);
       setName("");
       setParticipants([]);
+      setAssignments({});
       setSelected(champ.id);
       await load();
     } catch (error) {
@@ -2314,6 +2326,15 @@ function ChampionshipPage({
           <Trophy />{" "}
           <span>
             Clássico<small>1v1 competitivo</small>
+          </span>
+        </button>
+        <button
+          className={mode === "duo" ? "active duo" : ""}
+          onClick={() => setMode("duo")}
+        >
+          <UsersRound />{" "}
+          <span>
+            Dupla<small>2v2 em equipe</small>
           </span>
         </button>
         <button
@@ -2583,19 +2604,19 @@ function ChampionshipPage({
                 : "CONFIRMAR PARTICIPANTES"}
             </span>
             <h2>
-              {mode === "duo" ? "Forme os esquadrões" : "Quem entra em campo?"}
+              {mode === "duo" ? "Formar Duplas" : "Quem entra em campo?"}
             </h2>
           </div>
           <span className="selection-count">
-            {participants.length} selecionados
+            {mode === "duo" ? `${Math.floor(participants.length / 2)} duplas` : `${participants.length} selecionados`}
           </span>
         </div>
         {mode === "duo" && (
           <div className="duo-notice">
             <UsersRound size={19} />
             <span>
-              <b>Modo dupla ativo.</b> Selecione jogadores em pares ou deixe a
-              Arena equilibrar os esquadrões.
+              <b>Modo dupla ativo.</b> Selecione dois jogadores por vez para
+              formar uma dupla ou deixe a Arena equilibrar os esquadrões.
             </span>
             <button type="button" onClick={pairPlayers}>
               <Shuffle size={14} /> Sortear duplas
@@ -2892,7 +2913,10 @@ function ChampionshipDetailView({
     4: "Final",
   };
   const renderFixture = (fixture: Fixture, compact = false) => (
-    <div className={compact ? "bracket-match" : "fixture"} key={fixture.id}>
+    <div
+      className={`${compact ? "bracket-match" : "fixture"}${detail.championship.mode === "duo" ? " duo-fixture" : ""}`}
+      key={fixture.id}
+    >
       {!compact && <small>{fixture.stage === "league" ? `Rodada ${fixture.round}` : knockoutRoundLabel[fixture.round] ?? "Mata-mata"}</small>}
       <span>{fixture.player1}</span>
       {fixture.matchId ? (
