@@ -3955,6 +3955,7 @@ function SettingsPage({ reload }: { reload: () => Promise<void> }) {
   const [accent, setAccent] = useState(
     () => localStorage.getItem("arena-accent") ?? "#7e5ff0",
   );
+  const [privacyPolicyOpen, setPrivacyPolicyOpen] = useState(false);
 
   const [background, setBackground] = useState(
     () => localStorage.getItem("arena-background") ?? "#0a0c10",
@@ -4362,11 +4363,29 @@ function SettingsPage({ reload }: { reload: () => Promise<void> }) {
                   organizar jogadores, equipes, partidas, rankings e competições
                   em um único lugar.
                 </p>
+
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() => setPrivacyPolicyOpen(true)}
+                >
+                  Política de Privacidade
+                </button>
               </div>
             </article>
           ): null}
         </div>
       </div>
+
+      {privacyPolicyOpen && (
+        <AppModal
+          title="Política de Privacidade"
+          message="Coletamos seu e-mail, nome de perfil e os placares registrados na Arena. Esses dados ficam armazenados no Supabase para o funcionamento do FC Arena e não são compartilhados com terceiros. Para solicitar a exclusão da conta ou dos dados, entre em contato pelo e-mail de atendimento do FC Arena."
+          confirmText="Entendi"
+          cancelText="Fechar"
+          onClose={() => setPrivacyPolicyOpen(false)}
+        />
+      )}
 
     </section>
   );
