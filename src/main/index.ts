@@ -9,6 +9,7 @@ import {
   changeEmail,
   changePassword,
   createRoom,
+  getRoomMemberRole,
   listRoomMembers,
   promoteRoomAdmin,
   removeRoomMember,
@@ -41,7 +42,64 @@ import {
 } from "./championship-service";
 
 let window: BrowserWindow | null = null;
-const dbPath = () => path.join(app.getPath("userData"), "fc-arena.sqlite");
+type RoomContext = {
+  roomId: string | null;
+  db: ReturnType<typeof createDatabase>;
+  repo: ReturnType<typeof repository>;
+  players: ReturnType<typeof createPlayersService>;
+  matches: ReturnType<typeof createMatchesService>;
+  teams: ReturnType<typeof createTeamsService>;
+};
+let currentContext: RoomContext | null = null;
+let contextQueue: Promise<void> = Promise.resolve();
+const dbPath = (roomId: string | null) => path.join(app.getPath("userData"), roomId ? `room-${roomId}.sqlite` : "fc-arena.sqlite");
+
+function enqueueContext<T>(operation: () => T | Promise<T>): Promise<T> {
+  const result = contextQueue.then(operation);
+  contextQueue = result.then(() => undefined, () => undefined);
+  return result;
+}
+
+function withContext<T>(operation: (context: RoomContext) => T | Promise<T>): Promise<T> {
+  return enqueueContext(() => {
+    if (!currentContext) throw new Error("Não foi possível carregar os dados da sala.");
+    return operation(currentContext);
+  });
+}
+
+function switchRoom(roomId: string | null): Promise<void> {
+  return enqueueContext(async () => {
+    if (roomId !== null) {
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(roomId)) {
+        throw new Error("Sala inválida.");
+      }
+      const rooms = await listMyRooms();
+      if (!rooms.some((room) => room.id === roomId)) throw new Error("Você não tem acesso a esta sala.");
+    }
+    if (currentContext?.roomId === roomId && currentContext.db.open) return;
+    const db = createDatabase(dbPath(roomId));
+    try {
+      const repo = repository(db);
+      const next: RoomContext = { roomId, db, repo, players: createPlayersService(db, repo, roomId), matches: createMatchesService(db, repo, roomId), teams: createTeamsService(repo) };
+      if (roomId !== null) {
+        await next.players.syncMirror(roomId);
+        await getChampionships(db, roomId);
+        await next.matches.syncMirror(roomId);
+      }
+      currentContext?.db.close();
+      currentContext = next;
+    } catch (error) {
+      db.close();
+      throw error;
+    }
+  });
+}
+
+function ensureRoomGlobalOnly(): void {
+  if (!currentContext || currentContext.roomId !== null) {
+    throw new Error("As ações de criar e editar dados estarão disponíveis em breve dentro das salas. Por enquanto, use a sala global.");
+  }
+}
 
 function createWindow() {
   window = new BrowserWindow({
@@ -70,16 +128,13 @@ function createWindow() {
   }
 }
 
-app.whenReady().then(() => {
-  const db = createDatabase(dbPath());
-  const repo = repository(db);
-
-  const players = createPlayersService(db, repo);
-  const teams = createTeamsService(repo);
-  const matches = createMatchesService(db, repo);
+app.whenReady().then(async () => {
+  await switchRoom(null);
 
   ipcMain.handle("auth:session", () => getAuthSession());
   ipcMain.handle("rooms:create", (_, name: string) => createRoom(name));
+  ipcMain.handle("rooms:member-role", (_, roomId: string) => getRoomMemberRole(roomId));
+  ipcMain.handle("rooms:set-active", async (_, roomId: string | null) => { await switchRoom(roomId); return { ok: true }; });
   ipcMain.handle("rooms:list-mine", () => listMyRooms());
   ipcMain.handle("rooms:join", (_, code: string) => joinRoom(code));
   ipcMain.handle("rooms:list-members", (_, roomId: string) => listRoomMembers(roomId));
@@ -115,39 +170,51 @@ app.whenReady().then(() => {
     resendEmailChangeConfirmation(pendingEmail),
 
 );
-  ipcMain.handle("auth:signout", () => signOutUser());
+  ipcMain.handle("auth:signout", async () => {
+    await switchRoom(null);
+    return signOutUser();
+  });
   ipcMain.handle("auth:signout-others", () => endOtherSessions());
 
-  ipcMain.handle("dashboard", () => repo.dashboard());
-  ipcMain.handle("arena:news", () => repo.arenaNews());
-  ipcMain.handle("players:list", () => players.list());
-  ipcMain.handle("players:save", (_, p) => players.save(p));
-  ipcMain.handle("players:delete", (_, id) => players.remove(id));
-  ipcMain.handle("teams:list", (_, q) => teams.list(q));
-  ipcMain.handle("matches:list", () => repo.matches());
-  ipcMain.handle("matches:save", (_, m) => matches.save(m));
-  ipcMain.handle("matches:update", (_, m) => matches.update(m));
-  ipcMain.handle("matches:delete", (_, id) => matches.remove(id));
-  ipcMain.handle("matches:clear", () => matches.clear());
-  ipcMain.handle("ranking", () => repo.ranking());
+  ipcMain.handle("dashboard", () => withContext(({ repo }) => repo.dashboard()));
+  ipcMain.handle("arena:news", () => withContext(({ repo }) => repo.arenaNews()));
+  ipcMain.handle("players:list", () => withContext(({ players, repo, roomId }) => roomId === null ? players.list() : repo.players()));
+  ipcMain.handle("players:save", (_, p, roomId: string | null) => withContext(({ players }) => players.save(p, roomId)));
+  ipcMain.handle("players:delete", (_, id) => withContext(({ players }) => players.remove(id)));
+  ipcMain.handle("teams:list", (_, q) => withContext(({ teams }) => teams.list(q)));
+  ipcMain.handle("matches:list", () => withContext(({ repo }) => repo.matches()));
+  ipcMain.handle("matches:save", (_, m, roomId: string | null) =>
+    withContext(({ matches, roomId: currentRoomId }) => {
+      if (roomId !== currentRoomId) {
+        throw new Error("A sala selecionada foi alterada. Tente novamente.");
+      }
+      return matches.save(m, roomId);
+    }),
+  );
+  ipcMain.handle("matches:update", (_, m) => withContext(({ matches }) => { ensureRoomGlobalOnly(); return matches.update(m); }));
+  ipcMain.handle("matches:delete", (_, id) => withContext(({ matches }) => matches.remove(id)));
+  ipcMain.handle("matches:clear", () => withContext(({ matches }) => { ensureRoomGlobalOnly(); return matches.clear(); }));
+  ipcMain.handle("ranking", () => withContext(({ repo }) => repo.ranking()));
 
   // Rotas de Campeonatos ligadas ao championship-service.ts (Supabase + SQLite)
-  ipcMain.handle("championships:list", () => getChampionships(db));
+  ipcMain.handle("championships:list", () => withContext(({ db, roomId, repo }) => roomId === null ? getChampionships(db, null) : repo.championships()));
   ipcMain.handle("championships:detail", (_, id) =>
-    repo.championshipDetail(id),
+    withContext(({ repo }) => repo.championshipDetail(id)),
   );
-  ipcMain.handle("championships:save", async (_, c) => {
+  ipcMain.handle("championships:save", (_, c, roomId: string | null) => withContext(async ({ db, roomId: currentRoomId }) => {
+    if (roomId !== currentRoomId) throw new Error("A sala selecionada foi alterada. Tente novamente.");
     console.log("[IPC] championships:save acionado:", c);
-    return await saveChampionship(db, c);
-  });
-  ipcMain.handle("championships:update", async (_, id, name) => {
+    return await saveChampionship(db, c, roomId);
+  }));
+  ipcMain.handle("championships:update", (_, id, name) => withContext(async ({ db, repo }) => {
+    ensureRoomGlobalOnly();
     console.log("[IPC] championships:update acionado:", { id, name });
     await updateChampionshipName(db, id, name);
     return repo.championshipDetail(id).championship;
-  });
-  ipcMain.handle("championships:delete", (_, id) =>
-    deleteChampionship(repo, id),
-  );
+  }));
+  ipcMain.handle("championships:delete", (_, id) => withContext(({ db }) => {
+    return deleteChampionship(db, id);
+  }));
 
 
   initSupabase({
@@ -165,12 +232,12 @@ app.whenReady().then(() => {
       
       if (status.ok && status.authenticated) {
         // Sincronização em cadeia no boot: jogadores -> campeonatos -> duplas e partidas.
-        void players
-          .syncMirror()
-          .then(() => getChampionships(db))
-          .then((champs) => {
-            console.info(`[championships] espelho local sincronizado com o Supabase: ${champs.length} campeonato(s).`);
-            return matches.syncMirror();
+        void withContext(async ({ players, db, matches, roomId }) => {
+          if (roomId !== null) return;
+          await players.syncMirror(null);
+          const champs = await getChampionships(db, null);
+          console.info(`[championships] espelho local sincronizado com o Supabase: ${champs.length} campeonato(s).`);
+          return matches.syncMirror(null);
           })
           .catch((err) => {
             console.warn(

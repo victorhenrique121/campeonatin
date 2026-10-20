@@ -206,7 +206,7 @@ function Game({
 }: {
   match: Match;
   players: Player[];
-  onEdit: (match: Match) => void;
+  onEdit?: (match: Match) => void;
   onDelete?: (match: Match) => void;
   onShare?: (match: Match) => void;
 }) {
@@ -243,15 +243,17 @@ function Game({
         </div>
       </div>
       <div className="game-actions">
-      <button
-        type="button"
-        className="edit-match-btn"
-        onClick={() => onEdit(match)}
-        aria-label={`Editar partida entre ${match.player1} e ${match.player2}`}
-        title="Editar resultado"
-      >
-        <SquarePen size={15} />
-      </button>
+      {onEdit && (
+        <button
+          type="button"
+          className="edit-match-btn"
+          onClick={() => onEdit(match)}
+          aria-label={`Editar partida entre ${match.player1} e ${match.player2}`}
+          title="Editar resultado"
+        >
+          <SquarePen size={15} />
+        </button>
+      )}
       {onDelete && (
         <button
           type="button"
@@ -289,9 +291,10 @@ function FriendsPage() {
   );
 }
 
-function RoomsPage({ activeRoomId, setActiveRoomId }: {
+function RoomsPage({ activeRoomId, setActiveRoomId, switchingRoom }: {
   activeRoomId: string | null;
   setActiveRoomId: React.Dispatch<React.SetStateAction<string | null>>;
+  switchingRoom: boolean;
 }) {
   const [name, setName] = useState("");
   const [entryCode, setEntryCode] = useState("");
@@ -608,6 +611,7 @@ function RoomsPage({ activeRoomId, setActiveRoomId }: {
               <button
                 type="button"
                 className="secondary-button"
+                disabled={switchingRoom}
                 aria-pressed={activeRoomId === room.id}
                 onClick={() => {
                   setCopyMessage("");
@@ -625,7 +629,7 @@ function RoomsPage({ activeRoomId, setActiveRoomId }: {
                   setActiveRoomId(room.id);
                 }}
               >
-                {activeRoomId === room.id ? "Selecionada" : "Entrar"}
+                {switchingRoom && activeRoomId === room.id ? "Carregando dados da sala..." : activeRoomId === room.id ? "Selecionada" : "Entrar"}
               </button>
             </div>
           ))}
@@ -927,16 +931,22 @@ function DashboardPage({
 function PlayersPage({
   players,
   reload,
+  activeRoomId,
+  roomRole,
 }: {
   players: Player[];
   reload: () => Promise<void>;
+  activeRoomId: string | null;
+  roomRole: "owner" | "admin" | "participant" | null;
 }) {
   const [name, setName] = useState("");
   const [nickname, setNickname] = useState("");
   const [deletePlayer, setDeletePlayer] = useState<Player | null>(null);
+  const canWrite =
+    activeRoomId === null || roomRole === "owner" || roomRole === "admin";
   const save = async (e: FormEvent) => {
     e.preventDefault();
-    await window.arena.savePlayer({ name, nickname });
+    await window.arena.savePlayer({ name, nickname }, activeRoomId);
     setName("");
     setNickname("");
     await reload();
@@ -950,7 +960,10 @@ function PlayersPage({
         </div>
       </section>
       <section className="grid players-layout">
-        <article className="panel">
+        {canWrite && <article className="panel">
+          <div className="panel-head">
+            <h2>Adicionar jogador</h2>
+          </div>
           <form className="form" onSubmit={save}>
             <label>
               Nome
@@ -968,9 +981,9 @@ function PlayersPage({
                 required
               />
             </label>
-            <button className="primary">Salvar jogador</button>
+            <button className="primary">Adicionar jogador</button>
           </form>
-        </article>
+        </article>}
         <article className="panel wide">
           <div className="cards players-list">
             {players.map((p) => (
@@ -980,9 +993,9 @@ function PlayersPage({
                   <b>{p.name}</b>
                   <small>@{p.nickname}</small>
                 </div>
-                <button className="danger" onClick={() => setDeletePlayer(p)}>
+                {canWrite && <button className="danger" onClick={() => setDeletePlayer(p)}>
                   Excluir
-                </button>
+                </button>}
               </div>
             ))}
             {!players.length && <Empty text="Adicione o primeiro jogador." />}
@@ -1253,11 +1266,15 @@ function MatchesPage({
   teams,
   reload,
   totalMatches,
+  activeRoomId,
+  roomRole,
 }: {
   players: Player[];
   teams: Team[];
   reload: () => Promise<void>;
   totalMatches: number;
+  activeRoomId: string | null;
+  roomRole: "owner" | "admin" | "participant" | null;
 }) {
   const [matches, setMatches] = useState<Match[]>([]);
   const [competitionFilter, setCompetitionFilter] = useState<"all" | "championship" | "casual">("all");
@@ -1278,6 +1295,8 @@ function MatchesPage({
     player2Id: "",
     team2Id: "",
   });
+  const canWrite =
+    activeRoomId === null || roomRole === "owner" || roomRole === "admin";
 
   useEffect(() => {
     window.arena
@@ -1361,7 +1380,7 @@ function MatchesPage({
         team2Id,
         score1: Number(form.score1),
         score2: Number(form.score2),
-      });
+      }, activeRoomId);
       playArenaSound("whistle");
 
       setMatches(await window.arena.matches());
@@ -1412,7 +1431,7 @@ function MatchesPage({
         </article>
       </section>
       <section className="matches-layout">
-        <article className="panel">
+        {canWrite && <article className="panel">
           <form className="form match-form" onSubmit={submit}>
             <div className="match-lanes">
               <div className="match-lane">
@@ -1463,13 +1482,13 @@ function MatchesPage({
             player2Id={form.player2Id}
             loading={!matchesLoaded}
           />
-        </article>
+        </article>}
         <article className="panel wide">
           <div className="panel-head">
             <h2>Últimas partidas</h2>
-            <button className="danger" onClick={() => setShowClearModal(true)}>
+            {canWrite && <button className="danger" onClick={() => setShowClearModal(true)}>
               Limpar histórico
-            </button>
+            </button>}
           </div>
           <div className="matches-filters form">
             <label>
@@ -1498,8 +1517,8 @@ function MatchesPage({
                 key={m.id}
                 match={m}
                 players={players}
-                onEdit={setEditingMatch}
-                onDelete={setDeletingMatch}
+                onEdit={canWrite ? setEditingMatch : undefined}
+                onDelete={canWrite ? setDeletingMatch : undefined}
                 onShare={async (match) => {
                   await copyMatchSummary(match);
                   showToast("Resumo copiado para o WhatsApp.");
@@ -2109,9 +2128,13 @@ function championshipCover(name: string): string {
 function ChampionshipPage({
   players,
   teams,
+  activeRoomId,
+  roomRole,
 }: {
   players: Player[];
   teams: Team[];
+  activeRoomId: string | null;
+  roomRole: "owner" | "admin" | "participant" | null;
 }) {
   const [news, setNews] = useState<ArenaNews[]>([]);
   const [items, setItems] = useState<Championship[]>([]),
@@ -2133,6 +2156,8 @@ function ChampionshipPage({
     [renaming, setRenaming] = useState<Championship | null>(null),
     [teamQuery, setTeamQuery] = useState(""),
     [searchedTeams, setSearchedTeams] = useState<Team[] | null>(null);
+  const canWrite =
+    activeRoomId === null || roomRole === "owner" || roomRole === "admin";
   useEffect(() => {
     if (!team && teams[0]) setTeam(teams[0]);
   }, [teams, team]);
@@ -2196,7 +2221,7 @@ function ChampionshipPage({
         status: "active",
         participantIds: participants,
         participantTeamIds: teamIdsInOrder,
-      });
+      }, activeRoomId);
       setName("");
       setParticipants([]);
       setSelected(champ.id);
@@ -2281,7 +2306,7 @@ function ChampionshipPage({
         </div>
       </section>
 
-      <section className="mode-switcher" aria-label="Modo do campeonato">
+      {canWrite && <section className="mode-switcher" aria-label="Modo do campeonato">
         <button
           className={mode === "classic" ? "active" : ""}
           onClick={() => setMode("classic")}
@@ -2301,9 +2326,9 @@ function ChampionshipPage({
           </span>
           <Sparkles className="mode-glint" />
         </button>
-      </section>
+      </section>}
 
-      <section className="championship-builder">
+      {canWrite && <section className="championship-builder">
         <article className="arena-create-card">
           <div className="create-card-top">
             <div>
@@ -2454,9 +2479,9 @@ function ChampionshipPage({
             modos.
           </p>
         </article>
-      </section>
+      </section>}
 
-      {mode === "mad" && (
+      {canWrite && mode === "mad" && (
         <section className="mutator-zone">
           <div className="mutator-copy">
             <span className="eyebrow">
@@ -2549,7 +2574,7 @@ function ChampionshipPage({
         </section>
       )}
 
-      <section className="enrollment-section">
+      {canWrite && <section className="enrollment-section">
         <div className="section-label">
           <div>
             <span className="eyebrow">
@@ -2668,7 +2693,7 @@ function ChampionshipPage({
         {!players.length && (
           <Empty text="Cadastre jogadores para montar o campeonato." />
         )}
-      </section>
+      </section>}
 
       <div className="championship-overview">
         <div className="championship-overview-main">
@@ -2724,7 +2749,7 @@ function ChampionshipPage({
                 <span>
                   Ver arena <ArrowRight size={15} />
                 </span>
-                <div
+                {canWrite && <div
                   className="season-card-actions"
                   onClick={(event) => event.stopPropagation()}
                 >
@@ -2745,7 +2770,7 @@ function ChampionshipPage({
                   >
                     <Trash2 size={14} />
                   </button>
-                </div>
+                </div>}
               </footer>
               {detail?.championship.id === c.id && (
                 <div className="season-avatars" aria-label="Avatares dos participantes">
@@ -2763,6 +2788,8 @@ function ChampionshipPage({
         <ChampionshipDetailView
           detail={detail}
           teams={teams}
+          roomId={activeRoomId}
+          canWrite={canWrite}
           onDelete={() => setDeletingChampionship(detail.championship)}
           onRegistered={async () => {
             await load();
@@ -2830,15 +2857,25 @@ function ChampionshipPage({
 function ChampionshipDetailView({
   detail,
   teams,
+  roomId,
+  canWrite,
   onDelete,
   onRegistered,
 }: {
   detail: ChampionshipDetail;
   teams: Team[];
+  roomId: string | null;
+  canWrite: boolean;
   onDelete: () => void;
   onRegistered: () => Promise<void>;
 }) {
   const [registering, setRegistering] = useState<Fixture | null>(null);
+  const knockoutRounds = detail.fixtures
+    .filter((fixture) => fixture.stage === "knockout")
+    .reduce<Record<number, Fixture[]>>((all, fixture) => {
+      (all[fixture.round] ??= []).push(fixture);
+      return all;
+    }, {});
   const grouped = detail.fixtures.reduce<Record<string, Fixture[]>>(
     (all, fixture) => {
       const group =
@@ -2847,6 +2884,32 @@ function ChampionshipDetailView({
       return all;
     },
     {},
+  );
+  const knockoutRoundLabel: Record<number, string> = {
+    1: "Oitavas",
+    2: "Quartas",
+    3: "Semifinal",
+    4: "Final",
+  };
+  const renderFixture = (fixture: Fixture, compact = false) => (
+    <div className={compact ? "bracket-match" : "fixture"} key={fixture.id}>
+      {!compact && <small>{fixture.stage === "league" ? `Rodada ${fixture.round}` : knockoutRoundLabel[fixture.round] ?? "Mata-mata"}</small>}
+      <span>{fixture.player1}</span>
+      {fixture.matchId ? (
+        <b>{fixture.score1} × {fixture.score2}</b>
+      ) : canWrite ? (
+        <button
+          type="button"
+          className="fixture-register"
+          onClick={() => setRegistering(fixture)}
+        >
+          vs · Registrar
+        </button>
+      ) : (
+        <span>vs</span>
+      )}
+      <span>{fixture.player2}</span>
+    </div>
   );
   return (
     <section className="grid championship-detail">
@@ -2860,13 +2923,13 @@ function ChampionshipDetailView({
             </h2>
             <ModeBadge championship={detail.championship} />
           </div>
-          <button
+          {canWrite && <button
             type="button"
             className="delete-championship-btn"
             onClick={onDelete}
           >
             <Trash2 size={15} /> Apagar campeonato
-          </button>
+          </button>}
         </div>
         <Ranking rows={detail.standing} />
       </article>
@@ -2887,39 +2950,56 @@ function ChampionshipDetailView({
             {detail.championship.format === "league" ? "Calendário" : "Chave"}
           </h2>
         </div>
-        <div className="fixtures">
-          {Object.entries(grouped).map(([stage, fixtures]) => (
-            <React.Fragment key={stage}>
-              <p className="fixture-stage">{stage}</p>
-              {fixtures.map((f) => (
-                <div className="fixture" key={f.id}>
-                  <small>{stage}</small>
-                  <span>{f.player1}</span>
-                  {f.matchId ? (
-                    <b>
-                      {f.score1} × {f.score2}
-                    </b>
-                  ) : (
-                    <button
-                      type="button"
-                      className="fixture-register"
-                      onClick={() => setRegistering(f)}
-                    >
-                      vs · Registrar
-                    </button>
-                  )}
-                  <span>{f.player2}</span>
-                </div>
-              ))}
-            </React.Fragment>
-          ))}
-        </div>
+        {detail.championship.format === "league" ? (
+          <div className="fixtures">
+            {Object.entries(grouped).map(([stage, fixtures]) => (
+              <React.Fragment key={stage}>
+                <p className="fixture-stage">{stage}</p>
+                {fixtures.map((fixture) => renderFixture(fixture))}
+              </React.Fragment>
+            ))}
+          </div>
+        ) : (
+          <>
+            {Object.keys(knockoutRounds).length ? (
+              <div className="bracket" aria-label="Chave do mata-mata">
+                {Object.entries(knockoutRounds)
+                  .sort(([first], [second]) => Number(first) - Number(second))
+                  .map(([round, fixtures]) => (
+                    <section className="bracket-round" key={round}>
+                      <h3>{knockoutRoundLabel[Number(round)] ?? `Rodada ${round}`}</h3>
+                      <div className="bracket-matches">
+                        {fixtures
+                          .sort((first, second) => (first.bracketPosition ?? first.id) - (second.bracketPosition ?? second.id))
+                          .map((fixture) => renderFixture(fixture, true))}
+                      </div>
+                    </section>
+                  ))}
+              </div>
+            ) : (
+              <Empty text="A chave será gerada quando a fase de grupos terminar." />
+            )}
+            {detail.championship.format === "groups_knockout" && (
+              <div className="fixtures group-fixtures">
+                {Object.entries(grouped)
+                  .filter(([stage]) => stage.startsWith("Rodada"))
+                  .map(([stage, fixtures]) => (
+                    <React.Fragment key={stage}>
+                      <p className="fixture-stage">{stage}</p>
+                      {fixtures.map((fixture) => renderFixture(fixture))}
+                    </React.Fragment>
+                  ))}
+              </div>
+            )}
+          </>
+        )}
       </article>
       {registering && (
         <FixtureResultModal
           fixture={registering}
           championship={detail.championship}
           teams={teams}
+          roomId={roomId}
           onClose={() => setRegistering(null)}
           onSaved={onRegistered}
         />
@@ -3067,12 +3147,14 @@ function FixtureResultModal({
   fixture,
   championship,
   teams,
+  roomId,
   onClose,
   onSaved,
 }: {
   fixture: Fixture;
   championship: Championship;
   teams: Team[];
+  roomId: string | null;
   onClose: () => void;
   onSaved: () => Promise<void>;
 }) {
@@ -3127,7 +3209,7 @@ function FixtureResultModal({
         score1: goals1,
         score2: goals2,
         championshipId: championship.id,
-      });
+      }, roomId);
       playArenaSound("whistle");
       await onSaved();
       onClose();
@@ -3745,6 +3827,12 @@ function SettingsPage({ reload }: { reload: () => Promise<void> }) {
 
 function ArenaApp({ user, onSignOut }: { user: AuthUser; onSignOut: () => void }) {
   const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
+  const [activeRoomRole, setActiveRoomRole] = useState<
+    "owner" | "admin" | "participant" | null
+  >(null);
+  const [loadedRoomId, setLoadedRoomId] = useState<string | null | undefined>(undefined);
+  const [roomLoadAttempt, setRoomLoadAttempt] = useState(0);
+  const switchingRoom = loadedRoomId !== activeRoomId;
   const showRoomOnlyTabs = activeRoomId !== null;
   const [page, setPage] = useState<Page>("dashboard"),
     [data, setData] = useState<Dashboard>(),
@@ -3783,8 +3871,45 @@ function ArenaApp({ user, onSignOut }: { user: AuthUser; onSignOut: () => void }
     }
   };
   useEffect(() => {
-    void reload();
-  }, []);
+    let current = true;
+    void (async () => {
+      try {
+        await window.arena.setActiveRoom(activeRoomId);
+        const [dashboard, playerList, teamList] = await Promise.all([
+          window.arena.dashboard(), window.arena.players(), window.arena.teams(),
+        ]);
+        if (!current) return;
+        setData(dashboard);
+        setPlayers(playerList);
+        setTeams(teamList);
+        setLoadError("");
+        setLoadedRoomId(activeRoomId);
+      } catch {
+        if (!current) return;
+        setLoadError("Não foi possível carregar os dados da sala.");
+        setData(undefined);
+      }
+    })();
+    return () => { current = false; };
+  }, [activeRoomId, roomLoadAttempt]);
+  useEffect(() => {
+    if (!activeRoomId) {
+      setActiveRoomRole(null);
+      return;
+    }
+    let current = true;
+    window.arena
+      .getRoomMemberRole(activeRoomId)
+      .then((role) => {
+        if (current) setActiveRoomRole(role);
+      })
+      .catch(() => {
+        if (current) setActiveRoomRole(null);
+      });
+    return () => {
+      current = false;
+    };
+  }, [activeRoomId]);
   useEffect(() => {
     const onDocumentClick = (event: MouseEvent) => {
       if (
@@ -3803,7 +3928,7 @@ function ArenaApp({ user, onSignOut }: { user: AuthUser; onSignOut: () => void }
       <main className="error-state">
         <h1>Não foi possível carregar a Arena</h1>
         <p>{loadError}</p>
-        <button className="primary" onClick={() => void reload()}>
+        <button className="primary" onClick={() => setRoomLoadAttempt((attempt) => attempt + 1)}>
           Tentar novamente
         </button>
       </main>
@@ -3815,24 +3940,27 @@ function ArenaApp({ user, onSignOut }: { user: AuthUser; onSignOut: () => void }
     ...(showRoomOnlyTabs
       ? ([["matches", "Partidas", Gamepad2], ["ranking", "Ranking", BarChart3]] as [Page, string, React.ElementType][])
       : []),
+    ["players", "Jogadores", Users],
     ["championships", "Campeonatos", Trophy],
     ["friends", "Amigos", UsersRound],
   ];
   const view =
-    page === "dashboard" ? (
+    switchingRoom && page !== "rooms" ? (
+      <main className="loading">Carregando dados da sala...</main>
+    ) : page === "dashboard" ? (
       <DashboardPage data={data} players={players} go={setPage} reload={reload} showRoomOnlyTabs={showRoomOnlyTabs} />
     ) : page === "rooms" ? (
-      <RoomsPage activeRoomId={activeRoomId} setActiveRoomId={setActiveRoomId} />
+      <RoomsPage activeRoomId={activeRoomId} setActiveRoomId={setActiveRoomId} switchingRoom={switchingRoom} />
     ) : page === "friends" ? (
       <FriendsPage />
     ) : page === "players" ? (
-      <PlayersPage players={players} reload={reload} />
+      <PlayersPage players={players} reload={reload} activeRoomId={activeRoomId} roomRole={activeRoomRole} />
     ) : page === "matches" ? (
-      <MatchesPage players={players} teams={teams} reload={reload} totalMatches={data.matches} />
+      <MatchesPage players={players} teams={teams} reload={reload} totalMatches={data.matches} activeRoomId={activeRoomId} roomRole={activeRoomRole} />
     ) : page === "ranking" ? (
       <RankingPage data={data} players={players} />
     ) : page === "championships" ? (
-      <ChampionshipPage players={players} teams={teams} />
+      <ChampionshipPage players={players} teams={teams} activeRoomId={activeRoomId} roomRole={activeRoomRole} />
     ) : page === "profile" ? (
       <ProfilePage
         onEditProfile={() => {

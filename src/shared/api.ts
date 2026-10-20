@@ -65,6 +65,7 @@ export type AuthSignUpResult = {
 };
 
 export type Api = {
+  getRoomMemberRole: (roomId: string) => Promise<"owner" | "admin" | "participant" | null>;
   listRoomMembers: (roomId: string) => Promise<Array<{ userId: string; role: string; displayName: string; username: string | null; avatarUrl: string | null }>>;
   promoteRoomAdmin: (roomId: string, userId: string) => Promise<void>;
   removeRoomMember: (roomId: string, userId: string) => Promise<void>;
@@ -75,6 +76,7 @@ export type Api = {
   leaveRoom: (roomId: string) => Promise<void>;
   createRoom: (name: string) => Promise<{ id: string; name: string; entryCode: string }>;
   listMyRooms: () => Promise<Array<{ id: string; name: string; role: string; entryCode: string; memberCount: number }>>;
+  setActiveRoom: (roomId: string | null) => Promise<{ ok: boolean }>;
   joinRoom: (code: string) => Promise<{ roomId: string | null }>;
   getProfile: () => Promise<UserProfile>;
   isUsernameAvailable: (username: string) => Promise<boolean>;
@@ -94,11 +96,11 @@ export type Api = {
   dashboard: () => Promise<Dashboard>;
   arenaNews: () => Promise<ArenaNews[]>;
   players: () => Promise<Player[]>;
-  savePlayer: (player: Partial<Player>) => Promise<Player>;
+  savePlayer: (player: Partial<Player>, roomId: string | null) => Promise<Player>;
   deletePlayer: (id: number) => Promise<void>;
   teams: (query?: string) => Promise<Team[]>;
   matches: () => Promise<Match[]>;
-  saveMatch: (match: MatchInput) => Promise<number>;
+  saveMatch: (match: MatchInput, roomId: string | null) => Promise<number>;
   updateMatch: (match: MatchInput & { id: number }) => Promise<number>;
   deleteMatch: (id: number) => Promise<void>;
   clearMatches: () => Promise<void>;
@@ -113,7 +115,7 @@ export type Api = {
       // participantIds) — persistido, deixa de ser esquecido ao registrar
       // resultados.
       participantTeamIds?: (number | null)[];
-    },
+    }, roomId: string | null,
   ) => Promise<Championship>;
   updateChampionship: (id: number, name: string) => Promise<Championship>;
   deleteChampionship: (id: number) => Promise<void>;
