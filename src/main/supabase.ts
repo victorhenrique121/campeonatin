@@ -298,6 +298,21 @@ async function roomSessionClient(): Promise<SupabaseClient> {
   return client;
 }
 
+export async function getUserSessionClient(): Promise<SupabaseClient> {
+  const client = getUserAuthClient();
+  if (!client) throw new Error("Sua sessão expirou. Entre novamente para continuar.");
+  const { data, error } = await client.auth.getSession();
+  if (error || !data.session) throw new Error("Sua sessão expirou. Entre novamente para continuar.");
+  return client;
+}
+
+export async function getSessionUserId(): Promise<string | null> {
+  const client = getUserAuthClient();
+  if (!client) return null;
+  const { data, error } = await client.auth.getUser();
+  return error ? null : data.user?.id ?? null;
+}
+
 export async function createRoom(name: string): Promise<{ id: string; name: string; entryCode: string }> {
   const client = await roomSessionClient();
   const { data, error } = await client.rpc("create_room", { p_name: name });

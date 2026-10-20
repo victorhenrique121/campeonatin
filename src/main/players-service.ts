@@ -2,7 +2,7 @@ import type Database from "better-sqlite3";
 
 import type { Player } from "../shared/models";
 import type { repository } from "./repository";
-import { ensureAuthenticated, getSupabase, isNetworkErrorMessage } from "./supabase";
+import { getUserSessionClient, getSessionUserId, isNetworkErrorMessage } from "./supabase";
 
 /**
  * ============================================================================
@@ -10,12 +10,10 @@ import { ensureAuthenticated, getSupabase, isNetworkErrorMessage } from "./supab
  * local no SQLite.
  * ============================================================================
  * Decisões de projeto (aprovadas pelo usuário):
- *  - Autenticação: conta de serviço do app via Supabase Auth (RLS exige o
- *    papel 'authenticated'; escrita exige profile 'admin').
+ *  - Autenticação: sessão do usuário; autorização remota pelas políticas RLS.
  *  - Fallback: LEITURAS caem para o espelho SQLite quando o Supabase está
  *    indisponível; ESCRITAS/exclusões exigem Supabase (sem divergência).
- *  - Sem .env configurado: modo legado 100% SQLite (repository), idêntico ao
- *    comportamento anterior à Etapa 2.
+ *  - Sem sessão, escritas são recusadas; leituras podem usar o espelho local.
  *  - O espelho local mantém os MESMOS ids do Supabase, preservando as FKs e
  *    JOINs de matches/fixtures/championship_participants/ranking/dashboard,
  *    que continuam 100% SQLite nesta etapa.
@@ -100,7 +98,8 @@ function toFriendlyError(err: unknown): Error {
         "Não foi possível conectar ao Supabase. Verifique sua conexão com a internet e tente novamente.",
       );
     }
-    return err;
+    return err.message === "Sua sessão expirou. Entre novamente para continuar."
+      ? err : new Error("Não foi possível concluir a operação. Tente novamente.");
   }
   if (isPostgrestErrorLike(err)) {
     const code = err.code || "";
@@ -119,34 +118,31 @@ function toFriendlyError(err: unknown): Error {
     }
     if (code === "PGRST301") {
       return new Error(
-        "Sessão recusada pelo Supabase. Verifique as credenciais da conta de serviço (SUPABASE_APP_EMAIL/SUPABASE_APP_PASSWORD) no .env.",
+        "Sua sessão expirou. Entre novamente para continuar.",
       );
     }
     if (code === "42501" || /row-level security/i.test(err.message)) {
       return new Error(
-        "Permissão negada pelo Supabase (RLS). Confirme que o profile da conta de serviço tem papel 'admin' (veja supabase/SETUP.md).",
+        "Você não tem permissão para realizar esta ação.",
       );
     }
     if (code === "23503") {
-      return new Error(`Operação bloqueada por vínculos no Supabase: ${err.message}`);
+      return new Error("Não foi possível concluir a operação porque existem registros vinculados.");
     }
     if (isNetworkErrorMessage(err.message)) {
       return new Error(
         "Não foi possível conectar ao Supabase. Verifique sua conexão com a internet e tente novamente.",
       );
     }
-    return new Error(`Erro no Supabase: ${err.message}${code ? ` (código ${code})` : ""}`);
+    return new Error("Não foi possível concluir a operação. Tente novamente.");
   }
-  return new Error(`Erro inesperado ao acessar o Supabase: ${String(err)}`);
-}
-
-function isAuthRejection(err: unknown): boolean {
-  return isPostgrestErrorLike(err) && (err.code === "PGRST301" || err.code === "401");
+  return new Error("Não foi possível concluir a operação. Tente novamente.");
 }
 
 export function createPlayersService(
   db: Database.Database,
   repo: Repository,
+  roomId: string | null = null,
 ): PlayersService {
   // ---------------------------------------------------------------------------
   // Espelho local (SQLite): mesmos ids do Supabase. O schema de players NÃO foi
@@ -194,21 +190,10 @@ export function createPlayersService(
     db.transaction(() => mirrorUpsertRow(row))();
   };
 
-  /** Garante sessão autenticada; lança erro amigável quando impossível. */
-  async function requireAuth(): Promise<void> {
-    const auth = await ensureAuthenticated();
-    if (!auth.ok) throw new Error(auth.message);
-  }
-
-  /**
-   * Executa uma consulta Supabase com retry único: se a sessão for recusada
-   * (token expirado/revogado), força novo login e tenta outra vez.
-   * `make` precisa criar um builder NOVO a cada tentativa (builders são de uso único).
-   */
+  /** Executa uma consulta e converte falhas em mensagens amigáveis. */
   async function execWithAuthRetry<T>(
     make: () => PromiseLike<{ data: T | null; error: PostgrestErrorLike | null }>,
   ): Promise<T> {
-    await requireAuth();
     const run = async (): Promise<T> => {
       const { data, error } = await make();
       if (error) throw error;
@@ -217,15 +202,6 @@ export function createPlayersService(
     try {
       return await run();
     } catch (err) {
-      if (isAuthRejection(err)) {
-        const reauth = await ensureAuthenticated({ force: true });
-        if (!reauth.ok) throw new Error(reauth.message);
-        try {
-          return await run();
-        } catch (retryErr) {
-          throw toFriendlyError(retryErr);
-        }
-      }
       throw toFriendlyError(err);
     }
   }
@@ -235,12 +211,9 @@ export function createPlayersService(
   // ---------------------------------------------------------------------------
 
   async function list(): Promise<Player[]> {
-    const supabase = getSupabase();
-    if (!supabase) return repo.players(); // modo legado: 100% SQLite
-
     try {
-      // requireAuth acontece dentro de execWithAuthRetry; qualquer falha de
-      // rede/credencial cai no fallback gracioso de leitura (espelho local).
+      const supabase = await getUserSessionClient();
+      // Uma falha de sessão ou rede permite leitura pelo espelho local.
       const rows = await execWithAuthRetry<SupabasePlayerRow[]>(() =>
         supabase
           .from("players")
@@ -266,21 +239,25 @@ export function createPlayersService(
       throw new Error("Nome e apelido são obrigatórios.");
     }
 
-    const supabase = getSupabase();
-    if (!supabase) return repo.savePlayer({ ...player, name, nickname }); // modo legado
+    const supabase = await getUserSessionClient();
+    const userId = await getSessionUserId();
+    if (!userId) throw new Error("Sua sessão expirou. Entre novamente para continuar.");
+    if (roomId !== null) {
+      const { data: role, error } = await supabase.rpc("room_member_role", { p_room_id: roomId });
+      if (error || (role !== "owner" && role !== "admin")) {
+        throw new Error("Você não tem permissão para realizar esta ação.");
+      }
+    }
 
     const payload = { name, nickname, avatar: player.avatar ?? null };
 
     const result = player.id
-      ? await execWithAuthRetry<SupabasePlayerRow[] | SupabasePlayerRow>(() =>
-          supabase
-            .from("players")
-            .update(payload)
-            .eq("id", player.id as number)
-            .select(PLAYER_COLUMNS),
-        )
+      ? await execWithAuthRetry<SupabasePlayerRow[] | SupabasePlayerRow>(() => {
+          const query = supabase.from("players").update(payload).eq("id", player.id as number);
+          return (roomId === null ? query.is("room_id", null) : query.eq("room_id", roomId)).select(PLAYER_COLUMNS);
+        })
       : await execWithAuthRetry<SupabasePlayerRow[] | SupabasePlayerRow>(() =>
-          supabase.from("players").insert(payload).select(PLAYER_COLUMNS),
+          supabase.from("players").insert({ ...payload, room_id: roomId, created_by: userId }).select(PLAYER_COLUMNS),
         );
 
     // Defensivo: o PostgREST responde array, mas normalizamos por segurança.
@@ -298,30 +275,33 @@ export function createPlayersService(
   }
 
   async function remove(id: number): Promise<void> {
-    const supabase = getSupabase();
-    if (!supabase) {
-      repo.deletePlayer(id); // modo legado: cascata local, como antes
-      return;
+    const supabase = await getUserSessionClient();
+    if (roomId !== null) {
+      const { data: role, error } = await supabase.rpc("room_member_role", { p_room_id: roomId });
+      if (error || (role !== "owner" && role !== "admin")) {
+        throw new Error("Você não tem permissão para realizar esta ação.");
+      }
     }
 
     // Cascata remota: no schema Supabase, matches/fixtures referenciam players
     // com ON DELETE RESTRICT (assim como a UI local avisa que partidas e
     // participações serão removidas). championship_participants ainda não
     // existe no Supabase (championships continuam 100% SQLite nesta etapa).
-    await execWithAuthRetry<Array<{ id: number }>>(() =>
-      supabase.from("matches").delete().or(`player1_id.eq.${id},player2_id.eq.${id}`).select("id"),
-    );
-    await execWithAuthRetry<Array<{ id: number }>>(() =>
-      supabase.from("fixtures").delete().or(`player1_id.eq.${id},player2_id.eq.${id}`).select("id"),
-    );
+    await execWithAuthRetry<Array<{ id: number }>>(() => {
+      const query = supabase.from("matches").delete().or(`player1_id.eq.${id},player2_id.eq.${id}`);
+      return (roomId === null ? query.is("room_id", null) : query.eq("room_id", roomId)).select("id");
+    });
+    await execWithAuthRetry<Array<{ id: number }>>(() => {
+      const query = supabase.from("fixtures").delete().or(`player1_id.eq.${id},player2_id.eq.${id}`);
+      return (roomId === null ? query.is("room_id", null) : query.eq("room_id", roomId)).select("id");
+    });
 
-    const deleted = await execWithAuthRetry<SupabasePlayerRow[]>(() =>
-      supabase.from("players").delete().eq("id", id).select("id"),
-    );
+    const deleted = await execWithAuthRetry<SupabasePlayerRow[]>(() => {
+      const query = supabase.from("players").delete().eq("id", id);
+      return (roomId === null ? query.is("room_id", null) : query.eq("room_id", roomId)).select("id");
+    });
     if (!deleted || deleted.length === 0) {
-      console.warn(
-        `${LOG_PREFIX} Supabase não retornou linhas ao excluir id=${id} (pode já não existir remotamente). Seguindo com a exclusão local.`,
-      );
+      throw new Error("Jogador não encontrado ou sem permissão para excluí-lo.");
     }
 
     // Cascata local (idêntica à atual): remove matches, fixtures,
@@ -331,17 +311,7 @@ export function createPlayersService(
   }
 
   async function syncMirror(roomId: string | null): Promise<number> {
-    const supabase = getSupabase();
-    if (!supabase) {
-      if (roomId !== null) throw new Error("Não foi possível sincronizar os jogadores da sala.");
-      return 0;
-    }
-
-    const auth = await ensureAuthenticated();
-    if (!auth.ok) {
-      if (roomId !== null) throw new Error("Não foi possível sincronizar os jogadores da sala.");
-      return 0;
-    }
+    const supabase = await getUserSessionClient();
 
     let rows: SupabasePlayerRow[];
     try {

@@ -79,7 +79,7 @@ function switchRoom(roomId: string | null): Promise<void> {
     const db = createDatabase(dbPath(roomId));
     try {
       const repo = repository(db);
-      const next: RoomContext = { roomId, db, repo, players: createPlayersService(db, repo), matches: createMatchesService(db, repo), teams: createTeamsService(repo) };
+      const next: RoomContext = { roomId, db, repo, players: createPlayersService(db, repo, roomId), matches: createMatchesService(db, repo), teams: createTeamsService(repo) };
       if (roomId !== null) {
         await next.players.syncMirror(roomId);
         await getChampionships(db, roomId);
