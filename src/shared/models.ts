@@ -144,6 +144,8 @@ export type Fixture = {
   id: number;
   round: number;
   stage: string;
+  groupName?: string | null;
+  bracketPosition?: number | null;
   player1Id?: number | null;
   player2Id?: number | null;
   team1DuoId?: number | null;

@@ -30,6 +30,25 @@ const defaultGameRules: GameRulesSettings = {
   minimumBestFormMatches: 3,
 };
 
+export type KnockoutFixturePlan = {
+  roundNumber: number;
+  bracketPosition: number;
+  player1Id: number;
+  player2Id: number;
+};
+
+export type KnockoutByePlan = {
+  roundNumber: number;
+  position: number;
+  playerId: number;
+};
+
+export type KnockoutProgressPlan = {
+  fixtures: KnockoutFixturePlan[];
+  byes: KnockoutByePlan[];
+  finished: boolean;
+};
+
 export function createDatabase(file: string) {
   const db = new Database(file);
   db.pragma("foreign_keys = ON");
@@ -90,7 +109,7 @@ export function createDatabase(file: string) {
         };
         rebuild("fixtures", `CREATE TABLE fixtures_new (
           id INTEGER PRIMARY KEY, championship_id INTEGER NOT NULL REFERENCES championships(id) ON DELETE CASCADE,
-          round_number INTEGER NOT NULL, stage TEXT NOT NULL DEFAULT 'league',
+          round_number INTEGER NOT NULL, stage TEXT NOT NULL DEFAULT 'league', group_name TEXT, bracket_position INTEGER,
           player1_id INTEGER REFERENCES players(id) ON DELETE RESTRICT, player2_id INTEGER REFERENCES players(id) ON DELETE RESTRICT,
           match_id INTEGER UNIQUE REFERENCES matches(id) ON DELETE SET NULL,
           team1_duo_id INTEGER REFERENCES teams2v2(id) ON DELETE RESTRICT, team2_duo_id INTEGER REFERENCES teams2v2(id) ON DELETE RESTRICT,
@@ -116,6 +135,29 @@ export function createDatabase(file: string) {
       db.pragma("foreign_keys = ON");
     }
   }
+
+  const knockoutFixtureColumns = db.prepare("PRAGMA table_info(fixtures)").all() as {
+    name: string;
+  }[];
+  if (!knockoutFixtureColumns.some((column) => column.name === "group_name")) {
+    db.exec("ALTER TABLE fixtures ADD COLUMN group_name TEXT");
+  }
+  if (!knockoutFixtureColumns.some((column) => column.name === "bracket_position")) {
+    db.exec("ALTER TABLE fixtures ADD COLUMN bracket_position INTEGER");
+  }
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS knockout_byes (
+      id INTEGER PRIMARY KEY,
+      championship_id INTEGER NOT NULL REFERENCES championships(id) ON DELETE CASCADE,
+      round_number INTEGER NOT NULL CHECK(round_number > 0),
+      player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE RESTRICT,
+      position INTEGER NOT NULL CHECK(position > 0),
+      UNIQUE(championship_id, round_number, position),
+      UNIQUE(championship_id, round_number, player_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_knockout_byes_championship_round
+      ON knockout_byes(championship_id, round_number, position);
+  `);
 
   // Migração: remover campo 'rating' da tabela 'teams' se existir
   const teamsColumns = db.prepare("PRAGMA table_info(teams)").all() as {
@@ -237,55 +279,147 @@ export function repository(db: Database.Database) {
       16: "Oitavas de final",
       32: "Dezesseis-avos",
     })[playersInRound] ?? `Fase de ${playersInRound}`;
-  const advanceKnockout = (championshipId: number, completedRound: number) => {
-    const current = db
-      .prepare(
-        `SELECT f.id,f.player1_id player1Id,f.player2_id player2Id,m.score1 score1,m.score2 score2 FROM fixtures f JOIN matches m ON m.id=f.match_id WHERE f.championship_id=? AND f.round_number=? AND f.stage <> 'league' ORDER BY f.id`,
-      )
-      .all(championshipId, completedRound) as {
-      id: number;
-      player1Id: number;
-      player2Id: number;
-      score1: number;
-      score2: number;
-    }[];
-    if (!current.length || current.some((f) => f.score1 === f.score2))
-      throw new Error("Partidas eliminatórias não podem terminar empatadas.");
-    const total = db
-      .prepare(
-        `SELECT COUNT(*) count FROM fixtures WHERE championship_id=? AND round_number=? AND stage <> 'league'`,
-      )
-      .get(championshipId, completedRound) as { count: number };
-    if (current.length !== total.count) return;
-    if (current.length === 1) {
-      db.prepare("UPDATE championships SET status='finished' WHERE id=?").run(
-        championshipId,
-      );
-      return;
+  const knockoutPlan = (
+    entries: Array<{ playerId: number; position: number }>,
+    roundNumber: number,
+  ): KnockoutProgressPlan => {
+    const nextRound = roundNumber + 1;
+    const ordered = [...entries].sort((a, b) => a.position - b.position);
+    const fixtures: KnockoutFixturePlan[] = [];
+    const byes: KnockoutByePlan[] = [];
+    for (let index = 0; index < ordered.length; index += 2) {
+      const first = ordered[index];
+      const second = ordered[index + 1];
+      const position = Math.floor(index / 2) + 1;
+      if (first && second) {
+        fixtures.push({
+          roundNumber: nextRound,
+          bracketPosition: position,
+          player1Id: first.playerId,
+          player2Id: second.playerId,
+        });
+      } else if (first) {
+        byes.push({ roundNumber: nextRound, position, playerId: first.playerId });
+      }
     }
-    const nextRound = completedRound + 1;
-    const exists = db
-      .prepare(
-        "SELECT 1 FROM fixtures WHERE championship_id=? AND round_number=? LIMIT 1",
+    return { fixtures, byes, finished: false };
+  };
+
+  const groupStanding = (championshipId: number, groupName: string) =>
+    db.prepare(`
+      WITH group_players AS (
+        SELECT player1_id player_id FROM fixtures
+        WHERE championship_id=? AND stage='league' AND group_name=?
+        UNION
+        SELECT player2_id FROM fixtures
+        WHERE championship_id=? AND stage='league' AND group_name=?
+      ), results AS (
+        SELECT f.player1_id player_id, m.score1 gf, m.score2 ga
+        FROM fixtures f JOIN matches m ON m.id=f.match_id
+        WHERE f.championship_id=? AND f.stage='league' AND f.group_name=?
+        UNION ALL
+        SELECT f.player2_id, m.score2, m.score1
+        FROM fixtures f JOIN matches m ON m.id=f.match_id
+        WHERE f.championship_id=? AND f.stage='league' AND f.group_name=?
+      ), aggregate AS (
+        SELECT player_id, COUNT(*) played,
+          SUM(CASE WHEN gf>ga THEN 1 ELSE 0 END) wins,
+          SUM(CASE WHEN gf=ga THEN 1 ELSE 0 END) draws,
+          SUM(CASE WHEN gf<ga THEN 1 ELSE 0 END) losses,
+          SUM(gf) goals_for, SUM(ga) goals_against
+        FROM results GROUP BY player_id
       )
-      .get(championshipId, nextRound);
-    if (exists) return;
-    const winners = current.map((f) =>
-      f.score1 > f.score2 ? f.player1Id : f.player2Id,
-    );
-    const insert = db.prepare(
-      "INSERT INTO fixtures(championship_id,round_number,stage,player1_id,player2_id) VALUES (?,?,?,?,?)",
-    );
-    winners.forEach((winner, index) => {
-      if (index % 2 === 0)
-        insert.run(
-          championshipId,
-          nextRound,
-          knockoutStage(winners.length),
-          winner,
-          winners[index + 1],
-        );
-    });
+      SELECT gp.player_id id
+      FROM group_players gp
+      LEFT JOIN aggregate a ON a.player_id=gp.player_id
+      ORDER BY ${pointsExpression(gameRules())} DESC,
+        (COALESCE(a.goals_for,0)-COALESCE(a.goals_against,0)) DESC,
+        COALESCE(a.goals_for,0) DESC,
+        gp.player_id ASC
+    `).all(
+      championshipId, groupName, championshipId, groupName,
+      championshipId, groupName, championshipId, groupName,
+    ) as Array<{ id: number }>;
+
+  const advanceToKnockout = (championshipId: number): KnockoutProgressPlan | null => {
+    const championship = db.prepare("SELECT format FROM championships WHERE id=?").get(championshipId) as { format: string } | undefined;
+    if (championship?.format !== "groups_knockout") return null;
+    const progress = db.prepare(`
+      SELECT COUNT(*) total, SUM(CASE WHEN match_id IS NOT NULL THEN 1 ELSE 0 END) completed
+      FROM fixtures WHERE championship_id=? AND stage='league'
+    `).get(championshipId) as { total: number; completed: number | null };
+    if (!progress.total || progress.total !== (progress.completed ?? 0)) return null;
+    const knockoutExists = db.prepare("SELECT 1 FROM fixtures WHERE championship_id=? AND stage='knockout' LIMIT 1").get(championshipId)
+      || db.prepare("SELECT 1 FROM knockout_byes WHERE championship_id=? LIMIT 1").get(championshipId);
+    if (knockoutExists) return null;
+
+    const groups = db.prepare(`
+      SELECT DISTINCT group_name groupName FROM fixtures
+      WHERE championship_id=? AND stage='league' AND group_name IS NOT NULL
+      ORDER BY group_name
+    `).all(championshipId) as Array<{ groupName: string }>;
+    if (!groups.length) return null;
+    const rankings = groups.map((group) => ({ ...group, players: groupStanding(championshipId, group.groupName) }));
+    const qualifiers = rankings.length === 1
+      ? rankings[0].players.slice(0, Math.min(3, rankings[0].players.length)).map((player) => player.id)
+      : [
+        rankings[0]?.players[0], rankings[1]?.players[0],
+        rankings[0]?.players[1], rankings[1]?.players[1],
+      ].filter((player): player is { id: number } => Boolean(player)).map((player) => player.id);
+    if (qualifiers.length < 2) return null;
+
+    const bracketSize = 2 ** Math.ceil(Math.log2(qualifiers.length));
+    const firstRound = ({ 2: 4, 4: 3, 8: 2, 16: 1 } as Record<number, number>)[bracketSize];
+    const seeded = [...qualifiers, ...Array<number | null>(bracketSize - qualifiers.length).fill(null)];
+    const entries: Array<{ playerId: number; position: number }> = [];
+    const fixtures: KnockoutFixturePlan[] = [];
+    const byes: KnockoutByePlan[] = [];
+    for (let index = 0; index < bracketSize / 2; index++) {
+      const first = seeded[index];
+      const second = seeded[bracketSize - 1 - index];
+      const position = index + 1;
+      if (first !== null && second !== null) {
+        fixtures.push({ roundNumber: firstRound, bracketPosition: position, player1Id: first, player2Id: second });
+      } else if (first !== null) {
+        byes.push({ roundNumber: firstRound, position, playerId: first });
+      }
+    }
+    // Três classificados formam uma semifinal entre 2º e 3º; o líder recebe
+    // o bye registrado e entra diretamente na final quando a semifinal acabar.
+    return { fixtures, byes, finished: false };
+  };
+
+  const advanceKnockout = (championshipId: number, completedRound: number): KnockoutProgressPlan | null => {
+    const fixtures = db.prepare(`
+      SELECT f.player1_id player1Id, f.player2_id player2Id, f.bracket_position bracketPosition,
+             m.score1 score1, m.score2 score2
+      FROM fixtures f LEFT JOIN matches m ON m.id=f.match_id
+      WHERE f.championship_id=? AND f.round_number=? AND f.stage='knockout'
+      ORDER BY f.bracket_position, f.id
+    `).all(championshipId, completedRound) as Array<{
+      player1Id: number; player2Id: number; bracketPosition: number | null;
+      score1: number | null; score2: number | null;
+    }>;
+    if (!fixtures.length || fixtures.some((fixture) => fixture.score1 == null || fixture.score2 == null)) return null;
+    if (fixtures.some((fixture) => fixture.score1 === fixture.score2)) {
+      throw new Error("Partidas eliminatórias não podem terminar empatadas.");
+    }
+    const nextExists = db.prepare("SELECT 1 FROM fixtures WHERE championship_id=? AND round_number=? AND stage='knockout' LIMIT 1")
+      .get(championshipId, completedRound + 1)
+      || db.prepare("SELECT 1 FROM knockout_byes WHERE championship_id=? AND round_number=? LIMIT 1")
+        .get(championshipId, completedRound + 1);
+    if (nextExists) return null;
+    const byes = db.prepare(`
+      SELECT player_id playerId, position FROM knockout_byes
+      WHERE championship_id=? AND round_number=? ORDER BY position
+    `).all(championshipId, completedRound) as Array<{ playerId: number; position: number }>;
+    const winners = fixtures.map((fixture, index) => ({
+      playerId: fixture.score1! > fixture.score2! ? fixture.player1Id : fixture.player2Id,
+      position: fixture.bracketPosition ?? index + 1,
+    }));
+    const entries = [...byes, ...winners];
+    if (entries.length === 1) return { fixtures: [], byes: [], finished: true };
+    return knockoutPlan(entries, completedRound);
   };
   const rankingSql = (settings: GameRulesSettings) => `WITH results AS (
     SELECT player1_id player_id, score1 gf, score2 ga FROM matches UNION ALL SELECT player2_id, score2, score1 FROM matches
@@ -661,6 +795,32 @@ export function repository(db: Database.Database) {
         .get(championshipId) as { total: number; played: number };
       return counts.total > 0 && counts.total === counts.played;
     },
+    advanceToKnockout,
+    advanceKnockout,
+    applyKnockoutProgress: (
+      championshipId: number,
+      fixtures: Array<KnockoutFixturePlan & { id: number }>,
+      byes: Array<KnockoutByePlan & { id: number }>,
+    ) => {
+      const insertFixture = db.prepare(`
+        INSERT OR IGNORE INTO fixtures
+          (id, championship_id, stage, round_number, player1_id, player2_id, bracket_position)
+        VALUES (?, ?, 'knockout', ?, ?, ?, ?)
+      `);
+      const insertBye = db.prepare(`
+        INSERT OR IGNORE INTO knockout_byes
+          (id, championship_id, round_number, player_id, position)
+        VALUES (?, ?, ?, ?, ?)
+      `);
+      db.transaction(() => {
+        for (const fixture of fixtures) {
+          insertFixture.run(fixture.id, championshipId, fixture.roundNumber, fixture.player1Id, fixture.player2Id, fixture.bracketPosition);
+        }
+        for (const bye of byes) {
+          insertBye.run(bye.id, championshipId, bye.roundNumber, bye.playerId, bye.position);
+        }
+      })();
+    },
     saveGameRules: (settings: GameRulesSettings) => {
       const validSettings = validateGameRules(settings);
       const save = db.prepare(
@@ -847,8 +1007,6 @@ export function repository(db: Database.Database) {
             id,
             fixture.id,
           );
-          if (fixture.stage !== "league")
-            advanceKnockout(championshipId!, fixture.round);
         }
         return id;
       });
@@ -1038,7 +1196,7 @@ export function repository(db: Database.Database) {
         : db.prepare(championshipRankingSql(gameRules())).all(id, id, id) as Standing[];
       const fixtures = championship.mode === "duo" ? db
         .prepare(`
-          SELECT f.id, f.round_number round, f.stage,
+          SELECT f.id, f.round_number round, f.stage, f.group_name groupName, f.bracket_position bracketPosition,
                  f.player1_id player1Id, f.player2_id player2Id,
                  f.team1_duo_id team1DuoId, f.team2_duo_id team2DuoId,
                  p1.name || ' & ' || p2.name player1,
@@ -1057,7 +1215,7 @@ export function repository(db: Database.Database) {
         `)
         .all(id) : db
         .prepare(
-          `SELECT f.id,f.round_number round,f.stage,f.player1_id player1Id,f.player2_id player2Id,p1.name player1,p2.name player2,f.match_id matchId,m.score1 score1,m.score2 score2,cp1.team_id team1Id,t1.name team1,cp2.team_id team2Id,t2.name team2 FROM fixtures f JOIN players p1 ON p1.id=f.player1_id JOIN players p2 ON p2.id=f.player2_id LEFT JOIN matches m ON m.id=f.match_id LEFT JOIN championship_participants cp1 ON cp1.championship_id=f.championship_id AND cp1.player_id=f.player1_id LEFT JOIN teams t1 ON t1.id=cp1.team_id LEFT JOIN championship_participants cp2 ON cp2.championship_id=f.championship_id AND cp2.player_id=f.player2_id LEFT JOIN teams t2 ON t2.id=cp2.team_id WHERE f.championship_id=? ORDER BY f.round_number,f.id`,
+          `SELECT f.id,f.round_number round,f.stage,f.group_name groupName,f.bracket_position bracketPosition,f.player1_id player1Id,f.player2_id player2Id,p1.name player1,p2.name player2,f.match_id matchId,m.score1 score1,m.score2 score2,cp1.team_id team1Id,t1.name team1,cp2.team_id team2Id,t2.name team2 FROM fixtures f JOIN players p1 ON p1.id=f.player1_id JOIN players p2 ON p2.id=f.player2_id LEFT JOIN matches m ON m.id=f.match_id LEFT JOIN championship_participants cp1 ON cp1.championship_id=f.championship_id AND cp1.player_id=f.player1_id LEFT JOIN teams t1 ON t1.id=cp1.team_id LEFT JOIN championship_participants cp2 ON cp2.championship_id=f.championship_id AND cp2.player_id=f.player2_id LEFT JOIN teams t2 ON t2.id=cp2.team_id WHERE f.championship_id=? ORDER BY f.round_number,f.bracket_position,f.id`,
         )
         .all(id);
       return { championship, standing, fixtures };

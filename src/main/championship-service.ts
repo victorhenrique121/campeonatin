@@ -308,15 +308,95 @@ export async function saveChampionship(
     }
   }
 
-  const fixtures: Array<{ championship_id: number; room_id: string | null; created_by: string; stage: string; round_number: number; player1_id: number | null; player2_id: number | null; team1_duo_id?: number; team2_duo_id?: number }> = [];
-  const p = isDuo ? duoIds : payload.participantIds;
-  let roundNum = 1;
-  for (let i = 0; i < p.length; i++) {
-    for (let j = i + 1; j < p.length; j++) {
-      fixtures.push(isDuo
-        ? { championship_id: id, room_id: roomId, created_by: userId, stage: "league", round_number: roundNum, player1_id: null, player2_id: null, team1_duo_id: p[i], team2_duo_id: p[j] }
-        : { championship_id: id, room_id: roomId, created_by: userId, stage: "league", round_number: roundNum, player1_id: p[i], player2_id: p[j] });
-      roundNum++;
+  type FixtureInsert = {
+    championship_id: number;
+    room_id: string | null;
+    created_by: string;
+    stage: string;
+    round_number: number;
+    player1_id: number | null;
+    player2_id: number | null;
+    team1_duo_id?: number;
+    team2_duo_id?: number;
+    group_name?: string | null;
+    bracket_position?: number | null;
+  };
+  const fixtures: FixtureInsert[] = [];
+  const initialByes: Array<{
+    championship_id: number;
+    round_number: number;
+    player_id: number;
+    position: number;
+  }> = [];
+  const participants = isDuo ? duoIds : payload.participantIds;
+  const addFixture = (
+    firstParticipant: number,
+    secondParticipant: number,
+    stage: string,
+    roundNumber: number,
+    groupName: string | null = null,
+    bracketPosition: number | null = null,
+  ) => {
+    fixtures.push(isDuo
+      ? { championship_id: id, room_id: roomId, created_by: userId, stage, round_number: roundNumber, player1_id: null, player2_id: null, team1_duo_id: firstParticipant, team2_duo_id: secondParticipant, group_name: groupName, bracket_position: bracketPosition }
+      : { championship_id: id, room_id: roomId, created_by: userId, stage, round_number: roundNumber, player1_id: firstParticipant, player2_id: secondParticipant, group_name: groupName, bracket_position: bracketPosition });
+  };
+
+  if (payload.format === "knockout") {
+    const bracketSize = 2 ** Math.ceil(Math.log2(participants.length));
+    if (bracketSize > 16) {
+      throw new Error("O mata-mata suporta no máximo 16 participantes.");
+    }
+    const firstRoundNumber = ({ 2: 4, 4: 3, 8: 2, 16: 1 } as Record<number, number>)[bracketSize];
+    const seeds: Array<number | null> = [
+      ...participants,
+      ...Array<number | null>(bracketSize - participants.length).fill(null),
+    ];
+
+    if (isDuo && bracketSize !== participants.length) {
+      throw new Error("Mata-mata com bye no modo dupla estará disponível em breve.");
+    }
+    for (let index = 0; index < bracketSize / 2; index++) {
+      const firstParticipant = seeds[index];
+      const secondParticipant = seeds[bracketSize - 1 - index];
+
+      // A ordem recebida define o seeding: os primeiros colocados encontram os
+      // últimos. Quando houver bye, o seed avança sem gerar uma partida vazia.
+      if (firstParticipant !== null && secondParticipant !== null) {
+        addFixture(firstParticipant, secondParticipant, "knockout", firstRoundNumber, null, index + 1);
+      } else if (firstParticipant !== null) {
+        initialByes.push({ championship_id: id, round_number: firstRoundNumber, player_id: firstParticipant, position: index + 1 });
+      }
+    }
+  } else if (payload.format === "groups_knockout") {
+    if (isDuo) {
+      throw new Error("Grupos + mata-mata no modo dupla estará disponível em breve.");
+    }
+    // Até cinco participantes, um grupo é o formato mais equilibrado. A partir
+    // daí, a distribuição alternada preserva a diferença máxima de um jogador.
+    const groups = participants.length <= 5
+      ? [{ name: "Grupo A", participants }]
+      : ["Grupo A", "Grupo B"].map((name, groupIndex) => ({
+        name,
+        participants: participants.filter((_, index) => index % 2 === groupIndex),
+      }));
+    let roundNum = 1;
+    for (const group of groups) {
+      for (let first = 0; first < group.participants.length; first++) {
+        for (let second = first + 1; second < group.participants.length; second++) {
+          addFixture(group.participants[first], group.participants[second], "league", roundNum, group.name);
+          roundNum++;
+        }
+      }
+    }
+  } else {
+    // Liga inicia com todos contra todos.
+    let roundNum = 1;
+    for (let i = 0; i < participants.length; i++) {
+      for (let j = i + 1; j < participants.length; j++) {
+        addFixture(participants[i], participants[j], "league", roundNum);
+        roundNum++;
+      }
     }
   }
   let savedFixtures: Array<{
@@ -327,6 +407,8 @@ export async function saveChampionship(
     player2_id: number | null;
     team1_duo_id?: number | null;
     team2_duo_id?: number | null;
+    group_name?: string | null;
+    bracket_position?: number | null;
   }>;
   if (isDuo) {
     const { error } = await supabase.from("fixtures").insert(fixtures);
@@ -338,7 +420,7 @@ export async function saveChampionship(
       throw new Error("Não foi possível salvar os confrontos. O campeonato pode estar incompleto; confira antes de tentar novamente.");
     }
     const { data, error: readError } = await supabase.from("fixtures")
-      .select("id, stage, round_number, player1_id, player2_id, team1_duo_id, team2_duo_id")
+      .select("id, stage, round_number, player1_id, player2_id, team1_duo_id, team2_duo_id, group_name, bracket_position")
       .eq("championship_id", id);
     if (readError || !data) {
       if (readError?.code === "42703" && /team[12]_duo_id/i.test(readError.message)) {
@@ -354,12 +436,19 @@ export async function saveChampionship(
       throw new Error("Não foi possível salvar os confrontos. O campeonato pode estar incompleto; confira antes de tentar novamente.");
     }
     const { data, error: readError } = await supabase.from("fixtures")
-      .select("id, stage, round_number, player1_id, player2_id")
+      .select("id, stage, round_number, player1_id, player2_id, group_name, bracket_position")
       .eq("championship_id", id);
     if (readError || !data) {
       throw new Error("Não foi possível carregar os confrontos salvos. Confira o campeonato antes de tentar novamente.");
     }
     savedFixtures = data;
+  }
+
+  if (initialByes.length) {
+    const { error: byeError } = await supabase.from("knockout_byes").insert(initialByes);
+    if (byeError) {
+      throw new Error("Não foi possível registrar os avanços automáticos. O campeonato pode estar incompleto; confira antes de tentar novamente.");
+    }
   }
 
   db.transaction(() => {
@@ -379,11 +468,18 @@ export async function saveChampionship(
     }
 
     const fixStmt = db.prepare(`
-      INSERT INTO fixtures (id, championship_id, stage, round_number, player1_id, player2_id, team1_duo_id, team2_duo_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO fixtures (id, championship_id, stage, round_number, player1_id, player2_id, team1_duo_id, team2_duo_id, group_name, bracket_position)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     for (const fixture of savedFixtures) {
-      fixStmt.run(fixture.id, id, fixture.stage, fixture.round_number, fixture.player1_id, fixture.player2_id, fixture.team1_duo_id ?? null, fixture.team2_duo_id ?? null);
+      fixStmt.run(fixture.id, id, fixture.stage, fixture.round_number, fixture.player1_id, fixture.player2_id, fixture.team1_duo_id ?? null, fixture.team2_duo_id ?? null, fixture.group_name ?? null, fixture.bracket_position ?? null);
+    }
+    const byeStmt = db.prepare(`
+      INSERT INTO knockout_byes (championship_id, round_number, player_id, position)
+      VALUES (?, ?, ?, ?)
+    `);
+    for (const bye of initialByes) {
+      byeStmt.run(bye.championship_id, bye.round_number, bye.player_id, bye.position);
     }
   })();
 

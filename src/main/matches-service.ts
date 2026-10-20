@@ -301,6 +301,74 @@ export function createMatchesService(
     return err instanceof Error ? err : new Error(message);
   }
 
+  async function syncKnockoutProgress(
+    championshipId: number,
+    progress: ReturnType<typeof repo.advanceToKnockout>,
+  ): Promise<void> {
+    if (!progress) return;
+    const supabase = await getUserSessionClient();
+    const userId = await getSessionUserId();
+    if (!userId) throw new Error("Sua sessão expirou. Entre novamente para continuar.");
+
+    const remoteFixtures: Array<{
+      id: number;
+      roundNumber: number;
+      bracketPosition: number;
+      player1Id: number;
+      player2Id: number;
+    }> = [];
+    if (progress.fixtures.length) {
+      const { data, error } = await supabase.from("fixtures").insert(
+        progress.fixtures.map((fixture) => ({
+          championship_id: championshipId,
+          room_id: roomId,
+          created_by: userId,
+          stage: "knockout",
+          round_number: fixture.roundNumber,
+          bracket_position: fixture.bracketPosition,
+          player1_id: fixture.player1Id,
+          player2_id: fixture.player2Id,
+        })),
+      ).select("id, round_number, bracket_position, player1_id, player2_id");
+      if (error || !data) {
+        throw new Error("Não foi possível criar a próxima fase do mata-mata.");
+      }
+      remoteFixtures.push(...data.map((fixture) => ({
+        id: Number(fixture.id),
+        roundNumber: fixture.round_number,
+        bracketPosition: fixture.bracket_position,
+        player1Id: fixture.player1_id,
+        player2Id: fixture.player2_id,
+      })));
+    }
+
+    const remoteByes: Array<{ id: number; roundNumber: number; position: number; playerId: number }> = [];
+    if (progress.byes.length) {
+      const { data, error } = await supabase.from("knockout_byes").insert(
+        progress.byes.map((bye) => ({
+          championship_id: championshipId,
+          round_number: bye.roundNumber,
+          player_id: bye.playerId,
+          position: bye.position,
+        })),
+      ).select("id, round_number, position, player_id");
+      if (error || !data) {
+        throw new Error("Não foi possível registrar o avanço automático do mata-mata.");
+      }
+      remoteByes.push(...data.map((bye) => ({
+        id: Number(bye.id),
+        roundNumber: bye.round_number,
+        position: bye.position,
+        playerId: bye.player_id,
+      })));
+    }
+
+    repo.applyKnockoutProgress(championshipId, remoteFixtures, remoteByes);
+    if (progress.finished) {
+      await setChampionshipStatus(db, roomId, championshipId, "finished");
+    }
+  }
+
   async function save(m: MatchInput, requestedRoomId: string | null): Promise<number> {
     if (requestedRoomId !== roomId) {
       throw new Error("A sala selecionada foi alterada. Tente novamente.");
@@ -369,8 +437,8 @@ export function createMatchesService(
       // 3) Atualiza o match_id na fixture do Supabase (se for partida de campeonato)
       if (championshipId !== null) {
         const localFixture = db
-          .prepare("SELECT id FROM fixtures WHERE match_id = ?")
-          .get(remoteId) as { id: number } | undefined;
+          .prepare("SELECT id, stage, round_number roundNumber FROM fixtures WHERE match_id = ?")
+          .get(remoteId) as { id: number; stage: string; roundNumber: number } | undefined;
 
         if (localFixture) {
           const fixtureUpdate = supabase
@@ -381,6 +449,15 @@ export function createMatchesService(
             ? fixtureUpdate.is("room_id", null)
             : fixtureUpdate.eq("room_id", roomId));
           if (error) throw toFriendlyError(error);
+
+          const championship = db
+            .prepare("SELECT format FROM championships WHERE id=?")
+            .get(championshipId) as { format: string } | undefined;
+          if (localFixture.stage === "league" && championship?.format === "groups_knockout") {
+            await syncKnockoutProgress(championshipId, repo.advanceToKnockout(championshipId));
+          } else if (localFixture.stage === "knockout") {
+            await syncKnockoutProgress(championshipId, repo.advanceKnockout(championshipId, localFixture.roundNumber));
+          }
         }
       }
     } catch (err) {
