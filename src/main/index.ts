@@ -65,6 +65,9 @@ type RoomContext = {
 let currentContext: RoomContext | null = null;
 let contextQueue: Promise<void> = Promise.resolve();
 const dbPath = (roomId: string | null) => path.join(app.getPath("userData"), roomId ? `room-${roomId}.sqlite` : "fc-arena.sqlite");
+const windowIconPath = app.isPackaged
+  ? path.join(process.resourcesPath, "icon.ico")
+  : path.join(__dirname, "../../build/icon.ico");
 const SESSION_EXPIRED_MESSAGE = "Sua sessão expirou. Faça login novamente.";
 
 function enqueueContext<T>(operation: () => T | Promise<T>): Promise<T> {
@@ -148,7 +151,7 @@ function createWindow() {
     backgroundColor: "#0b1020",
     title: "FC Arena",
 
-    icon: path.join(__dirname, "../../src/midia/fcarena.png"),
+    icon: windowIconPath,
 
     webPreferences: {
       preload: path.join(__dirname, "../preload/index.js"),

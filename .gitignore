@@ -21,3 +21,5 @@ out/
 
 forge.config.js
 supabase/local_test/
+
+generate-icon.mjs

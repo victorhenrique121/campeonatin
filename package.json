@@ -21,6 +21,7 @@
     "migrate:matches": "node scripts/migrate-matches-to-supabase.mjs",
     "migrate:champions": "node scripts/migrate-champions-to-supabase.mjs",
     "test:stage2": "node scripts/dev-tests/run-stage2-tests.cjs",
+    "generate:icon": "node scripts/generate-icon.mjs",
     "start": "electron-forge start",
     "package": "electron-forge package",
     "make": "electron-forge make"
@@ -55,6 +56,8 @@
     "concurrently": "^10.0.5",
     "electron": "^43.2.0",
     "eslint": "^9.39.4",
+    "png-to-ico": "^3.0.2",
+    "sharp": "^0.35.5",
     "supabase": "^2.121.0",
     "typescript": "7.0.2",
     "vitest": "^4.0.18",
@@ -70,7 +73,7 @@
     ],
     "win": {
       "target": "nsis",
-      "icon": "src/midia/fcarena.png"
+      "icon": "build/icon.ico"
     },
     "mac": {
       "target": "dmg",
@@ -78,7 +81,7 @@
     },
     "linux": {
       "target": "AppImage",
-      "icon": "src/midia/fcarena-icon.png"
+      "icon": "src/midia/icon.ico"
     }
   }
 }
