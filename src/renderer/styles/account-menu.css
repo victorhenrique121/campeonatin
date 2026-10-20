@@ -3,12 +3,98 @@
    Etapa 2: navegação de Meu perfil / Configurações / Sair
    ========================================================= */
 
-.account-menu {
+.account-actions {
   position: fixed;
   top: 12px;
   right: 58px;
   z-index: 80;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.account-menu {
   width: min(270px, calc(100vw - 24px));
+}
+
+.notification-menu {
+  position: relative;
+}
+
+.notification-menu-trigger {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #26324b;
+  border-radius: 11px;
+  background: #0f1728e8;
+  color: #dfe5f3;
+  cursor: pointer;
+}
+
+.notification-menu-trigger:hover {
+  border-color: #354461;
+  background: #131d31f2;
+}
+
+.notification-badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  min-width: 17px;
+  height: 17px;
+  display: grid;
+  place-items: center;
+  border: 2px solid #0f1728;
+  border-radius: 999px;
+  background: #ef476f;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.notification-menu-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: min(340px, calc(100vw - 24px));
+  padding: 10px;
+  border: 1px solid #293653;
+  border-radius: 12px;
+  background: #0f1728f7;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, .38);
+  backdrop-filter: blur(16px);
+}
+
+.notification-menu-head {
+  padding: 2px 2px 8px;
+  color: #e7ebf4;
+  font-size: 13px;
+}
+
+.notification-empty,
+.notification-item p,
+.notification-menu-panel [role="alert"] {
+  margin: 0;
+  color: #aeb9cb;
+  font-size: 12px;
+}
+
+.notification-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 2px;
+  border-top: 1px solid #253148;
+}
+
+.notification-item .primary {
+  flex: 0 0 auto;
+  padding: 7px 10px;
+  font-size: 11px;
 }
 
 .account-menu-trigger {
@@ -178,13 +264,15 @@
   margin-left: auto;
 }
 
-body.arena-light .account-menu-trigger {
+body.arena-light .account-menu-trigger,
+body.arena-light .notification-menu-trigger {
   border-color: #dbe2ee;
   background: #ffffffee;
   color: #182033;
 }
 
-body.arena-light .account-menu-trigger:hover {
+body.arena-light .account-menu-trigger:hover,
+body.arena-light .notification-menu-trigger:hover {
   border-color: #cbd5e5;
   background: #fff;
 }
@@ -201,6 +289,26 @@ body.arena-light .account-menu-panel {
   border-color: #dbe2ee;
   background: #fffffff5;
   box-shadow: 0 18px 50px rgba(31, 43, 68, .18);
+}
+
+body.arena-light .notification-menu-panel {
+  border-color: #dbe2ee;
+  background: #fffffff5;
+  box-shadow: 0 18px 50px rgba(31, 43, 68, .18);
+}
+
+body.arena-light .notification-menu-head {
+  color: #182033;
+}
+
+body.arena-light .notification-empty,
+body.arena-light .notification-item p,
+body.arena-light .notification-menu-panel [role="alert"] {
+  color: #647089;
+}
+
+body.arena-light .notification-item {
+  border-color: #e1e6ef;
 }
 
 body.arena-light .account-menu-panel button {
@@ -220,9 +328,12 @@ body.arena-light .profile-placeholder-card strong {
 }
 
 @media (max-width: 650px) {
-  .account-menu {
+  .account-actions {
     right: 12px;
-    width: min(250px, calc(100vw - 24px));
+  }
+
+  .account-menu {
+    width: min(250px, calc(100vw - 76px));
   }
 
   .account-menu-identity {

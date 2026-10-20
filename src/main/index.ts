@@ -21,9 +21,21 @@ import {
   listMyRooms,
   joinRoom,
   getAuthSession,
+  addFriend,
+  blockUser,
+  findFriendByUsername,
+  listFriends,
+  listBlockedUsers,
+  listUnreadNotifications,
+  markNotificationRead,
+  removeFriend,
+  sendRoomInvite,
+  unblockUser,
   getEmailSettings,
   getProfile,
+  getUserSessionClient,
   isUsernameAvailable,
+  refreshUserSession,
   updateProfile,
   initSupabase,
   resendEmailChangeConfirmation,
@@ -53,6 +65,7 @@ type RoomContext = {
 let currentContext: RoomContext | null = null;
 let contextQueue: Promise<void> = Promise.resolve();
 const dbPath = (roomId: string | null) => path.join(app.getPath("userData"), roomId ? `room-${roomId}.sqlite` : "fc-arena.sqlite");
+const SESSION_EXPIRED_MESSAGE = "Sua sessão expirou. Faça login novamente.";
 
 function enqueueContext<T>(operation: () => T | Promise<T>): Promise<T> {
   const result = contextQueue.then(operation);
@@ -67,12 +80,26 @@ function withContext<T>(operation: (context: RoomContext) => T | Promise<T>): Pr
   });
 }
 
+async function ensureRoomSession(): Promise<void> {
+  try {
+    await getUserSessionClient();
+  } catch {
+    try {
+      await refreshUserSession();
+      await getUserSessionClient();
+    } catch {
+      throw new Error(SESSION_EXPIRED_MESSAGE);
+    }
+  }
+}
+
 function switchRoom(roomId: string | null): Promise<void> {
   return enqueueContext(async () => {
     if (roomId !== null) {
       if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(roomId)) {
         throw new Error("Sala inválida.");
       }
+      await ensureRoomSession();
       const rooms = await listMyRooms();
       if (!rooms.some((room) => room.id === roomId)) throw new Error("Você não tem acesso a esta sala.");
     }
@@ -146,6 +173,16 @@ app.whenReady().then(async () => {
   ipcMain.handle("rooms:delete", (_, roomId: string) => deleteRoom(roomId));
   ipcMain.handle("rooms:leave", (_, roomId: string) => leaveRoom(roomId));
   ipcMain.handle("profile:get", () => getProfile());
+  ipcMain.handle("friends:find", (_, username: string) => findFriendByUsername(username));
+  ipcMain.handle("friends:add", (_, username: string) => addFriend(username));
+  ipcMain.handle("friends:list", () => listFriends());
+  ipcMain.handle("friends:remove", (_, friendId: string) => removeFriend(friendId));
+  ipcMain.handle("friends:block", (_, userId: string) => blockUser(userId));
+  ipcMain.handle("friends:blocked", () => listBlockedUsers());
+  ipcMain.handle("friends:unblock", (_, userId: string) => unblockUser(userId));
+  ipcMain.handle("notifications:list-unread", () => listUnreadNotifications());
+  ipcMain.handle("notifications:mark-read", (_, notificationId: number) => markNotificationRead(notificationId));
+  ipcMain.handle("notifications:send-room-invite", (_, friendId: string, roomId: string) => sendRoomInvite(friendId, roomId));
   ipcMain.handle("profile:username-available", (_, username) =>
     isUsernameAvailable(username),
   );

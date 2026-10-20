@@ -19,6 +19,7 @@ import { createRoot } from "react-dom/client";
 import {
   ArrowRight,
   BarChart3,
+  Bell,
   CalendarDays,
   Check,
   Clipboard,
@@ -179,6 +180,12 @@ const Toast = ({ message }: { message: string }) =>
     </div>
   ) : null;
 
+const SESSION_EXPIRED_MESSAGE = "Sua sessão expirou. Faça login novamente.";
+
+function isSessionExpiredError(error: unknown): boolean {
+  return error instanceof Error && error.message.toLocaleLowerCase().includes("sessão expirou");
+}
+
 function useToast() {
   const [toast, setToast] = useState("");
   const timer = useRef<number | undefined>(undefined);
@@ -281,21 +288,336 @@ function Game({
   );
 }
 
-function FriendsPage() {
+function FriendsPage({ activeRoomId }: { activeRoomId: string | null }) {
+  const [username, setUsername] = useState("");
+  const [friends, setFriends] = useState<Awaited<ReturnType<typeof window.arena.listFriends>>>([]);
+  const [blockedUsers, setBlockedUsers] = useState<Awaited<ReturnType<typeof window.arena.listBlockedUsers>>>([]);
+  const [searchResult, setSearchResult] = useState<Awaited<ReturnType<typeof window.arena.findFriendByUsername>> | null>(null);
+  const [viewingFriend, setViewingFriend] = useState<Awaited<ReturnType<typeof window.arena.findFriendByUsername>> | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [searching, setSearching] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [invitingFriendId, setInvitingFriendId] = useState<string | null>(null);
+  const [friendActionId, setFriendActionId] = useState<string | null>(null);
+  const { toast, showToast } = useToast();
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+
+  const loadFriends = async () => {
+    setLoading(true);
+    try {
+      const [friendList, blockedList] = await Promise.all([
+        window.arena.listFriends(),
+        window.arena.listBlockedUsers(),
+      ]);
+      setFriends(friendList);
+      setBlockedUsers(blockedList);
+      setError("");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Não foi possível carregar seus amigos.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadFriends();
+  }, []);
+
+  const searchFriend = async (event: FormEvent) => {
+    event.preventDefault();
+    const value = username.trim();
+    if (!value) {
+      setError("Informe o @username da pessoa.");
+      return;
+    }
+
+    setSearching(true);
+    setError("");
+    setSuccess("");
+    setSearchResult(null);
+    try {
+      const result = await window.arena.findFriendByUsername(value);
+      if (!result) {
+        setError("Usuário não encontrado.");
+        return;
+      }
+      setSearchResult(result);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Não foi possível procurar o usuário.");
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const addFriend = async () => {
+    if (!searchResult?.username) return;
+
+    setAdding(true);
+    setError("");
+    setSuccess("");
+    try {
+      const friend = await window.arena.addFriend(searchResult.username);
+      setUsername("");
+      setSearchResult(null);
+      setSuccess(`${friend.displayName} foi adicionado(a) aos seus amigos.`);
+      await loadFriends();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Não foi possível adicionar o amigo.");
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  const removeFriend = async (friendId: string) => {
+    setFriendActionId(friendId);
+    setError("");
+    setSuccess("");
+    try {
+      await window.arena.removeFriend(friendId);
+      if (viewingFriend?.id === friendId) setViewingFriend(null);
+      setSuccess("Amigo removido da sua lista.");
+      await loadFriends();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Não foi possível remover o amigo.");
+    } finally {
+      setFriendActionId(null);
+    }
+  };
+
+  const blockUser = async (userId: string) => {
+    setFriendActionId(userId);
+    setError("");
+    setSuccess("");
+    try {
+      await window.arena.blockUser(userId);
+      if (searchResult?.id === userId) setSearchResult(null);
+      if (viewingFriend?.id === userId) setViewingFriend(null);
+      setSuccess("Usuário bloqueado.");
+      await loadFriends();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Não foi possível bloquear o usuário.");
+    } finally {
+      setFriendActionId(null);
+    }
+  };
+
+  const unblockUser = async (userId: string) => {
+    setFriendActionId(userId);
+    setError("");
+    setSuccess("");
+    try {
+      await window.arena.unblockUser(userId);
+      if (viewingFriend?.id === userId) setViewingFriend(null);
+      setSuccess("Usuário desbloqueado.");
+      await loadFriends();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Não foi possível desbloquear o usuário.");
+    } finally {
+      setFriendActionId(null);
+    }
+  };
+
+  const inviteFriend = async (friend: Awaited<ReturnType<typeof window.arena.listFriends>>[number]) => {
+    if (!activeRoomId) return;
+
+    setInvitingFriendId(friend.id);
+    setError("");
+    try {
+      await window.arena.sendRoomInvite(friend.id, activeRoomId);
+      showToast(`Convite enviado para @${friend.username ?? friend.displayName}`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Não foi possível enviar o convite.");
+    } finally {
+      setInvitingFriendId(null);
+    }
+  };
+
+  const resultAlreadyFriend = Boolean(searchResult && friends.some((friend) => friend.id === searchResult.id));
+  const isBlocked = (userId: string) => blockedUsers.some((blockedUser) => blockedUser.id === userId);
+
   return (
-    <section className="page-title">
-      <div>
-        <h1>Amigos</h1>
-        <span>Em breve: adicionar amigos e convidar para salas.</span>
-      </div>
-    </section>
+    <>
+      <section className="page-title">
+        <div>
+          <p>COMUNIDADE</p>
+          <h1>Amigos</h1>
+          <span>Adicione amigos pelo @username para encontrá-los mais rápido.</span>
+        </div>
+      </section>
+      <section className="grid players-layout">
+        <article className="panel">
+          <div className="panel-head">
+            <h2>Adicionar amigo</h2>
+          </div>
+          <form className="form" onSubmit={searchFriend}>
+            <label>
+              @username
+              <input
+                value={username}
+                onChange={(event) => setUsername(event.target.value)}
+                placeholder="@nome_do_amigo"
+                autoComplete="off"
+              />
+            </label>
+            <button className="primary" type="submit" disabled={searching || adding}>
+              {searching ? "Buscando..." : "Buscar"}
+            </button>
+          </form>
+          {searchResult && (
+            <div className="player-card">
+              {searchResult.avatarUrl ? (
+                <img src={searchResult.avatarUrl} alt="" width={27} height={27} />
+              ) : (
+                <i>{searchResult.displayName.slice(0, 1).toUpperCase()}</i>
+              )}
+              <div>
+                <small>Resultado da busca</small>
+                <b>{searchResult.displayName}</b>
+                {searchResult.username && <small>@{searchResult.username}</small>}
+              </div>
+              <button type="button" className="secondary-button" onClick={() => setViewingFriend(searchResult)}>
+                Ver perfil
+              </button>
+              <button type="button" className="primary" onClick={() => void addFriend()} disabled={adding || resultAlreadyFriend}>
+                {resultAlreadyFriend ? "Já é seu amigo" : adding ? "Adicionando..." : "Adicionar amigo"}
+              </button>
+              <button
+                type="button"
+                className="danger"
+                onClick={() => void (isBlocked(searchResult.id) ? unblockUser(searchResult.id) : blockUser(searchResult.id))}
+                disabled={friendActionId === searchResult.id}
+              >
+                <Ban size={14} /> {friendActionId === searchResult.id ? "Atualizando..." : isBlocked(searchResult.id) ? "Desbloquear" : "Bloquear"}
+              </button>
+            </div>
+          )}
+          {success && <p role="status">{success}</p>}
+          {error && <p role="alert">{error}</p>}
+        </article>
+        <article className="panel wide">
+          <div className="panel-head">
+            <h2>Meus amigos</h2>
+          </div>
+          {loading ? (
+            <p role="status">Carregando amigos...</p>
+          ) : friends.length === 0 ? (
+            <Empty text="Você ainda não adicionou nenhum amigo." />
+          ) : (
+            <div className="cards players-list">
+              {friends.map((friend) => (
+                <div className="player-card" key={friend.id}>
+                  {friend.avatarUrl ? (
+                    <img src={friend.avatarUrl} alt="" width={27} height={27} />
+                  ) : (
+                    <i>{friend.displayName.slice(0, 1).toUpperCase()}</i>
+                  )}
+                  <div>
+                    <b>{friend.displayName}</b>
+                    {friend.username && <small>@{friend.username}</small>}
+                  </div>
+                  <button type="button" className="secondary-button" onClick={() => setViewingFriend(friend)}>
+                    Ver perfil
+                  </button>
+                  {activeRoomId && (
+                    <button
+                      type="button"
+                      className="primary"
+                      onClick={() => void inviteFriend(friend)}
+                      disabled={invitingFriendId === friend.id}
+                    >
+                      {invitingFriendId === friend.id ? "Enviando..." : "Convidar para a sala atual"}
+                    </button>
+                  )}
+                  <button type="button" className="secondary-button" onClick={() => void removeFriend(friend.id)} disabled={friendActionId === friend.id}>
+                    <Trash2 size={14} /> {friendActionId === friend.id ? "Removendo..." : "Remover amigo"}
+                  </button>
+                  <button
+                    type="button"
+                    className="danger"
+                    onClick={() => void (isBlocked(friend.id) ? unblockUser(friend.id) : blockUser(friend.id))}
+                    disabled={friendActionId === friend.id}
+                  >
+                    <Ban size={14} /> {friendActionId === friend.id ? "Atualizando..." : isBlocked(friend.id) ? "Desbloquear" : "Bloquear"}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="panel-head">
+            <h2>Usuários Bloqueados</h2>
+          </div>
+          {loading ? (
+            <p className="muted">Carregando usuários bloqueados...</p>
+          ) : blockedUsers.length === 0 ? (
+            <Empty text="Nenhum usuário bloqueado." />
+          ) : (
+            <div className="cards compact-cards">
+              {blockedUsers.map((blockedUser) => (
+                <div className="player-card" key={blockedUser.id}>
+                  {blockedUser.avatarUrl ? (
+                    <img src={blockedUser.avatarUrl} alt="" width={27} height={27} />
+                  ) : (
+                    <i>{blockedUser.displayName.slice(0, 1).toUpperCase()}</i>
+                  )}
+                  <div>
+                    <b>{blockedUser.displayName}</b>
+                    {blockedUser.username && <small>@{blockedUser.username}</small>}
+                  </div>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => void unblockUser(blockedUser.id)}
+                    disabled={friendActionId === blockedUser.id}
+                  >
+                    <Ban size={14} /> {friendActionId === blockedUser.id ? "Desbloqueando..." : "Desbloquear"}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </article>
+      </section>
+      <Toast message={toast} />
+      {viewingFriend && (
+        <div className="app-modal-backdrop" onMouseDown={() => setViewingFriend(null)}>
+          <section
+            className="app-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="friend-profile-title"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="panel-head">
+              <h2 id="friend-profile-title">Perfil</h2>
+              <button type="button" className="secondary-button" onClick={() => setViewingFriend(null)}>
+                Fechar
+              </button>
+            </div>
+            <div className="player-card">
+              {viewingFriend.avatarUrl ? (
+                <img src={viewingFriend.avatarUrl} alt="" width={27} height={27} />
+              ) : (
+                <i>{viewingFriend.displayName.slice(0, 1).toUpperCase()}</i>
+              )}
+              <div>
+                <b>{viewingFriend.displayName}</b>
+                {viewingFriend.username && <small>@{viewingFriend.username}</small>}
+              </div>
+            </div>
+            <p>Este é o perfil público disponível para seus amigos.</p>
+          </section>
+        </div>
+      )}
+    </>
   );
 }
 
-function RoomsPage({ activeRoomId, setActiveRoomId, switchingRoom }: {
+function RoomsPage({ activeRoomId, setActiveRoomId, switchingRoom, refreshKey }: {
   activeRoomId: string | null;
   setActiveRoomId: React.Dispatch<React.SetStateAction<string | null>>;
   switchingRoom: boolean;
+  refreshKey: number;
 }) {
   const [name, setName] = useState("");
   const [entryCode, setEntryCode] = useState("");
@@ -484,7 +806,7 @@ function RoomsPage({ activeRoomId, setActiveRoomId, switchingRoom }: {
       if (request === roomsRequest.current) setLoadingRooms(false);
     });
     return () => { roomsRequest.current++; };
-  }, []);
+  }, [refreshKey]);
 
   const create = async (event: FormEvent) => {
     event.preventDefault();
@@ -3900,13 +4222,14 @@ function SettingsPage({ reload }: { reload: () => Promise<void> }) {
   );
 }
 
-function ArenaApp({ user, onSignOut }: { user: AuthUser; onSignOut: () => void }) {
+function ArenaApp({ user, onSignOut, onSessionExpired }: { user: AuthUser; onSignOut: () => void; onSessionExpired: () => void }) {
   const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
   const [activeRoomRole, setActiveRoomRole] = useState<
     "owner" | "admin" | "participant" | null
   >(null);
   const [loadedRoomId, setLoadedRoomId] = useState<string | null | undefined>(undefined);
   const [roomLoadAttempt, setRoomLoadAttempt] = useState(0);
+  const [roomListVersion, setRoomListVersion] = useState(0);
   const switchingRoom = loadedRoomId !== activeRoomId;
   const showRoomOnlyTabs = activeRoomId !== null;
   const [page, setPage] = useState<Page>("dashboard"),
@@ -3915,7 +4238,12 @@ function ArenaApp({ user, onSignOut }: { user: AuthUser; onSignOut: () => void }
     [players, setPlayers] = useState<Player[]>([]),
     [teams, setTeams] = useState<Team[]>([]),
     [accountMenuOpen, setAccountMenuOpen] = useState(false);
-  const accountMenuRef = useRef<HTMLDivElement | null>(null);
+  const accountActionsRef = useRef<HTMLDivElement | null>(null);
+  const [notifications, setNotifications] = useState<Awaited<ReturnType<typeof window.arena.listUnreadNotifications>>>([]);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [notificationActionId, setNotificationActionId] = useState<number | null>(null);
+  const [notificationError, setNotificationError] = useState("");
+  const { toast, showToast } = useToast();
   const [online, setOnline] = useState(navigator.onLine);
   useEffect(() => {
     const updateOnline = () => setOnline(navigator.onLine);
@@ -3945,6 +4273,47 @@ function ArenaApp({ user, onSignOut }: { user: AuthUser; onSignOut: () => void }
       );
     }
   };
+  const loadNotifications = async () => {
+    try {
+      const unreadNotifications = await window.arena.listUnreadNotifications();
+      setNotifications(unreadNotifications);
+    } catch {
+      setNotifications([]);
+    }
+  };
+  const acceptRoomInvite = async (notification: Awaited<ReturnType<typeof window.arena.listUnreadNotifications>>[number]) => {
+    const roomCode = notification.type === "room_invite" && typeof notification.payload.roomCode === "string"
+      ? notification.payload.roomCode
+      : null;
+    if (!roomCode) {
+      setNotificationError("Este convite não possui um código de sala válido.");
+      return;
+    }
+
+    setNotificationActionId(notification.id);
+    setNotificationError("");
+    try {
+      const { roomId } = await window.arena.joinRoom(roomCode);
+      if (roomId === null) {
+        throw new Error("Não foi possível entrar na sala. Peça um novo convite.");
+      }
+      await window.arena.markNotificationRead(notification.id);
+      setNotifications((current) => current.filter((item) => item.id !== notification.id));
+      setNotificationsOpen(false);
+      setActiveRoomId(roomId);
+      setRoomListVersion((version) => version + 1);
+      setPage("rooms");
+      showToast("Convite aceito. Você entrou na sala.");
+    } catch (error) {
+      if (isSessionExpiredError(error)) {
+        onSessionExpired();
+        return;
+      }
+      setNotificationError(error instanceof Error ? error.message : "Não foi possível aceitar o convite.");
+    } finally {
+      setNotificationActionId(null);
+    }
+  };
   useEffect(() => {
     let current = true;
     void (async () => {
@@ -3959,8 +4328,12 @@ function ArenaApp({ user, onSignOut }: { user: AuthUser; onSignOut: () => void }
         setTeams(teamList);
         setLoadError("");
         setLoadedRoomId(activeRoomId);
-      } catch {
+      } catch (error) {
         if (!current) return;
+        if (isSessionExpiredError(error)) {
+          onSessionExpired();
+          return;
+        }
         setLoadError("Não foi possível carregar os dados da sala.");
         setData(undefined);
       }
@@ -3986,10 +4359,15 @@ function ArenaApp({ user, onSignOut }: { user: AuthUser; onSignOut: () => void }
     };
   }, [activeRoomId]);
   useEffect(() => {
+    void loadNotifications();
+    const interval = window.setInterval(() => void loadNotifications(), 30_000);
+    return () => window.clearInterval(interval);
+  }, []);
+  useEffect(() => {
     const onDocumentClick = (event: MouseEvent) => {
       if (
-        accountMenuRef.current &&
-        !accountMenuRef.current.contains(event.target as Node)
+        accountActionsRef.current &&
+        !accountActionsRef.current.contains(event.target as Node)
       ) {
         setAccountMenuOpen(false);
       }
@@ -4025,9 +4403,9 @@ function ArenaApp({ user, onSignOut }: { user: AuthUser; onSignOut: () => void }
     ) : page === "dashboard" ? (
       <DashboardPage data={data} players={players} go={setPage} reload={reload} showRoomOnlyTabs={showRoomOnlyTabs} />
     ) : page === "rooms" ? (
-      <RoomsPage activeRoomId={activeRoomId} setActiveRoomId={setActiveRoomId} switchingRoom={switchingRoom} />
+      <RoomsPage activeRoomId={activeRoomId} setActiveRoomId={setActiveRoomId} switchingRoom={switchingRoom} refreshKey={roomListVersion} />
     ) : page === "friends" ? (
-      <FriendsPage />
+      <FriendsPage activeRoomId={activeRoomId} />
     ) : page === "players" ? (
       <PlayersPage players={players} reload={reload} activeRoomId={activeRoomId} roomRole={activeRoomRole} />
     ) : page === "matches" ? (
@@ -4079,34 +4457,89 @@ function ArenaApp({ user, onSignOut }: { user: AuthUser; onSignOut: () => void }
         </div>
       </aside>
       <main>{view}</main>
-      <div className="account-menu" ref={accountMenuRef}>
-        <button
-          type="button"
-          className="account-menu-trigger"
-          onClick={() => setAccountMenuOpen((open) => !open)}
-          aria-expanded={accountMenuOpen}
-          aria-haspopup="menu"
-        >
-          <span className="account-menu-avatar">
-            {user.displayName.slice(0, 1).toUpperCase()}
-          </span>
+      <div className="account-actions" ref={accountActionsRef}>
+        <div className="notification-menu">
+          <button
+            type="button"
+            className="notification-menu-trigger"
+            onClick={() => {
+              setNotificationsOpen((open) => !open);
+              setAccountMenuOpen(false);
+            }}
+            aria-expanded={notificationsOpen}
+            aria-haspopup="menu"
+            aria-label="Notificações"
+          >
+            <Bell size={18} />
+            {notifications.length > 0 && <span className="notification-badge">{notifications.length}</span>}
+          </button>
+          {notificationsOpen && (
+            <div className="notification-menu-panel" role="menu">
+              <div className="notification-menu-head">
+                <strong>Notificações</strong>
+              </div>
+              {notificationError && <p role="alert">{notificationError}</p>}
+              {notifications.length === 0 ? (
+                <p className="notification-empty">Nenhuma notificação nova.</p>
+              ) : (
+                notifications.map((notification) => {
+                  const senderName = typeof notification.payload.senderName === "string"
+                    ? notification.payload.senderName
+                    : "Um amigo";
+                  const roomName = typeof notification.payload.roomName === "string"
+                    ? notification.payload.roomName
+                    : "uma sala";
+                  return (
+                    <article className="notification-item" key={notification.id}>
+                      <p>{senderName} te convidou para a sala {roomName}.</p>
+                      {notification.type === "room_invite" && (
+                        <button
+                          type="button"
+                          className="primary"
+                          onClick={() => void acceptRoomInvite(notification)}
+                          disabled={notificationActionId === notification.id}
+                        >
+                          {notificationActionId === notification.id ? "Aceitando..." : "Aceitar"}
+                        </button>
+                      )}
+                    </article>
+                  );
+                })
+              )}
+            </div>
+          )}
+        </div>
+        <div className="account-menu">
+          <button
+            type="button"
+            className="account-menu-trigger"
+            onClick={() => {
+              setAccountMenuOpen((open) => !open);
+              setNotificationsOpen(false);
+            }}
+            aria-expanded={accountMenuOpen}
+            aria-haspopup="menu"
+          >
+            <span className="account-menu-avatar">
+              {user.displayName.slice(0, 1).toUpperCase()}
+            </span>
 
-          <span className="account-menu-identity">
-            <strong>{user.displayName}</strong>
-            <small>{user.email}</small>
-          </span>
+            <span className="account-menu-identity">
+              <strong>{user.displayName}</strong>
+              <small>{user.email}</small>
+            </span>
 
-          <ChevronDown
-            size={15}
-            className={
-              accountMenuOpen
-                ? "account-menu-chevron open"
-                : "account-menu-chevron"
-            }
-          />
-        </button>
+            <ChevronDown
+              size={15}
+              className={
+                accountMenuOpen
+                  ? "account-menu-chevron open"
+                  : "account-menu-chevron"
+              }
+            />
+          </button>
 
-        {accountMenuOpen && (
+          {accountMenuOpen && (
           <div className="account-menu-panel" role="menu">
             <button
               type="button"
@@ -4147,10 +4580,12 @@ function ArenaApp({ user, onSignOut }: { user: AuthUser; onSignOut: () => void }
               <span>Sair</span>
             </button>
           </div>
-        )}
+          )}
+        </div>
       </div>
 
       {showArenaMenu && <ArenaTools mutators={MUTATORS} teams={teams} />}
+      <Toast message={toast} />
     </div>
   );
 }
@@ -4158,6 +4593,7 @@ function App() {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [authError, setAuthError] = useState("");
+  const [sessionMessage, setSessionMessage] = useState("");
 
   useEffect(() => {
     void window.arena.auth.session()
@@ -4194,7 +4630,17 @@ function App() {
   }
 
   if (!user) {
-    return <AuthPage onAuthenticated={setUser} />;
+    return (
+      <>
+        <Toast message={sessionMessage} />
+        <AuthPage
+          onAuthenticated={(nextUser) => {
+            setSessionMessage("");
+            setUser(nextUser);
+          }}
+        />
+      </>
+    );
   }
 
   return (
@@ -4202,6 +4648,10 @@ function App() {
       user={user}
       onSignOut={() => {
         void window.arena.auth.signOut().then(() => setUser(null));
+      }}
+      onSessionExpired={() => {
+        setSessionMessage(SESSION_EXPIRED_MESSAGE);
+        setUser(null);
       }}
     />
   );
