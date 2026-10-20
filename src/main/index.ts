@@ -105,19 +105,30 @@ function switchRoom(roomId: string | null): Promise<void> {
     }
     if (currentContext?.roomId === roomId && currentContext.db.open) return;
     const db = createDatabase(dbPath(roomId));
+    let next: RoomContext;
     try {
       const repo = repository(db);
-      const next: RoomContext = { roomId, db, repo, players: createPlayersService(db, repo, roomId), matches: createMatchesService(db, repo, roomId), teams: createTeamsService(repo) };
-      if (roomId !== null) {
-        await next.players.syncMirror(roomId);
-        await getChampionships(db, roomId);
-        await next.matches.syncMirror(roomId);
-      }
-      currentContext?.db.close();
-      currentContext = next;
+      next = { roomId, db, repo, players: createPlayersService(db, repo, roomId), matches: createMatchesService(db, repo, roomId), teams: createTeamsService(repo) };
     } catch (error) {
       db.close();
       throw error;
+    }
+
+    const previousContext = currentContext;
+    currentContext = next;
+
+    if (roomId !== null) {
+      try {
+        await next.players.syncMirror(roomId);
+        await getChampionships(db, roomId);
+        await next.matches.syncMirror(roomId);
+      } catch (error) {
+        console.warn("Não foi possível sincronizar os dados da sala.", error);
+      }
+    }
+
+    if (previousContext?.db.open) {
+      previousContext.db.close();
     }
   });
 }

@@ -181,6 +181,13 @@ const Toast = ({ message }: { message: string }) =>
   ) : null;
 
 const SESSION_EXPIRED_MESSAGE = "Sua sessão expirou. Faça login novamente.";
+const EMPTY_DASHBOARD: Dashboard = {
+  players: 0,
+  matches: 0,
+  recent: [],
+  ranking: [],
+  statistics: null,
+};
 
 function isSessionExpiredError(error: unknown): boolean {
   return error instanceof Error && error.message.toLocaleLowerCase().includes("sessão expirou");
@@ -1069,6 +1076,7 @@ function DashboardPage({
     { label: "LÍDER DA TEMPORADA", value: data.leader?.name ?? "—", detail: data.leader ? `${data.leader.points} pontos no ranking geral` : "Sem líder" },
     { label: "MAIOR SEQUÊNCIA", value: largestStreak?.streak ?? 0, detail: largestStreak?.streak ? `${largestStreak.name} · sequência atual` : "Nenhuma sequência atual" },
   ];
+  const isEmptyRoom = data.players === 0 && data.matches === 0;
   const trendPoints = stats?.rankingTrend[0]?.points ?? [];
   const maxTrend = Math.max(...trendPoints.map((point) => point.position), 1);
   const trendPath = trendPoints.length
@@ -1095,6 +1103,11 @@ function DashboardPage({
           </button>
         )}
       </section>
+      {isEmptyRoom && (
+        <section className="panel">
+          <Empty text="Nenhum dado nesta sala ainda. Crie um jogador ou campeonato para começar." />
+        </section>
+      )}
       <section className="metrics dashboard-metrics">
         {metrics.map(({ label, value, detail }) => (
           <article className="metric" key={label}>
@@ -4239,6 +4252,7 @@ function ArenaApp({ user, onSignOut, onSessionExpired }: { user: AuthUser; onSig
     [teams, setTeams] = useState<Team[]>([]),
     [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const accountActionsRef = useRef<HTMLDivElement | null>(null);
+  const roomSwitchRequest = useRef(0);
   const [notifications, setNotifications] = useState<Awaited<ReturnType<typeof window.arena.listUnreadNotifications>>>([]);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [notificationActionId, setNotificationActionId] = useState<number | null>(null);
@@ -4254,16 +4268,18 @@ function ArenaApp({ user, onSignOut, onSessionExpired }: { user: AuthUser; onSig
       window.removeEventListener("offline", updateOnline);
     };
   }, []);
-  const loadCurrentRoomData = useCallback(async () => {
+  const loadCurrentRoomData = useCallback(async (requestId?: number): Promise<boolean> => {
     const [dashboard, playerList, teamList] = await Promise.all([
       window.arena.dashboard(),
       window.arena.players(),
       window.arena.teams(),
     ]);
+    if (requestId !== undefined && roomSwitchRequest.current !== requestId) return false;
     setData(dashboard);
     setPlayers(playerList);
     setTeams(teamList);
     setLoadError("");
+    return true;
   }, []);
   const reload = useCallback(async () => {
     try {
@@ -4273,32 +4289,47 @@ function ArenaApp({ user, onSignOut, onSessionExpired }: { user: AuthUser; onSig
         onSessionExpired();
         return;
       }
-      setLoadError(
-        error instanceof Error
-          ? error.message
-          : "Não foi possível carregar os dados da Arena.",
-      );
+      if (activeRoomId === null) {
+        setLoadError(
+          error instanceof Error
+            ? error.message
+            : "Não foi possível carregar os dados da Arena.",
+        );
+      } else {
+        console.warn("Falha ao recarregar os dados da sala", error);
+      }
     }
-  }, [loadCurrentRoomData, onSessionExpired]);
+  }, [activeRoomId, loadCurrentRoomData, onSessionExpired]);
   const activateRoom = useCallback(async (roomId: string | null): Promise<boolean> => {
+    const requestId = ++roomSwitchRequest.current;
     setSwitchingRoom(true);
     setSwitchingRoomId(roomId);
     setLoadError("");
+    setData(EMPTY_DASHBOARD);
+    setPlayers([]);
+    setTeams([]);
     try {
       await window.arena.setActiveRoom(roomId);
+      if (roomSwitchRequest.current !== requestId) return false;
       setActiveRoomId(roomId);
-      await loadCurrentRoomData();
+      try {
+        await loadCurrentRoomData(requestId);
+      } catch (error) {
+        console.warn("Falha ao carregar dados iniciais da sala", error);
+      }
       return true;
     } catch (error) {
       if (isSessionExpiredError(error)) {
         onSessionExpired();
         return false;
       }
-      setLoadError("Não foi possível carregar os dados da sala.");
+      console.warn("Falha ao trocar de sala", error);
       return false;
     } finally {
-      setSwitchingRoom(false);
-      setSwitchingRoomId(null);
+      if (roomSwitchRequest.current === requestId) {
+        setSwitchingRoom(false);
+        setSwitchingRoomId(null);
+      }
     }
   }, [loadCurrentRoomData, onSessionExpired]);
   const loadNotifications = async () => {
@@ -4327,14 +4358,12 @@ function ArenaApp({ user, onSignOut, onSessionExpired }: { user: AuthUser; onSig
       }
       await window.arena.markNotificationRead(notification.id);
       const switched = await activateRoom(roomId);
-      if (!switched) {
-        setNotificationError("Não foi possível carregar os dados da sala.");
-        return;
-      }
-      setNotifications((current) => current.filter((item) => item.id !== notification.id));
-      setNotificationsOpen(false);
-      setRoomListVersion((version) => version + 1);
+      if (!switched) return;
+      setActiveRoomId(roomId);
       setPage("rooms");
+      setNotificationsOpen(false);
+      setNotifications((current) => current.filter((item) => item.id !== notification.id));
+      setRoomListVersion((version) => version + 1);
       showToast("Convite aceito. Você entrou na sala.");
     } catch (error) {
       if (isSessionExpiredError(error)) {
