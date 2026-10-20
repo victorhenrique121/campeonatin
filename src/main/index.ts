@@ -206,10 +206,9 @@ app.whenReady().then(async () => {
     console.log("[IPC] championships:save acionado:", c);
     return await saveChampionship(db, c, roomId);
   }));
-  ipcMain.handle("championships:update", (_, id, name) => withContext(async ({ db, repo }) => {
-    ensureRoomGlobalOnly();
+  ipcMain.handle("championships:update", (_, id, name) => withContext(async ({ db, repo, roomId }) => {
     console.log("[IPC] championships:update acionado:", { id, name });
-    await updateChampionshipName(db, id, name);
+    await updateChampionshipName(db, id, name, roomId);
     return repo.championshipDetail(id).championship;
   }));
   ipcMain.handle("championships:delete", (_, id) => withContext(({ db }) => {

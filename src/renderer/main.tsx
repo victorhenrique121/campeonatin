@@ -2154,6 +2154,7 @@ function ChampionshipPage({
     [deletingChampionship, setDeletingChampionship] =
       useState<Championship | null>(null),
     [assignments, setAssignments] = useState<Record<number, Team>>({}),
+    [duoAssignments, setDuoAssignments] = useState<Record<string, Team>>({}),
     [renaming, setRenaming] = useState<Championship | null>(null),
     [teamQuery, setTeamQuery] = useState(""),
     [searchedTeams, setSearchedTeams] = useState<Team[] | null>(null);
@@ -2195,20 +2196,36 @@ function ChampionshipPage({
     return () => window.clearTimeout(timer);
   }, [teamQuery]);
   const selectorTeams = searchedTeams ?? teams;
+  const duoKey = (player1Id: number, player2Id: number) =>
+    [player1Id, player2Id].sort((a, b) => a - b).join(":");
+  const selectedDuos = participants.reduce<DuoInput[]>((duos, playerId, index) => {
+    if (index % 2 === 0)
+      duos.push({ player1Id: playerId, player2Id: playerId });
+    else duos[duos.length - 1].player2Id = playerId;
+    return duos;
+  }, []);
   const save = async (e: FormEvent) => {
     e.preventDefault();
-    const participantDuos = participants.reduce<DuoInput[]>((duos, playerId, index) => {
-      if (index % 2 === 0) duos.push({ player1Id: playerId, player2Id: playerId });
-      else duos[duos.length - 1].player2Id = playerId;
-      return duos;
-    }, []);
-    if (mode === "duo" && (participants.length < 4 || participantDuos.some((duo) => duo.player1Id === duo.player2Id))) {
+    if (
+      mode === "duo" &&
+      (participants.length < 4 ||
+        selectedDuos.some((duo) => duo.player1Id === duo.player2Id))
+    ) {
       setFormError("Forme ao menos duas duplas completas para criar o campeonato.");
       return;
     }
-    const teamIdsInOrder = participants.map(
-      (id) => assignments[id]?.id ?? null,
-    );
+    const teamIdsInOrder =
+      mode === "duo"
+        ? selectedDuos.map(
+            (duo) =>
+              duoAssignments[duoKey(duo.player1Id, duo.player2Id)]?.id ??
+              null,
+          )
+        : participants.map((id) => assignments[id]?.id ?? null);
+    if (mode === "duo" && teamIdsInOrder.some((teamId) => teamId === null)) {
+      setFormError("Escolha um time para cada dupla.");
+      return;
+    }
     const assignedTeamIds = teamIdsInOrder.filter(
       (teamId): teamId is number => typeof teamId === "number",
     );
@@ -2230,12 +2247,13 @@ function ChampionshipPage({
         startsAt: new Date().toISOString(),
         status: "active",
         participantIds: mode === "duo" ? [] : participants,
-        participantDuos: mode === "duo" ? participantDuos : undefined,
-        participantTeamIds: mode === "duo" ? [] : teamIdsInOrder,
+        participantDuos: mode === "duo" ? selectedDuos : undefined,
+        participantTeamIds: teamIdsInOrder,
       }, activeRoomId);
       setName("");
       setParticipants([]);
       setAssignments({});
+      setDuoAssignments({});
       setSelected(champ.id);
       await load();
     } catch (error) {
@@ -2290,11 +2308,19 @@ function ChampionshipPage({
     const shuffledPlayers = [...players].sort(() => Math.random() - 0.5);
     const shuffledTeams = [...teams].sort(() => Math.random() - 0.5);
     setParticipants(shuffledPlayers.map((p) => p.id));
-    setAssignments(
+    setAssignments({});
+    setDuoAssignments(
       Object.fromEntries(
-        shuffledPlayers.map(
-          (p, index) => [p.id, shuffledTeams[index]] as [number, Team],
-        ),
+        shuffledPlayers.reduce<number[][]>((pairs, player, index) => {
+          if (index % 2 === 0) pairs.push([player.id]);
+          else pairs[pairs.length - 1].push(player.id);
+          return pairs;
+        }, [])
+          .filter((pair) => pair.length === 2)
+          .map((pair, index) => [
+            duoKey(pair[0], pair[1]),
+            shuffledTeams[index],
+          ] as [string, Team]),
       ),
     );
   };
@@ -2380,7 +2406,7 @@ function ChampionshipPage({
               ) {
                 e.preventDefault();
                 setFormError(
-                  "O mata-mata exige 2, 4, 8, 16 ou 32 participantes.",
+                  "O formato Mata-mata exige um número exato de participantes (2, 4, 8, 16 ou 32). Para números diferentes, use o formato 'Maluco' (Fase de Grupos + Mata-mata).",
                 );
                 return;
               }
@@ -2651,7 +2677,7 @@ function ChampionshipPage({
                   </span>
                   {included && <Check size={16} />}
                 </button>
-                {included && (
+                {included && mode !== "duo" && (
                   <TeamPicker
                     label={`Time de ${p.name}`}
                     teams={teams}
@@ -2677,38 +2703,63 @@ function ChampionshipPage({
             );
           })}
         </div>
-        {mode === "duo" && participants.length > 0 && (
+        {mode === "duo" && selectedDuos.length > 0 && (
           <div className="duo-preview">
-            {participants
-              .reduce<number[][]>((pairs, id, index) => {
-                if (index % 2 === 0) pairs.push([id]);
-                else pairs[pairs.length - 1].push(id);
-                return pairs;
-              }, [])
-              .map((pair, index) => (
-                <div className="duo-team" key={pair.join("-")}>
+            {selectedDuos.map((duo, index) => {
+              const pair = [duo.player1Id, duo.player2Id];
+              const complete = duo.player1Id !== duo.player2Id;
+              const key = duoKey(duo.player1Id, duo.player2Id);
+              const otherDuoTeamIds = selectedDuos
+                .filter((_, duoIndex) => duoIndex !== index)
+                .map((otherDuo) =>
+                  duoAssignments[
+                    duoKey(otherDuo.player1Id, otherDuo.player2Id)
+                  ]?.id,
+                )
+                .filter(
+                  (teamId): teamId is number => typeof teamId === "number",
+                );
+
+              return (
+                <div className="duo-team" key={key}>
                   <span className="duo-team-label">DUPLA {index + 1}</span>
                   <div>
-                    {pair.map((id) => {
+                    {pair.map((id, memberIndex) => {
                       const player = players.find((p) => p.id === id);
                       return (
                         player && (
-                          <span className="duo-member" key={id}>
+                          <span className="duo-member" key={`${id}-${memberIndex}`}>
                             <i>{player.name[0]}</i>
                             {player.name}
                           </span>
                         )
                       );
                     })}
-                    {pair.length === 1 && (
+                    {!complete && (
                       <span className="duo-empty">+ Convide alguém</span>
                     )}
-                    <span className="duo-club">
-                      → {assignments[pair[0]]?.name ?? "Sorteie uma equipe"}
-                    </span>
                   </div>
+                  {complete && (
+                    <section className="duo-team-picker">
+                      <TeamPicker
+                        label={`Time da dupla ${index + 1}`}
+                        teams={teams}
+                        value={duoAssignments[key] ?? null}
+                        excludeTeamIds={otherDuoTeamIds}
+                        onChange={(picked) =>
+                          setDuoAssignments((current) => {
+                            const next = { ...current };
+                            if (picked) next[key] = picked;
+                            else delete next[key];
+                            return next;
+                          })
+                        }
+                      />
+                    </section>
+                  )}
                 </div>
-              ))}
+              );
+            })}
           </div>
         )}
         {!players.length && (
