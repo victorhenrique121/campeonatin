@@ -174,11 +174,16 @@ export async function getChampionships(db: Database.Database, roomId: string | n
     console.warn("[championship-service] Supabase indisponível. Utilizando dados locais do SQLite.");
   }
 
-  // Corrigido COUNT(cp.id) para COUNT(cp.player_id)
   const rows = db.prepare(`
     SELECT 
       c.id, c.name, c.format, c.mode, c.mutator, c.starts_at as startsAt, c.status,
-      COUNT(cp.player_id) as participantsCount
+      CASE WHEN c.mode = 'duo' THEN (
+        SELECT COUNT(*) FROM (
+          SELECT team1_duo_id FROM fixtures WHERE championship_id = c.id AND team1_duo_id IS NOT NULL
+          UNION
+          SELECT team2_duo_id FROM fixtures WHERE championship_id = c.id AND team2_duo_id IS NOT NULL
+        )
+      ) ELSE COUNT(cp.player_id) END as participantsCount
     FROM championships c
     LEFT JOIN championship_participants cp ON cp.championship_id = c.id
     GROUP BY c.id
@@ -197,38 +202,30 @@ export async function getChampionships(db: Database.Database, roomId: string | n
 export async function updateChampionshipName(
   db: Database.Database,
   id: number,
-  name: string
+  name: string,
+  roomId: string | null,
 ): Promise<void> {
   const normalizedName = name.trim();
 
   if (!normalizedName) throw new Error("Informe um nome para o campeonato.");
   if (!Number.isInteger(id) || id <= 0) throw new Error("Campeonato inválido.");
 
+  const supabase = await getUserSessionClient();
+  const update = supabase
+    .from("championships")
+    .update({ name: normalizedName })
+    .eq("id", id);
+  const { error } = await (roomId === null
+    ? update.is("room_id", null)
+    : update.eq("room_id", roomId));
+  if (error) {
+    throw new Error("Não foi possível renomear o campeonato. Verifique sua conexão e suas permissões.");
+  }
+
   const result = db
     .prepare("UPDATE championships SET name = ? WHERE id = ?")
     .run(normalizedName, id);
-
   if (!result.changes) throw new Error("Campeonato não encontrado.");
-
-  const auth = await ensureAuthenticated();
-  const supabase = getSupabase();
-
-  if (auth.ok && supabase) {
-    try {
-      const { error } = await supabase
-        .from("championships")
-        .update({ name: normalizedName })
-        .eq("id", id);
-
-      if (error) {
-        console.warn(`[championship-service] Erro ao atualizar nome no Supabase (ID: ${id}):`, error.message);
-      } else {
-        console.info(`[championship-service] Nome do campeonato ${id} atualizado com sucesso no Supabase.`);
-      }
-    } catch (err) {
-      console.warn(`[championship-service] Falha na conexão com Supabase para renomear campeonato (ID: ${id}):`, err);
-    }
-  }
 }
 
 /**
@@ -252,6 +249,7 @@ export async function saveChampionship(
   const name = payload.name.trim();
   if (!name) throw new Error("Informe o nome do campeonato.");
   const duos = payload.participantDuos ?? [];
+  const duoTeamIds = payload.participantTeamIds ?? [];
   const isDuo = duos.length > 0;
   if (isDuo ? duos.length < 2 : !payload.participantIds || payload.participantIds.length < 2) {
     throw new Error("Selecione ao menos 2 participantes.");
@@ -261,6 +259,17 @@ export async function saveChampionship(
     if (new Set(pairs).size !== pairs.length) throw new Error("Não é possível repetir uma dupla no campeonato.");
     if (duos.some(({ player1Id, player2Id }) => player1Id === player2Id)) {
       throw new Error("Uma dupla precisa ter dois jogadores diferentes.");
+    }
+    if (
+      duoTeamIds.length !== duos.length ||
+      duoTeamIds.some(
+        (teamId) =>
+          typeof teamId !== "number" ||
+          !Number.isSafeInteger(teamId) ||
+          teamId <= 0,
+      )
+    ) {
+      throw new Error("Escolha um time para cada dupla.");
     }
   }
 
@@ -274,8 +283,15 @@ export async function saveChampionship(
   if (!userId) throw new Error("Sua sessão expirou. Entre novamente para continuar.");
 
   const duoIds: number[] = [];
-  for (const duo of duos) {
-    duoIds.push(await getOrCreateDuoRemote(db, supabase, duo.player1Id, duo.player2Id, roomId));
+  for (const [index, duo] of duos.entries()) {
+    duoIds.push(await getOrCreateDuoRemote(
+      db,
+      supabase,
+      duo.player1Id,
+      duo.player2Id,
+      roomId,
+      duoTeamIds[index]!,
+    ));
   }
 
   const { error: champErr } = await supabase.from("championships").insert({

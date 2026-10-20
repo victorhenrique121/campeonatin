@@ -59,6 +59,21 @@ export type UserProfile = {
   updatedAt: string;
 };
 
+export type FriendProfile = {
+  id: string;
+  displayName: string;
+  username: string | null;
+  avatarUrl: string | null;
+};
+
+export type ArenaNotification = {
+  id: number;
+  senderId: string;
+  type: string;
+  payload: Record<string, unknown>;
+  createdAt: string;
+};
+
 export type AuthSignUpResult = {
   requiresEmailConfirmation: boolean;
   email: string;
@@ -79,6 +94,16 @@ export type Api = {
   setActiveRoom: (roomId: string | null) => Promise<{ ok: boolean }>;
   joinRoom: (code: string) => Promise<{ roomId: string | null }>;
   getProfile: () => Promise<UserProfile>;
+  findFriendByUsername: (username: string) => Promise<FriendProfile | null>;
+  addFriend: (username: string) => Promise<FriendProfile>;
+  listFriends: () => Promise<FriendProfile[]>;
+  removeFriend: (friendId: string) => Promise<void>;
+  blockUser: (userId: string) => Promise<void>;
+  listBlockedUsers: () => Promise<FriendProfile[]>;
+  unblockUser: (userId: string) => Promise<void>;
+  sendRoomInvite: (friendId: string, roomId: string) => Promise<void>;
+  listUnreadNotifications: () => Promise<ArenaNotification[]>;
+  markNotificationRead: (notificationId: number) => Promise<void>;
   isUsernameAvailable: (username: string) => Promise<boolean>;
   updateProfile: (input: UpdateProfileInput) => Promise<UserProfile>;
   auth: {

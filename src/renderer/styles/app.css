@@ -331,48 +331,6 @@ body {
     width: 15px;
 }
 
-.selected-team-inline {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    min-height: 51px;
-    padding: 8px 10px;
-    border: 1px solid #2c3854;
-    background: #0b1325a6;
-    border-radius: 12px;
-}
-
-.selected-team-inline .team-flag {
-    display: grid;
-    place-items: center;
-    width: 33px;
-    height: 33px;
-    font-size: 19px;
-    border-radius: 9px;
-    background: #ffffff0e;
-}
-
-.selected-team-inline span:nth-child(2) {
-    display: grid;
-    gap: 2px;
-}
-
-.selected-team-inline small {
-    color: #71809d;
-    font-size: 8px;
-    letter-spacing: .1em;
-}
-
-.selected-team-inline b {
-    color: #dde5f9;
-    font-size: 12px;
-}
-
-.selected-team-inline>svg {
-    margin-left: auto;
-    color: #a695ff;
-}
-
 .launch-championship {
     display: flex;
     align-items: center;
@@ -1070,13 +1028,6 @@ body {
     background-image: linear-gradient(145deg, rgba(14, 24, 47, .9), rgba(6, 12, 26, .96)), url("https://images.unsplash.com/photo-1579952363873-27f3bade9f55?auto=format&fit=crop&w=900&q=75");
     background-position: center;
     background-size: cover;
-}
-
-.duo-club {
-    margin-left: auto;
-    color: #8ff2e3;
-    font-size: 10px;
-    font-weight: 800;
 }
 
 .share-match-btn {
@@ -1806,31 +1757,6 @@ body {
    PLACEHOLDER
    ========================================================= */
 
-.settings-placeholder {
-  min-height: 150px;
-
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.settings-placeholder-icon {
-  width: 48px;
-  height: 48px;
-  min-width: 48px;
-
-  display: flex;
-  align-items: center;
-  justify-content: center;
-
-  border: 1px solid rgba(136, 114, 255, 0.16);
-  border-radius: 13px;
-
-  background: rgba(136, 114, 255, 0.07);
-
-  color: var(--arena-accent);
-}
-
 .settings-placeholder-label {
   display: block;
 
@@ -1990,82 +1916,10 @@ body {
     .settings-layout {
         grid-template-columns: repeat(2, 1fr);
     }
-
-    .activity-feed {
-        grid-column: span 2;
-    }
 }
 
 @media (max-width:600px) {
     .settings-layout {
-        grid-template-columns: 1fr;
-    }
-
-    .activity-feed {
-        grid-column: auto;
-    }
-}
-
-.compact-settings {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.color-settings {
-    display: flex;
-    gap: 9px;
-}
-
-.color-settings label {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    color: #9daac1;
-    font-size: 10px;
-}
-
-.color-settings input {
-    width: 30px;
-    height: 25px;
-    padding: 0;
-    border: 0;
-    background: none;
-}
-
-.mute-toggle {
-    width: 100%;
-    min-height: 110px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 12px;
-    color: #d8e2fb;
-    border: 0;
-    border-radius: 10px;
-    background: #ffffff0a;
-}
-
-.mute-toggle svg {
-    color: var(--arena-accent);
-}
-
-.mute-toggle span {
-    display: grid;
-    gap: 4px;
-    text-align: left;
-}
-
-.mute-toggle small {
-    color: #8290a8;
-}
-
-.reset-card button {
-    color: #ffc1cb;
-    border-color: #914356;
-    background: #69233355;
-}
-
-@media(max-width:800px) {
-    .compact-settings {
         grid-template-columns: 1fr;
     }
 }
@@ -2998,7 +2852,6 @@ nav .active {
     color: #ffffff;
 }
 
-.edit-modal-info,
 .edit-match-info {
     padding: 16px 24px 0;
 }
@@ -3217,12 +3070,6 @@ nav .active {
 .dashboard-recent-match:first-child {
     border-top: 0;
     padding-top: 0;
-}
-
-.dashboard-competition {
-    color: var(--arena-accent);
-    font-size: 12px;
-    font-weight: 700;
 }
 
 .dashboard-recent .game em {
@@ -3859,31 +3706,6 @@ nav .active {
     color: #8491ab;
     font-size: 10px;
     font-weight: 700;
-}
-
-.check-list {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 7px;
-}
-
-.check-list label {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    color: #c5cde0;
-}
-
-.champ {
-    display: flex;
-    gap: 13px;
-    align-items: center;
-    border-top: 1px solid #25304a;
-    padding: 15px 0;
-}
-
-.champ:first-of-type {
-    border-top: 0;
 }
 
 /* Ganha o tom de alerta apenas no HOVER */
@@ -5038,51 +4860,6 @@ body.arena-light .team-search button:hover {
 }
 
 /* Sessão atual — temporário até a etapa visual da conta. */
-.user-session-badge {
-  position: fixed;
-  top: 12px;
-  right: 58px;
-  z-index: 40;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 7px 6px 6px;
-  border: 1px solid #26324b;
-  border-radius: 10px;
-  background: #0f1728e8;
-  backdrop-filter: blur(12px);
-}
-.user-session-badge > span {
-  width: 25px;
-  height: 25px;
-  display: grid;
-  place-items: center;
-  border-radius: 8px;
-  background: var(--arena-accent);
-  color: #fff;
-  font-size: 10px;
-  font-weight: 900;
-}
-.user-session-badge div { min-width: 0; display: grid; gap: 1px; }
-.user-session-badge strong { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #dfe5f3; font-size: 9px; }
-.user-session-badge small { max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #687894; font-size: 8px; }
-.user-session-badge button {
-  border: 0;
-  background: transparent;
-  color: #9ca9bf;
-  font: inherit;
-  font-size: 9px;
-  font-weight: 700;
-  cursor: pointer;
-}
-.user-session-badge button:hover { color: #fff; }
-
-@media (max-width: 650px) {
-  .user-session-badge { right: 12px; }
-  .user-session-badge div { display: none; }
-}
-
-
 /* =========================================================
    SENHA
    ========================================================= */

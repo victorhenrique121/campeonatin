@@ -92,6 +92,21 @@ export type UserProfile = {
   updatedAt: string;
 };
 
+export type FriendProfile = {
+  id: string;
+  displayName: string;
+  username: string | null;
+  avatarUrl: string | null;
+};
+
+export type ArenaNotification = {
+  id: number;
+  senderId: string;
+  type: string;
+  payload: Record<string, unknown>;
+  createdAt: string;
+};
+
 const LOG_PREFIX = "[supabase]";
 const SERVICE_ROLE_ENV_VAR = "SUPABASE_SERVICE_ROLE_KEY";
 const APP_EMAIL_ENV_VAR = "SUPABASE_APP_EMAIL";
@@ -306,6 +321,14 @@ export async function getUserSessionClient(): Promise<SupabaseClient> {
   return client;
 }
 
+export async function refreshUserSession(): Promise<void> {
+  const client = getUserAuthClient();
+  if (!client) throw new Error("Sua sessão expirou. Faça login novamente.");
+
+  const { data, error } = await client.auth.refreshSession();
+  if (error || !data.session) throw new Error("Sua sessão expirou. Faça login novamente.");
+}
+
 export async function getSessionUserId(): Promise<string | null> {
   const client = getUserAuthClient();
   if (!client) return null;
@@ -414,6 +437,189 @@ export async function deleteRoom(roomId: string): Promise<void> {
 
 export async function leaveRoom(roomId: string): Promise<void> {
   await roomRpc("leave_room", { p_room_id: roomId });
+}
+
+type FriendProfileRow = {
+  id: string;
+  display_name: string;
+  username: string | null;
+  avatar_url: string | null;
+};
+
+function mapFriendProfile(profile: FriendProfileRow): FriendProfile {
+  return {
+    id: profile.id,
+    displayName: profile.display_name,
+    username: profile.username,
+    avatarUrl: profile.avatar_url,
+  };
+}
+
+export async function findFriendByUsername(username: string): Promise<FriendProfile | null> {
+  const supabase = await getUserSessionClient();
+  const normalizedUsername = normalizeUsername(username.replace(/^@/, ""));
+  if (!isValidUsername(normalizedUsername)) {
+    throw new Error("Informe um @username válido.");
+  }
+
+  const { data: friendData, error: friendError } = await supabase
+    .rpc("find_friend_profile_by_username", { p_username: normalizedUsername })
+    .maybeSingle();
+  if (friendError) {
+    throw new Error("Não foi possível procurar o usuário. Tente novamente em instantes.");
+  }
+  if (!friendData) return null;
+
+  return mapFriendProfile(friendData as FriendProfileRow);
+}
+
+export async function addFriend(username: string): Promise<FriendProfile> {
+  const supabase = await getUserSessionClient();
+  const userId = await getSessionUserId();
+  if (!userId) throw new Error("Sua sessão expirou. Entre novamente para continuar.");
+
+  const friend = await findFriendByUsername(username);
+  if (!friend) throw new Error("Usuário não encontrado.");
+  if (friend.id === userId) throw new Error("Você não pode adicionar a si mesmo.");
+
+  const { data: existingFriends, error: existingError } = await supabase.rpc("list_my_friends");
+  if (existingError) {
+    throw new Error("Não foi possível verificar seus amigos. Tente novamente em instantes.");
+  }
+  if ((existingFriends ?? []).some((existing: FriendProfileRow) => existing.id === friend.id)) {
+    throw new Error("Essa pessoa já está na sua lista de amigos.");
+  }
+
+  const { error: insertError } = await supabase
+    .from("friends")
+    .insert({ user_id: userId, friend_id: friend.id });
+  if (insertError?.code === "23505") {
+    throw new Error("Essa pessoa já está na sua lista de amigos.");
+  }
+  if (insertError) {
+    throw new Error("Não foi possível adicionar o amigo. Tente novamente em instantes.");
+  }
+
+  return friend;
+}
+
+export async function listFriends(): Promise<FriendProfile[]> {
+  const supabase = await getUserSessionClient();
+  const { data, error } = await supabase.rpc("list_my_friends");
+  if (error) {
+    throw new Error("Não foi possível carregar seus amigos. Tente novamente em instantes.");
+  }
+  return (data ?? []).map((friend: FriendProfileRow) => mapFriendProfile(friend));
+}
+
+export async function removeFriend(friendId: string): Promise<void> {
+  const supabase = await getUserSessionClient();
+  const userId = await getSessionUserId();
+  if (!userId) throw new Error("Sua sessão expirou. Entre novamente para continuar.");
+
+  const { error } = await supabase
+    .from("friends")
+    .delete()
+    .eq("user_id", userId)
+    .eq("friend_id", friendId);
+  if (error) throw new Error("Não foi possível remover o amigo. Tente novamente em instantes.");
+}
+
+export async function blockUser(userId: string): Promise<void> {
+  const supabase = await getUserSessionClient();
+  const currentUserId = await getSessionUserId();
+  if (!currentUserId) throw new Error("Sua sessão expirou. Entre novamente para continuar.");
+  if (currentUserId === userId) throw new Error("Você não pode bloquear a si mesmo.");
+
+  const { error: blockError } = await supabase
+    .from("blocked_users")
+    .insert({ user_id: currentUserId, blocked_id: userId });
+  if (blockError?.code === "23505") throw new Error("Esse usuário já está bloqueado.");
+  if (blockError) throw new Error("Não foi possível bloquear o usuário. Tente novamente em instantes.");
+
+  const { error: friendError } = await supabase
+    .from("friends")
+    .delete()
+    .eq("user_id", currentUserId)
+    .eq("friend_id", userId);
+  if (friendError) {
+    throw new Error("O usuário foi bloqueado, mas não foi possível atualizar sua lista de amigos.");
+  }
+}
+
+export async function listBlockedUsers(): Promise<FriendProfile[]> {
+  const supabase = await getUserSessionClient();
+  const { data, error } = await supabase.rpc("list_my_blocked_users");
+  if (error) {
+    throw new Error("Não foi possível carregar os usuários bloqueados. Tente novamente em instantes.");
+  }
+  return (data ?? []).map((profile: FriendProfileRow) => mapFriendProfile(profile));
+}
+
+export async function unblockUser(userId: string): Promise<void> {
+  const supabase = await getUserSessionClient();
+  const currentUserId = await getSessionUserId();
+  if (!currentUserId) throw new Error("Sua sessão expirou. Entre novamente para continuar.");
+
+  const { error } = await supabase
+    .from("blocked_users")
+    .delete()
+    .eq("user_id", currentUserId)
+    .eq("blocked_id", userId);
+  if (error) throw new Error("Não foi possível desbloquear o usuário. Tente novamente em instantes.");
+}
+
+type ArenaNotificationRow = {
+  id: number;
+  sender_id: string;
+  type: string;
+  payload: Record<string, unknown>;
+  created_at: string;
+};
+
+export async function sendRoomInvite(friendId: string, roomId: string): Promise<void> {
+  const supabase = await getUserSessionClient();
+  const { error } = await supabase.rpc("send_room_invite", {
+    p_recipient_id: friendId,
+    p_room_id: roomId,
+  });
+  if (error) {
+    const friendlyMessages = [
+      "Você não pode convidar a si mesmo.",
+      "Você não tem permissão para convidar pessoas para esta sala.",
+      "Você só pode convidar pessoas da sua lista de amigos.",
+      "Não é possível enviar convite para este usuário.",
+      "Este amigo já participa da sala.",
+    ];
+    const friendlyMessage = friendlyMessages.find((message) => error.message.includes(message));
+    if (friendlyMessage) throw new Error(friendlyMessage);
+    throw new Error("Não foi possível enviar o convite. Tente novamente em instantes.");
+  }
+}
+
+export async function listUnreadNotifications(): Promise<ArenaNotification[]> {
+  const supabase = await getUserSessionClient();
+  const { data, error } = await supabase.rpc("list_unread_notifications");
+  if (error) {
+    throw new Error("Não foi possível carregar as notificações. Tente novamente em instantes.");
+  }
+  return (data ?? []).map((notification: ArenaNotificationRow) => ({
+    id: notification.id,
+    senderId: notification.sender_id,
+    type: notification.type,
+    payload: notification.payload,
+    createdAt: notification.created_at,
+  }));
+}
+
+export async function markNotificationRead(notificationId: number): Promise<void> {
+  const supabase = await getUserSessionClient();
+  const { error } = await supabase.rpc("mark_notification_read", {
+    p_notification_id: notificationId,
+  });
+  if (error) {
+    throw new Error("Não foi possível atualizar a notificação. Tente novamente em instantes.");
+  }
 }
 
 function normalizeAuthError(

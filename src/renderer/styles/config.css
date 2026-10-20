@@ -787,31 +787,6 @@
    PLACEHOLDER
    ========================================================= */
 
-.settings-placeholder {
-    min-height: 145px;
-
-    display: flex;
-    align-items: center;
-
-    gap: 15px;
-}
-
-.settings-placeholder-icon {
-    width: 48px;
-    height: 48px;
-    min-width: 48px;
-
-    display: grid;
-    place-items: center;
-
-    border: 1px solid #8872ff2b;
-    border-radius: 12px;
-
-    background: #8872ff0c;
-
-    color: var(--arena-accent);
-}
-
 .settings-placeholder-label {
     display: block;
 
@@ -822,26 +797,6 @@
     font-size: 9px;
     font-weight: 800;
     letter-spacing: .1em;
-}
-
-.settings-placeholder h2 {
-    margin: 0;
-
-    color: #edf1fb;
-
-    font-size: 17px;
-    font-weight: 700;
-}
-
-.settings-placeholder p {
-    max-width: 570px;
-
-    margin: 6px 0 0;
-
-    color: #7c899f;
-
-    font-size: 11px;
-    line-height: 1.55;
 }
 
 /* =========================================================
@@ -865,9 +820,6 @@ body.arena-light .settings-nav-group {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
-    .settings-form-grid {
-        grid-template-columns: 1fr;
-    }
 }
 
 @media (max-width: 650px) {
@@ -1112,30 +1064,6 @@ body.arena-light .settings-appearance-actions .secondary-button {
    NOTIFICAÇÕES E PRIVACIDADE
    ========================================================= */
 
-.settings-backup-warning {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 18px;
-    margin: 18px 0 0;
-    padding: 14px 16px;
-    border: 1px solid #8a6a20;
-    border-radius: 10px;
-    background: #2a210d;
-}
-
-.settings-backup-warning strong {
-    color: #f7df9b;
-    font-size: 11px;
-}
-
-.settings-backup-warning p {
-    margin: 4px 0 0;
-    color: #c9b986;
-    font-size: 10px;
-    line-height: 1.5;
-}
-
 .settings-status-badge {
     display: inline-flex;
     align-items: center;
@@ -1161,51 +1089,6 @@ body.arena-light .settings-appearance-actions .secondary-button {
 .settings-status-badge.info {
     color: #d7d0ff;
     background: #332c66;
-}
-
-.settings-link-button,
-.settings-backup-warning .secondary-button {
-    min-height: 36px;
-    padding: 0 13px;
-    border: 1px solid #34415f;
-    border-radius: 8px;
-    background: #17223a;
-    color: #e8edf8;
-    font: inherit;
-    font-size: 10px;
-    font-weight: 800;
-    cursor: pointer;
-}
-
-.settings-link-button:hover,
-.settings-backup-warning .secondary-button:hover {
-    border-color: var(--arena-accent);
-}
-
-.settings-select-label {
-    display: grid;
-    gap: 7px;
-    max-width: 330px;
-    color: #a8b4ca;
-    font-size: 10px;
-    font-weight: 700;
-}
-
-.settings-select-label select {
-    min-height: 38px;
-    padding: 0 10px;
-    border: 1px solid #34415f;
-    border-radius: 8px;
-    background: #101a2d;
-    color: #edf1fb;
-    font: inherit;
-    font-size: 11px;
-}
-
-.settings-local-note {
-    margin: 9px 0 0;
-    color: #72819a;
-    font-size: 9px;
 }
 
 .settings-coming-grid {
@@ -1314,19 +1197,6 @@ body.arena-light .settings-appearance-actions .secondary-button {
     cursor: not-allowed;
 }
 
-body.arena-light .settings-backup-warning {
-    border-color: #d4a62a;
-    background: #fff9e8;
-}
-
-body.arena-light .settings-backup-warning strong {
-    color: #684b00;
-}
-
-body.arena-light .settings-backup-warning p {
-    color: #725e28;
-}
-
 body.arena-light .settings-status-badge.enabled {
     color: #166534;
     background: #dcfce7;
@@ -1342,21 +1212,9 @@ body.arena-light .settings-status-badge.info {
     background: #e0e7ff;
 }
 
-body.arena-light .settings-link-button,
-body.arena-light .settings-backup-warning .secondary-button,
 body.arena-light .settings-confirm-actions .secondary-button {
     border-color: #c9d2e1;
     background: #f6f8fc;
-    color: #182033;
-}
-
-body.arena-light .settings-select-label {
-    color: #46546c;
-}
-
-body.arena-light .settings-select-label select {
-    border-color: #c9d2e1;
-    background: #fff;
     color: #182033;
 }
 
@@ -1392,11 +1250,6 @@ body.arena-light .settings-confirm-modal p {
 }
 
 @media (max-width: 650px) {
-    .settings-backup-warning {
-        align-items: flex-start;
-        flex-direction: column;
-    }
-
     .settings-coming-item {
         align-items: flex-start;
         flex-direction: column;

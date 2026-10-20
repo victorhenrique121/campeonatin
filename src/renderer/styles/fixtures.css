@@ -114,6 +114,14 @@
 .bracket-match span:last-child { text-align: right; }
 .bracket-match b { color: var(--arena-accent); font-family: 'Space Grotesk'; }
 
+.duo-fixture {
+    border-color: color-mix(in srgb, #3dfd96 34%, rgba(255, 255, 255, .10));
+}
+
+.duo-fixture span {
+    font-weight: 700;
+}
+
 /* Liga cada confronto à coluna seguinte sem depender da lógica do campeonato. */
 .bracket-round:not(:last-child) .bracket-match::after {
     position: absolute;

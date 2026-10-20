@@ -1,3 +1,5 @@
+import "./styles/tokens.css";
+import "./styles/base.css";
 import "./styles/config.css";
 import { AccountSettings } from "./settings/AccountSettings";
 import { PasswordSettings } from "./settings/PasswordSettings";
@@ -14,11 +16,12 @@ import {
   type ArenaTheme,
 } from "./settings/palettes";
 import fcArenaLogo from "../midia/fcarena-icon.png";
-import React, { FormEvent, useEffect, useRef, useState } from "react";
+import React, { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   ArrowRight,
   BarChart3,
+  Bell,
   CalendarDays,
   Check,
   Clipboard,
@@ -67,6 +70,7 @@ import type {
   Championship,
   ChampionshipDetail,
   Dashboard,
+  DuoInput,
   Fixture,
   Match,
   Player,
@@ -85,6 +89,7 @@ import "./styles/app.css";
 import "./styles/account-menu.css";
 import "./styles/fixtures.css";
 import "./styles/HeadToHeadCard.css";
+import "./styles/components.css";
 
 type Page =
   | "dashboard"
@@ -97,6 +102,9 @@ type Page =
   | "settings"
   | "profile"
   | "teams";
+const DesignGallery = import.meta.env.DEV
+  ? React.lazy(() => import("./components/DesignGallery").then(({ DesignGallery: Component }) => ({ default: Component })))
+  : null;
 const date = (value: string) =>
   new Intl.DateTimeFormat("pt-BR", { dateStyle: "medium" }).format(
     new Date(value),
@@ -177,6 +185,19 @@ const Toast = ({ message }: { message: string }) =>
       <Check size={14} /> {message}
     </div>
   ) : null;
+
+const SESSION_EXPIRED_MESSAGE = "Sua sessão expirou. Faça login novamente.";
+const EMPTY_DASHBOARD: Dashboard = {
+  players: 0,
+  matches: 0,
+  recent: [],
+  ranking: [],
+  statistics: null,
+};
+
+function isSessionExpiredError(error: unknown): boolean {
+  return error instanceof Error && error.message.toLocaleLowerCase().includes("sessão expirou");
+}
 
 function useToast() {
   const [toast, setToast] = useState("");
@@ -280,21 +301,337 @@ function Game({
   );
 }
 
-function FriendsPage() {
+function FriendsPage({ activeRoomId }: { activeRoomId: string | null }) {
+  const [username, setUsername] = useState("");
+  const [friends, setFriends] = useState<Awaited<ReturnType<typeof window.arena.listFriends>>>([]);
+  const [blockedUsers, setBlockedUsers] = useState<Awaited<ReturnType<typeof window.arena.listBlockedUsers>>>([]);
+  const [searchResult, setSearchResult] = useState<Awaited<ReturnType<typeof window.arena.findFriendByUsername>> | null>(null);
+  const [viewingFriend, setViewingFriend] = useState<Awaited<ReturnType<typeof window.arena.findFriendByUsername>> | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [searching, setSearching] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [invitingFriendId, setInvitingFriendId] = useState<string | null>(null);
+  const [friendActionId, setFriendActionId] = useState<string | null>(null);
+  const { toast, showToast } = useToast();
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+
+  const loadFriends = async () => {
+    setLoading(true);
+    try {
+      const [friendList, blockedList] = await Promise.all([
+        window.arena.listFriends(),
+        window.arena.listBlockedUsers(),
+      ]);
+      setFriends(friendList);
+      setBlockedUsers(blockedList);
+      setError("");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Não foi possível carregar seus amigos.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadFriends();
+  }, []);
+
+  const searchFriend = async (event: FormEvent) => {
+    event.preventDefault();
+    const value = username.trim();
+    if (!value) {
+      setError("Informe o @username da pessoa.");
+      return;
+    }
+
+    setSearching(true);
+    setError("");
+    setSuccess("");
+    setSearchResult(null);
+    try {
+      const result = await window.arena.findFriendByUsername(value);
+      if (!result) {
+        setError("Usuário não encontrado.");
+        return;
+      }
+      setSearchResult(result);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Não foi possível procurar o usuário.");
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const addFriend = async () => {
+    if (!searchResult?.username) return;
+
+    setAdding(true);
+    setError("");
+    setSuccess("");
+    try {
+      const friend = await window.arena.addFriend(searchResult.username);
+      setUsername("");
+      setSearchResult(null);
+      setSuccess(`${friend.displayName} foi adicionado(a) aos seus amigos.`);
+      await loadFriends();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Não foi possível adicionar o amigo.");
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  const removeFriend = async (friendId: string) => {
+    setFriendActionId(friendId);
+    setError("");
+    setSuccess("");
+    try {
+      await window.arena.removeFriend(friendId);
+      if (viewingFriend?.id === friendId) setViewingFriend(null);
+      setSuccess("Amigo removido da sua lista.");
+      await loadFriends();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Não foi possível remover o amigo.");
+    } finally {
+      setFriendActionId(null);
+    }
+  };
+
+  const blockUser = async (userId: string) => {
+    setFriendActionId(userId);
+    setError("");
+    setSuccess("");
+    try {
+      await window.arena.blockUser(userId);
+      if (searchResult?.id === userId) setSearchResult(null);
+      if (viewingFriend?.id === userId) setViewingFriend(null);
+      setSuccess("Usuário bloqueado.");
+      await loadFriends();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Não foi possível bloquear o usuário.");
+    } finally {
+      setFriendActionId(null);
+    }
+  };
+
+  const unblockUser = async (userId: string) => {
+    setFriendActionId(userId);
+    setError("");
+    setSuccess("");
+    try {
+      await window.arena.unblockUser(userId);
+      if (viewingFriend?.id === userId) setViewingFriend(null);
+      setSuccess("Usuário desbloqueado.");
+      await loadFriends();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Não foi possível desbloquear o usuário.");
+    } finally {
+      setFriendActionId(null);
+    }
+  };
+
+  const inviteFriend = async (friend: Awaited<ReturnType<typeof window.arena.listFriends>>[number]) => {
+    if (!activeRoomId) return;
+
+    setInvitingFriendId(friend.id);
+    setError("");
+    try {
+      await window.arena.sendRoomInvite(friend.id, activeRoomId);
+      showToast(`Convite enviado para @${friend.username ?? friend.displayName}`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Não foi possível enviar o convite.");
+    } finally {
+      setInvitingFriendId(null);
+    }
+  };
+
+  const resultAlreadyFriend = Boolean(searchResult && friends.some((friend) => friend.id === searchResult.id));
+  const isBlocked = (userId: string) => blockedUsers.some((blockedUser) => blockedUser.id === userId);
+
   return (
-    <section className="page-title">
-      <div>
-        <h1>Amigos</h1>
-        <span>Em breve: adicionar amigos e convidar para salas.</span>
-      </div>
-    </section>
+    <>
+      <section className="page-title">
+        <div>
+          <p>COMUNIDADE</p>
+          <h1>Amigos</h1>
+          <span>Adicione amigos pelo @username para encontrá-los mais rápido.</span>
+        </div>
+      </section>
+      <section className="grid players-layout">
+        <article className="panel">
+          <div className="panel-head">
+            <h2>Adicionar amigo</h2>
+          </div>
+          <form className="form" onSubmit={searchFriend}>
+            <label>
+              @username
+              <input
+                value={username}
+                onChange={(event) => setUsername(event.target.value)}
+                placeholder="@nome_do_amigo"
+                autoComplete="off"
+              />
+            </label>
+            <button className="primary" type="submit" disabled={searching || adding}>
+              {searching ? "Buscando..." : "Buscar"}
+            </button>
+          </form>
+          {searchResult && (
+            <div className="player-card">
+              {searchResult.avatarUrl ? (
+                <img src={searchResult.avatarUrl} alt="" width={27} height={27} />
+              ) : (
+                <i>{searchResult.displayName.slice(0, 1).toUpperCase()}</i>
+              )}
+              <div>
+                <small>Resultado da busca</small>
+                <b>{searchResult.displayName}</b>
+                {searchResult.username && <small>@{searchResult.username}</small>}
+              </div>
+              <button type="button" className="secondary-button" onClick={() => setViewingFriend(searchResult)}>
+                Ver perfil
+              </button>
+              <button type="button" className="primary" onClick={() => void addFriend()} disabled={adding || resultAlreadyFriend}>
+                {resultAlreadyFriend ? "Já é seu amigo" : adding ? "Adicionando..." : "Adicionar amigo"}
+              </button>
+              <button
+                type="button"
+                className="danger"
+                onClick={() => void (isBlocked(searchResult.id) ? unblockUser(searchResult.id) : blockUser(searchResult.id))}
+                disabled={friendActionId === searchResult.id}
+              >
+                <Ban size={14} /> {friendActionId === searchResult.id ? "Atualizando..." : isBlocked(searchResult.id) ? "Desbloquear" : "Bloquear"}
+              </button>
+            </div>
+          )}
+          {success && <p role="status">{success}</p>}
+          {error && <p role="alert">{error}</p>}
+        </article>
+        <article className="panel wide">
+          <div className="panel-head">
+            <h2>Meus amigos</h2>
+          </div>
+          {loading ? (
+            <p role="status">Carregando amigos...</p>
+          ) : friends.length === 0 ? (
+            <Empty text="Você ainda não adicionou nenhum amigo." />
+          ) : (
+            <div className="cards players-list">
+              {friends.map((friend) => (
+                <div className="player-card" key={friend.id}>
+                  {friend.avatarUrl ? (
+                    <img src={friend.avatarUrl} alt="" width={27} height={27} />
+                  ) : (
+                    <i>{friend.displayName.slice(0, 1).toUpperCase()}</i>
+                  )}
+                  <div>
+                    <b>{friend.displayName}</b>
+                    {friend.username && <small>@{friend.username}</small>}
+                  </div>
+                  <button type="button" className="secondary-button" onClick={() => setViewingFriend(friend)}>
+                    Ver perfil
+                  </button>
+                  {activeRoomId && (
+                    <button
+                      type="button"
+                      className="primary"
+                      onClick={() => void inviteFriend(friend)}
+                      disabled={invitingFriendId === friend.id}
+                    >
+                      {invitingFriendId === friend.id ? "Enviando..." : "Convidar para a sala atual"}
+                    </button>
+                  )}
+                  <button type="button" className="secondary-button" onClick={() => void removeFriend(friend.id)} disabled={friendActionId === friend.id}>
+                    <Trash2 size={14} /> {friendActionId === friend.id ? "Removendo..." : "Remover amigo"}
+                  </button>
+                  <button
+                    type="button"
+                    className="danger"
+                    onClick={() => void (isBlocked(friend.id) ? unblockUser(friend.id) : blockUser(friend.id))}
+                    disabled={friendActionId === friend.id}
+                  >
+                    <Ban size={14} /> {friendActionId === friend.id ? "Atualizando..." : isBlocked(friend.id) ? "Desbloquear" : "Bloquear"}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="panel-head">
+            <h2>Usuários Bloqueados</h2>
+          </div>
+          {loading ? (
+            <p className="muted">Carregando usuários bloqueados...</p>
+          ) : blockedUsers.length === 0 ? (
+            <Empty text="Nenhum usuário bloqueado." />
+          ) : (
+            <div className="cards compact-cards">
+              {blockedUsers.map((blockedUser) => (
+                <div className="player-card" key={blockedUser.id}>
+                  {blockedUser.avatarUrl ? (
+                    <img src={blockedUser.avatarUrl} alt="" width={27} height={27} />
+                  ) : (
+                    <i>{blockedUser.displayName.slice(0, 1).toUpperCase()}</i>
+                  )}
+                  <div>
+                    <b>{blockedUser.displayName}</b>
+                    {blockedUser.username && <small>@{blockedUser.username}</small>}
+                  </div>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => void unblockUser(blockedUser.id)}
+                    disabled={friendActionId === blockedUser.id}
+                  >
+                    <Ban size={14} /> {friendActionId === blockedUser.id ? "Desbloqueando..." : "Desbloquear"}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </article>
+      </section>
+      <Toast message={toast} />
+      {viewingFriend && (
+        <div className="app-modal-backdrop" onMouseDown={() => setViewingFriend(null)}>
+          <section
+            className="app-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="friend-profile-title"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="panel-head">
+              <h2 id="friend-profile-title">Perfil</h2>
+              <button type="button" className="secondary-button" onClick={() => setViewingFriend(null)}>
+                Fechar
+              </button>
+            </div>
+            <div className="player-card">
+              {viewingFriend.avatarUrl ? (
+                <img src={viewingFriend.avatarUrl} alt="" width={27} height={27} />
+              ) : (
+                <i>{viewingFriend.displayName.slice(0, 1).toUpperCase()}</i>
+              )}
+              <div>
+                <b>{viewingFriend.displayName}</b>
+                {viewingFriend.username && <small>@{viewingFriend.username}</small>}
+              </div>
+            </div>
+            <p>Este é o perfil público disponível para seus amigos.</p>
+          </section>
+        </div>
+      )}
+    </>
   );
 }
 
-function RoomsPage({ activeRoomId, setActiveRoomId, switchingRoom }: {
+function RoomsPage({ activeRoomId, onSelectRoom, switchingRoom, switchingRoomId, refreshKey }: {
   activeRoomId: string | null;
-  setActiveRoomId: React.Dispatch<React.SetStateAction<string | null>>;
+  onSelectRoom: (roomId: string | null) => void;
   switchingRoom: boolean;
+  switchingRoomId: string | null;
+  refreshKey: number;
 }) {
   const [name, setName] = useState("");
   const [entryCode, setEntryCode] = useState("");
@@ -323,6 +660,7 @@ function RoomsPage({ activeRoomId, setActiveRoomId, switchingRoom }: {
   const [newOwnerId, setNewOwnerId] = useState("");
   const [renameValue, setRenameValue] = useState("");
   const [renaming, setRenaming] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const selectedRoomRef = useRef<string | null>(activeRoomId);
   const selectionVersion = useRef(0);
   const selectedRoom = rooms.find((room) => room.id === activeRoomId);
@@ -412,8 +750,6 @@ function RoomsPage({ activeRoomId, setActiveRoomId, switchingRoom }: {
       setRoomActionError("Escolha um membro para ser o novo proprietário.");
       return;
     }
-    if (action === "delete" && !window.confirm("Deseja excluir esta sala?")) return;
-
     setRoomActionMessage("");
     setRoomActionError("");
     setRoomActionPending(true);
@@ -434,7 +770,7 @@ function RoomsPage({ activeRoomId, setActiveRoomId, switchingRoom }: {
         if (action === "leave" || action === "delete") {
           selectionVersion.current++;
           selectedRoomRef.current = null;
-          setActiveRoomId(null);
+          onSelectRoom(null);
           setMemberResult(null);
         }
         const messages = {
@@ -483,7 +819,7 @@ function RoomsPage({ activeRoomId, setActiveRoomId, switchingRoom }: {
       if (request === roomsRequest.current) setLoadingRooms(false);
     });
     return () => { roomsRequest.current++; };
-  }, []);
+  }, [refreshKey]);
 
   const create = async (event: FormEvent) => {
     event.preventDefault();
@@ -626,10 +962,10 @@ function RoomsPage({ activeRoomId, setActiveRoomId, switchingRoom }: {
                     setMemberResult(null);
                   }
                   selectedRoomRef.current = room.id;
-                  setActiveRoomId(room.id);
+                  onSelectRoom(room.id);
                 }}
               >
-                {switchingRoom && activeRoomId === room.id ? "Carregando dados da sala..." : activeRoomId === room.id ? "Selecionada" : "Entrar"}
+                {switchingRoom && switchingRoomId === room.id ? "Carregando sala..." : activeRoomId === room.id ? "Selecionada" : "Entrar"}
               </button>
             </div>
           ))}
@@ -669,7 +1005,7 @@ function RoomsPage({ activeRoomId, setActiveRoomId, switchingRoom }: {
                 </select>
               </label>
               <button type="button" className="secondary-button" disabled={renaming || roomActionPending || memberActionPending || !newOwnerId} onClick={() => changeRoom("transfer")}>Transferir propriedade</button>
-              <button type="button" className="danger" disabled={renaming || roomActionPending || memberActionPending} onClick={() => changeRoom("delete")}>Excluir sala</button>
+              <button type="button" className="danger" disabled={renaming || roomActionPending || memberActionPending} onClick={() => setConfirmingDelete(true)}>Excluir sala</button>
             </>
           )}
           {(selectedRoom.role !== "owner" || (memberResult?.roomId === selectedRoom.id && !memberResult.error && memberResult.members.length > 1)) && (
@@ -716,6 +1052,16 @@ function RoomsPage({ activeRoomId, setActiveRoomId, switchingRoom }: {
       )}
       </div>
       </div>
+      {confirmingDelete && selectedRoom && (
+        <AppModal
+          title="Excluir sala?"
+          message={`A sala ${selectedRoom.name} e seus dados serão excluídos.`}
+          confirmText="Excluir sala"
+          danger
+          onClose={() => setConfirmingDelete(false)}
+          onConfirm={() => changeRoom("delete")}
+        />
+      )}
     </>
   );
 }
@@ -745,6 +1091,7 @@ function DashboardPage({
     { label: "LÍDER DA TEMPORADA", value: data.leader?.name ?? "—", detail: data.leader ? `${data.leader.points} pontos no ranking geral` : "Sem líder" },
     { label: "MAIOR SEQUÊNCIA", value: largestStreak?.streak ?? 0, detail: largestStreak?.streak ? `${largestStreak.name} · sequência atual` : "Nenhuma sequência atual" },
   ];
+  const isEmptyRoom = data.players === 0 && data.matches === 0;
   const trendPoints = stats?.rankingTrend[0]?.points ?? [];
   const maxTrend = Math.max(...trendPoints.map((point) => point.position), 1);
   const trendPath = trendPoints.length
@@ -758,7 +1105,7 @@ function DashboardPage({
         .join(" ")
     : "";
   return (
-    <>
+    <div className="dashboard-page">
       <section className="page-title">
         <div>
           <p>VISÃO GERAL</p>
@@ -771,6 +1118,11 @@ function DashboardPage({
           </button>
         )}
       </section>
+      {isEmptyRoom && (
+        <section className="panel">
+          <Empty text="Nenhum dado nesta sala ainda. Crie um jogador ou campeonato para começar." />
+        </section>
+      )}
       <section className="metrics dashboard-metrics">
         {metrics.map(({ label, value, detail }) => (
           <article className="metric" key={label}>
@@ -925,7 +1277,7 @@ function DashboardPage({
         />
       )}
       <Toast message={toast} />
-    </>
+    </div>
   );
 }
 function PlayersPage({
@@ -993,8 +1345,14 @@ function PlayersPage({
                   <b>{p.name}</b>
                   <small>@{p.nickname}</small>
                 </div>
-                {canWrite && <button className="danger" onClick={() => setDeletePlayer(p)}>
-                  Excluir
+                {canWrite && <button
+                  type="button"
+                  className="button--icon danger"
+                  onClick={() => setDeletePlayer(p)}
+                  aria-label={`Excluir ${p.name}`}
+                  title="Excluir jogador"
+                >
+                  <Trash2 size={16} />
                 </button>}
               </div>
             ))}
@@ -1167,9 +1525,21 @@ function TeamPicker({
   );
 }
 
-function RankingPage({ data, players }: { data: Dashboard; players: Player[] }) {
+function RankingPage({
+  data,
+  players,
+  activeRoomId,
+}: {
+  data: Dashboard;
+  players: Player[];
+  activeRoomId: string | null;
+}) {
   const [tab, setTab] = useState<"geral" | "individuais" | "confrontos">("geral");
   const [sortBy, setSortBy] = useState<"goals" | "winrate" | "goaldiff" | "wins">("goals");
+  const [headToHeadMatches, setHeadToHeadMatches] = useState<Match[]>([]);
+  const [headToHeadLoading, setHeadToHeadLoading] = useState(false);
+  const [headToHeadPlayer1Id, setHeadToHeadPlayer1Id] = useState("");
+  const [headToHeadPlayer2Id, setHeadToHeadPlayer2Id] = useState("");
   const rankingFilters = [
     { id: "goals", label: "Artilharia" },
     { id: "winrate", label: "Aproveitamento" },
@@ -1194,6 +1564,50 @@ function RankingPage({ data, players }: { data: Dashboard; players: Player[] }) 
     { id: "individuais", label: "Estatísticas Individuais" },
     { id: "confrontos", label: "Confrontos Diretos" },
   ] as const;
+  const rankedPlayerIds = new Set(sortedRanking.map((row) => row.id));
+  const orderedPlayers = [
+    ...sortedRanking
+      .map((row) => players.find((player) => player.id === row.id))
+      .filter((player): player is Player => Boolean(player)),
+    ...players.filter((player) => !rankedPlayerIds.has(player.id)),
+  ];
+  const rankingFilterControls = (
+    <div className="ranking-filters" aria-label="Filtros da classificação">
+      {rankingFilters.map(({ id, label }) => (
+        <button
+          key={id}
+          type="button"
+          className={sortBy === id ? "active" : ""}
+          aria-pressed={sortBy === id}
+          onClick={() => setSortBy(id)}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+
+  useEffect(() => {
+    if (tab !== "confrontos") return;
+
+    let active = true;
+    setHeadToHeadLoading(true);
+    void window.arena
+      .matches()
+      .then((items) => {
+        if (active) setHeadToHeadMatches(items);
+      })
+      .catch(() => {
+        if (active) setHeadToHeadMatches([]);
+      })
+      .finally(() => {
+        if (active) setHeadToHeadLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [activeRoomId, tab]);
 
   return (
     <>
@@ -1210,9 +1624,7 @@ function RankingPage({ data, players }: { data: Dashboard; players: Player[] }) 
           </button>
         ))}
       </div>
-      {tab !== "geral" ? (
-        <article className="panel"><Empty text="Em breve" /></article>
-      ) : (
+      {tab === "geral" ? (
         <>
           <section className="metrics dashboard-metrics">
             <article className="metric">
@@ -1240,11 +1652,7 @@ function RankingPage({ data, players }: { data: Dashboard; players: Player[] }) 
           <section className="ranking-layout">
             <article className="panel">
               <div className="panel-head"><h2>Classificação Geral</h2></div>
-              <div className="ranking-filters" aria-label="Filtros da classificação">
-                {rankingFilters.map(({ id, label }) => (
-                  <button key={id} type="button" className={sortBy === id ? "active" : ""} aria-pressed={sortBy === id} onClick={() => setSortBy(id)}>{label}</button>
-                ))}
-              </div>
+              {rankingFilterControls}
               <Ranking rows={sortedRanking} />
             </article>
             <article className="panel ranking-insights">
@@ -1256,6 +1664,62 @@ function RankingPage({ data, players }: { data: Dashboard; players: Player[] }) 
             </article>
           </section>
         </>
+      ) : tab === "individuais" ? (
+        <section className="ranking-layout ranking-individual-layout">
+          <article className="panel">
+            <div className="panel-head">
+              <div>
+                <p>DESEMPENHO</p>
+                <h2>Estatísticas individuais</h2>
+              </div>
+            </div>
+            {rankingFilterControls}
+            <Ranking rows={sortedRanking} />
+          </article>
+          <article className="panel ranking-insights">
+            <div className="panel-head"><h2>Evolução no ranking</h2></div>
+            <div className="ranking-chart-placeholder ranking-evolution-placeholder">
+              <BarChart3 size={28} aria-hidden="true" />
+              <strong>Gráfico em breve</strong>
+              <span>A evolução de cada jogador aparecerá aqui.</span>
+            </div>
+          </article>
+        </section>
+      ) : (
+        <section className="ranking-layout ranking-head-to-head-layout">
+          <article className="panel">
+            <div className="panel-head">
+              <div>
+                <p>RETROSPECTO</p>
+                <h2>Confrontos diretos</h2>
+              </div>
+            </div>
+            {rankingFilterControls}
+            <div className="ranking-h2h-selectors">
+              <label>
+                Jogador 1
+                <select value={headToHeadPlayer1Id} onChange={(event) => setHeadToHeadPlayer1Id(event.target.value)}>
+                  <option value="">Selecione um jogador</option>
+                  {orderedPlayers.map((player) => <option key={player.id} value={player.id}>{player.name}</option>)}
+                </select>
+              </label>
+              <label>
+                Jogador 2
+                <select value={headToHeadPlayer2Id} onChange={(event) => setHeadToHeadPlayer2Id(event.target.value)}>
+                  <option value="">Selecione um jogador</option>
+                  {orderedPlayers.map((player) => <option key={player.id} value={player.id}>{player.name}</option>)}
+                </select>
+              </label>
+            </div>
+          </article>
+          <HeadToHeadCard
+            matches={headToHeadMatches}
+            players={players}
+            player1Id={headToHeadPlayer1Id}
+            player2Id={headToHeadPlayer2Id}
+            loading={headToHeadLoading}
+          />
+        </section>
       )}
     </>
   );
@@ -2153,6 +2617,7 @@ function ChampionshipPage({
     [deletingChampionship, setDeletingChampionship] =
       useState<Championship | null>(null),
     [assignments, setAssignments] = useState<Record<number, Team>>({}),
+    [duoAssignments, setDuoAssignments] = useState<Record<string, Team>>({}),
     [renaming, setRenaming] = useState<Championship | null>(null),
     [teamQuery, setTeamQuery] = useState(""),
     [searchedTeams, setSearchedTeams] = useState<Team[] | null>(null);
@@ -2194,11 +2659,36 @@ function ChampionshipPage({
     return () => window.clearTimeout(timer);
   }, [teamQuery]);
   const selectorTeams = searchedTeams ?? teams;
+  const duoKey = (player1Id: number, player2Id: number) =>
+    [player1Id, player2Id].sort((a, b) => a - b).join(":");
+  const selectedDuos = participants.reduce<DuoInput[]>((duos, playerId, index) => {
+    if (index % 2 === 0)
+      duos.push({ player1Id: playerId, player2Id: playerId });
+    else duos[duos.length - 1].player2Id = playerId;
+    return duos;
+  }, []);
   const save = async (e: FormEvent) => {
     e.preventDefault();
-    const teamIdsInOrder = participants.map(
-      (id) => assignments[id]?.id ?? null,
-    );
+    if (
+      mode === "duo" &&
+      (participants.length < 4 ||
+        selectedDuos.some((duo) => duo.player1Id === duo.player2Id))
+    ) {
+      setFormError("Forme ao menos duas duplas completas para criar o campeonato.");
+      return;
+    }
+    const teamIdsInOrder =
+      mode === "duo"
+        ? selectedDuos.map(
+            (duo) =>
+              duoAssignments[duoKey(duo.player1Id, duo.player2Id)]?.id ??
+              null,
+          )
+        : participants.map((id) => assignments[id]?.id ?? null);
+    if (mode === "duo" && teamIdsInOrder.some((teamId) => teamId === null)) {
+      setFormError("Escolha um time para cada dupla.");
+      return;
+    }
     const assignedTeamIds = teamIdsInOrder.filter(
       (teamId): teamId is number => typeof teamId === "number",
     );
@@ -2219,11 +2709,14 @@ function ChampionshipPage({
           mode === "mad" && mutator !== null ? MUTATORS[mutator].title : null,
         startsAt: new Date().toISOString(),
         status: "active",
-        participantIds: participants,
+        participantIds: mode === "duo" ? [] : participants,
+        participantDuos: mode === "duo" ? selectedDuos : undefined,
         participantTeamIds: teamIdsInOrder,
       }, activeRoomId);
       setName("");
       setParticipants([]);
+      setAssignments({});
+      setDuoAssignments({});
       setSelected(champ.id);
       await load();
     } catch (error) {
@@ -2278,11 +2771,19 @@ function ChampionshipPage({
     const shuffledPlayers = [...players].sort(() => Math.random() - 0.5);
     const shuffledTeams = [...teams].sort(() => Math.random() - 0.5);
     setParticipants(shuffledPlayers.map((p) => p.id));
-    setAssignments(
+    setAssignments({});
+    setDuoAssignments(
       Object.fromEntries(
-        shuffledPlayers.map(
-          (p, index) => [p.id, shuffledTeams[index]] as [number, Team],
-        ),
+        shuffledPlayers.reduce<number[][]>((pairs, player, index) => {
+          if (index % 2 === 0) pairs.push([player.id]);
+          else pairs[pairs.length - 1].push(player.id);
+          return pairs;
+        }, [])
+          .filter((pair) => pair.length === 2)
+          .map((pair, index) => [
+            duoKey(pair[0], pair[1]),
+            shuffledTeams[index],
+          ] as [string, Team]),
       ),
     );
   };
@@ -2314,6 +2815,15 @@ function ChampionshipPage({
           <Trophy />{" "}
           <span>
             Clássico<small>1v1 competitivo</small>
+          </span>
+        </button>
+        <button
+          className={mode === "duo" ? "active duo" : ""}
+          onClick={() => setMode("duo")}
+        >
+          <UsersRound />{" "}
+          <span>
+            Dupla<small>2v2 em equipe</small>
           </span>
         </button>
         <button
@@ -2359,7 +2869,7 @@ function ChampionshipPage({
               ) {
                 e.preventDefault();
                 setFormError(
-                  "O mata-mata exige 2, 4, 8, 16 ou 32 participantes.",
+                  "O formato Mata-mata exige um número exato de participantes (2, 4, 8, 16 ou 32). Para números diferentes, use o formato 'Maluco' (Fase de Grupos + Mata-mata).",
                 );
                 return;
               }
@@ -2425,6 +2935,7 @@ function ChampionshipPage({
             {teamQuery.trim() && (
               <button
                 type="button"
+                className="button--icon"
                 onClick={() => setTeamQuery("")}
                 aria-label="Limpar busca"
               >
@@ -2492,7 +3003,7 @@ function ChampionshipPage({
               A roleta define obrigatoriamente o desafio da rodada antes do
               apito inicial.
             </p>
-            <button type="button" onClick={drawMutator} disabled={rolling}>
+            <button type="button" className="button button--primary" onClick={drawMutator} disabled={rolling}>
               <Shuffle size={17} />{" "}
               {rolling ? "Roleta girando..." : "Sortear 5 desafios"}
             </button>
@@ -2583,21 +3094,21 @@ function ChampionshipPage({
                 : "CONFIRMAR PARTICIPANTES"}
             </span>
             <h2>
-              {mode === "duo" ? "Forme os esquadrões" : "Quem entra em campo?"}
+              {mode === "duo" ? "Formar Duplas" : "Quem entra em campo?"}
             </h2>
           </div>
           <span className="selection-count">
-            {participants.length} selecionados
+            {mode === "duo" ? `${Math.floor(participants.length / 2)} duplas` : `${participants.length} selecionados`}
           </span>
         </div>
         {mode === "duo" && (
           <div className="duo-notice">
             <UsersRound size={19} />
             <span>
-              <b>Modo dupla ativo.</b> Selecione jogadores em pares ou deixe a
-              Arena equilibrar os esquadrões.
+              <b>Modo dupla ativo.</b> Selecione dois jogadores por vez para
+              formar uma dupla ou deixe a Arena equilibrar os esquadrões.
             </span>
-            <button type="button" onClick={pairPlayers}>
+            <button type="button" className="button--secondary" onClick={pairPlayers}>
               <Shuffle size={14} /> Sortear duplas
             </button>
           </div>
@@ -2630,7 +3141,7 @@ function ChampionshipPage({
                   </span>
                   {included && <Check size={16} />}
                 </button>
-                {included && (
+                {included && mode !== "duo" && (
                   <TeamPicker
                     label={`Time de ${p.name}`}
                     teams={teams}
@@ -2656,38 +3167,63 @@ function ChampionshipPage({
             );
           })}
         </div>
-        {mode === "duo" && participants.length > 0 && (
+        {mode === "duo" && selectedDuos.length > 0 && (
           <div className="duo-preview">
-            {participants
-              .reduce<number[][]>((pairs, id, index) => {
-                if (index % 2 === 0) pairs.push([id]);
-                else pairs[pairs.length - 1].push(id);
-                return pairs;
-              }, [])
-              .map((pair, index) => (
-                <div className="duo-team" key={pair.join("-")}>
+            {selectedDuos.map((duo, index) => {
+              const pair = [duo.player1Id, duo.player2Id];
+              const complete = duo.player1Id !== duo.player2Id;
+              const key = duoKey(duo.player1Id, duo.player2Id);
+              const otherDuoTeamIds = selectedDuos
+                .filter((_, duoIndex) => duoIndex !== index)
+                .map((otherDuo) =>
+                  duoAssignments[
+                    duoKey(otherDuo.player1Id, otherDuo.player2Id)
+                  ]?.id,
+                )
+                .filter(
+                  (teamId): teamId is number => typeof teamId === "number",
+                );
+
+              return (
+                <div className="duo-team" key={key}>
                   <span className="duo-team-label">DUPLA {index + 1}</span>
                   <div>
-                    {pair.map((id) => {
+                    {pair.map((id, memberIndex) => {
                       const player = players.find((p) => p.id === id);
                       return (
                         player && (
-                          <span className="duo-member" key={id}>
+                          <span className="duo-member" key={`${id}-${memberIndex}`}>
                             <i>{player.name[0]}</i>
                             {player.name}
                           </span>
                         )
                       );
                     })}
-                    {pair.length === 1 && (
+                    {!complete && (
                       <span className="duo-empty">+ Convide alguém</span>
                     )}
-                    <span className="duo-club">
-                      → {assignments[pair[0]]?.name ?? "Sorteie uma equipe"}
-                    </span>
                   </div>
+                  {complete && (
+                    <section className="duo-team-picker">
+                      <TeamPicker
+                        label={`Time da dupla ${index + 1}`}
+                        teams={teams}
+                        value={duoAssignments[key] ?? null}
+                        excludeTeamIds={otherDuoTeamIds}
+                        onChange={(picked) =>
+                          setDuoAssignments((current) => {
+                            const next = { ...current };
+                            if (picked) next[key] = picked;
+                            else delete next[key];
+                            return next;
+                          })
+                        }
+                      />
+                    </section>
+                  )}
                 </div>
-              ))}
+              );
+            })}
           </div>
         )}
         {!players.length && (
@@ -2755,6 +3291,7 @@ function ChampionshipPage({
                 >
                   <button
                     type="button"
+                    className="button--icon"
                     title="Editar nome"
                     aria-label={`Editar nome de ${c.name}`}
                     onClick={() => setRenaming(c)}
@@ -2892,7 +3429,10 @@ function ChampionshipDetailView({
     4: "Final",
   };
   const renderFixture = (fixture: Fixture, compact = false) => (
-    <div className={compact ? "bracket-match" : "fixture"} key={fixture.id}>
+    <div
+      className={`${compact ? "bracket-match" : "fixture"}${detail.championship.mode === "duo" ? " duo-fixture" : ""}`}
+      key={fixture.id}
+    >
       {!compact && <small>{fixture.stage === "league" ? `Rodada ${fixture.round}` : knockoutRoundLabel[fixture.round] ?? "Mata-mata"}</small>}
       <span>{fixture.player1}</span>
       {fixture.matchId ? (
@@ -3228,12 +3768,15 @@ function FixtureResultModal({
     <div className="edit-modal-backdrop" onMouseDown={onClose}>
       <div
         className="edit-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="fixture-result-title"
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="edit-modal-header">
           <div>
             <span>REGISTRAR RESULTADO · {championship.name}</span>
-            <h2>
+            <h2 id="fixture-result-title">
               {fixture.player1} vs {fixture.player2}
             </h2>
           </div>
@@ -3754,7 +4297,11 @@ function SettingsPage({ reload }: { reload: () => Promise<void> }) {
               </div>
             </article>
           ) : section === "notifications" ? (
-            <NotificationsSettings onOpenAppearance={() => setSection("appearance")} />
+            <NotificationsSettings
+              onOpenAppearance={() => setSection("appearance")}
+              soundEnabled={!muted}
+              onToggleSound={() => setMuted((value) => !value)}
+            />
           ) : section === "privacy" ? (
             <PrivacySettings />
           ) : section === "about" ? (
@@ -3825,14 +4372,14 @@ function SettingsPage({ reload }: { reload: () => Promise<void> }) {
   );
 }
 
-function ArenaApp({ user, onSignOut }: { user: AuthUser; onSignOut: () => void }) {
+function ArenaApp({ user, onSignOut, onSessionExpired }: { user: AuthUser; onSignOut: () => void; onSessionExpired: () => void }) {
   const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
   const [activeRoomRole, setActiveRoomRole] = useState<
     "owner" | "admin" | "participant" | null
   >(null);
-  const [loadedRoomId, setLoadedRoomId] = useState<string | null | undefined>(undefined);
-  const [roomLoadAttempt, setRoomLoadAttempt] = useState(0);
-  const switchingRoom = loadedRoomId !== activeRoomId;
+  const [roomListVersion, setRoomListVersion] = useState(0);
+  const [switchingRoom, setSwitchingRoom] = useState(true);
+  const [switchingRoomId, setSwitchingRoomId] = useState<string | null>(null);
   const showRoomOnlyTabs = activeRoomId !== null;
   const [page, setPage] = useState<Page>("dashboard"),
     [data, setData] = useState<Dashboard>(),
@@ -3840,7 +4387,13 @@ function ArenaApp({ user, onSignOut }: { user: AuthUser; onSignOut: () => void }
     [players, setPlayers] = useState<Player[]>([]),
     [teams, setTeams] = useState<Team[]>([]),
     [accountMenuOpen, setAccountMenuOpen] = useState(false);
-  const accountMenuRef = useRef<HTMLDivElement | null>(null);
+  const accountActionsRef = useRef<HTMLDivElement | null>(null);
+  const roomSwitchRequest = useRef(0);
+  const [notifications, setNotifications] = useState<Awaited<ReturnType<typeof window.arena.listUnreadNotifications>>>([]);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [notificationActionId, setNotificationActionId] = useState<number | null>(null);
+  const [notificationError, setNotificationError] = useState("");
+  const { toast, showToast } = useToast();
   const [online, setOnline] = useState(navigator.onLine);
   useEffect(() => {
     const updateOnline = () => setOnline(navigator.onLine);
@@ -3851,47 +4404,116 @@ function ArenaApp({ user, onSignOut }: { user: AuthUser; onSignOut: () => void }
       window.removeEventListener("offline", updateOnline);
     };
   }, []);
-  const reload = async () => {
+  const loadCurrentRoomData = useCallback(async (requestId?: number): Promise<boolean> => {
+    const [dashboard, playerList, teamList] = await Promise.all([
+      window.arena.dashboard(),
+      window.arena.players(),
+      window.arena.teams(),
+    ]);
+    if (requestId !== undefined && roomSwitchRequest.current !== requestId) return false;
+    setData(dashboard);
+    setPlayers(playerList);
+    setTeams(teamList);
+    setLoadError("");
+    return true;
+  }, []);
+  const reload = useCallback(async () => {
     try {
-      const [dashboard, playerList, teamList] = await Promise.all([
-        window.arena.dashboard(),
-        window.arena.players(),
-        window.arena.teams(),
-      ]);
-      setData(dashboard);
-      setPlayers(playerList);
-      setTeams(teamList);
-      setLoadError("");
+      await loadCurrentRoomData();
     } catch (error) {
-      setLoadError(
-        error instanceof Error
-          ? error.message
-          : "Não foi possível carregar os dados da Arena.",
-      );
+      if (isSessionExpiredError(error)) {
+        onSessionExpired();
+        return;
+      }
+      if (activeRoomId === null) {
+        setLoadError(
+          error instanceof Error
+            ? error.message
+            : "Não foi possível carregar os dados da Arena.",
+        );
+      } else {
+        console.warn("Falha ao recarregar os dados da sala", error);
+      }
+    }
+  }, [activeRoomId, loadCurrentRoomData, onSessionExpired]);
+  const activateRoom = useCallback(async (roomId: string | null): Promise<boolean> => {
+    const requestId = ++roomSwitchRequest.current;
+    setSwitchingRoom(true);
+    setSwitchingRoomId(roomId);
+    setLoadError("");
+    setData(EMPTY_DASHBOARD);
+    setPlayers([]);
+    setTeams([]);
+    try {
+      await window.arena.setActiveRoom(roomId);
+      if (roomSwitchRequest.current !== requestId) return false;
+      setActiveRoomId(roomId);
+      try {
+        await loadCurrentRoomData(requestId);
+      } catch (error) {
+        console.warn("Falha ao carregar dados iniciais da sala", error);
+      }
+      return true;
+    } catch (error) {
+      if (isSessionExpiredError(error)) {
+        onSessionExpired();
+        return false;
+      }
+      console.warn("Falha ao trocar de sala", error);
+      return false;
+    } finally {
+      if (roomSwitchRequest.current === requestId) {
+        setSwitchingRoom(false);
+        setSwitchingRoomId(null);
+      }
+    }
+  }, [loadCurrentRoomData, onSessionExpired]);
+  const loadNotifications = async () => {
+    try {
+      const unreadNotifications = await window.arena.listUnreadNotifications();
+      setNotifications(unreadNotifications);
+    } catch {
+      setNotifications([]);
+    }
+  };
+  const acceptRoomInvite = async (notification: Awaited<ReturnType<typeof window.arena.listUnreadNotifications>>[number]) => {
+    const roomCode = notification.type === "room_invite" && typeof notification.payload.roomCode === "string"
+      ? notification.payload.roomCode
+      : null;
+    if (!roomCode) {
+      setNotificationError("Este convite não possui um código de sala válido.");
+      return;
+    }
+
+    setNotificationActionId(notification.id);
+    setNotificationError("");
+    try {
+      const { roomId } = await window.arena.joinRoom(roomCode);
+      if (roomId === null) {
+        throw new Error("Não foi possível entrar na sala. Peça um novo convite.");
+      }
+      await window.arena.markNotificationRead(notification.id);
+      const switched = await activateRoom(roomId);
+      if (!switched) return;
+      setActiveRoomId(roomId);
+      setPage("rooms");
+      setNotificationsOpen(false);
+      setNotifications((current) => current.filter((item) => item.id !== notification.id));
+      setRoomListVersion((version) => version + 1);
+      showToast("Convite aceito. Você entrou na sala.");
+    } catch (error) {
+      if (isSessionExpiredError(error)) {
+        onSessionExpired();
+        return;
+      }
+      setNotificationError(error instanceof Error ? error.message : "Não foi possível aceitar o convite.");
+    } finally {
+      setNotificationActionId(null);
     }
   };
   useEffect(() => {
-    let current = true;
-    void (async () => {
-      try {
-        await window.arena.setActiveRoom(activeRoomId);
-        const [dashboard, playerList, teamList] = await Promise.all([
-          window.arena.dashboard(), window.arena.players(), window.arena.teams(),
-        ]);
-        if (!current) return;
-        setData(dashboard);
-        setPlayers(playerList);
-        setTeams(teamList);
-        setLoadError("");
-        setLoadedRoomId(activeRoomId);
-      } catch {
-        if (!current) return;
-        setLoadError("Não foi possível carregar os dados da sala.");
-        setData(undefined);
-      }
-    })();
-    return () => { current = false; };
-  }, [activeRoomId, roomLoadAttempt]);
+    void activateRoom(null);
+  }, [activateRoom]);
   useEffect(() => {
     if (!activeRoomId) {
       setActiveRoomRole(null);
@@ -3911,10 +4533,15 @@ function ArenaApp({ user, onSignOut }: { user: AuthUser; onSignOut: () => void }
     };
   }, [activeRoomId]);
   useEffect(() => {
+    void loadNotifications();
+    const interval = window.setInterval(() => void loadNotifications(), 30_000);
+    return () => window.clearInterval(interval);
+  }, []);
+  useEffect(() => {
     const onDocumentClick = (event: MouseEvent) => {
       if (
-        accountMenuRef.current &&
-        !accountMenuRef.current.contains(event.target as Node)
+        accountActionsRef.current &&
+        !accountActionsRef.current.contains(event.target as Node)
       ) {
         setAccountMenuOpen(false);
       }
@@ -3928,12 +4555,12 @@ function ArenaApp({ user, onSignOut }: { user: AuthUser; onSignOut: () => void }
       <main className="error-state">
         <h1>Não foi possível carregar a Arena</h1>
         <p>{loadError}</p>
-        <button className="primary" onClick={() => setRoomLoadAttempt((attempt) => attempt + 1)}>
+        <button className="primary" onClick={() => void activateRoom(activeRoomId)}>
           Tentar novamente
         </button>
       </main>
     );
-  if (!data) return <main className="loading">Carregando arena…</main>;
+  if (!data) return <main className="loading">{switchingRoom ? "Carregando sala..." : "Carregando arena…"}</main>;
   const nav: [Page, string, React.ElementType][] = [
     ["dashboard", "Visão geral", LayoutDashboard],
     ["rooms", "Salas personalizadas", DoorOpen],
@@ -3944,25 +4571,37 @@ function ArenaApp({ user, onSignOut }: { user: AuthUser; onSignOut: () => void }
     ["championships", "Campeonatos", Trophy],
     ["friends", "Amigos", UsersRound],
   ];
+  const designGalleryEnabled = import.meta.env.DEV && window.location.hash === "#design";
   const view =
-    switchingRoom && page !== "rooms" ? (
-      <main className="loading">Carregando dados da sala...</main>
+    designGalleryEnabled && DesignGallery ? (
+      <React.Suspense fallback={<main className="loading">Carregando galeria...</main>}>
+        <DesignGallery />
+      </React.Suspense>
+    ) : switchingRoom ? (
+      <main className="loading">Carregando sala...</main>
     ) : page === "dashboard" ? (
       <DashboardPage data={data} players={players} go={setPage} reload={reload} showRoomOnlyTabs={showRoomOnlyTabs} />
     ) : page === "rooms" ? (
-      <RoomsPage activeRoomId={activeRoomId} setActiveRoomId={setActiveRoomId} switchingRoom={switchingRoom} />
+      <RoomsPage
+        activeRoomId={activeRoomId}
+        onSelectRoom={(roomId) => void activateRoom(roomId)}
+        switchingRoom={switchingRoom}
+        switchingRoomId={switchingRoomId}
+        refreshKey={roomListVersion}
+      />
     ) : page === "friends" ? (
-      <FriendsPage />
+      <FriendsPage activeRoomId={activeRoomId} />
     ) : page === "players" ? (
       <PlayersPage players={players} reload={reload} activeRoomId={activeRoomId} roomRole={activeRoomRole} />
     ) : page === "matches" ? (
       <MatchesPage players={players} teams={teams} reload={reload} totalMatches={data.matches} activeRoomId={activeRoomId} roomRole={activeRoomRole} />
     ) : page === "ranking" ? (
-      <RankingPage data={data} players={players} />
+      <RankingPage data={data} players={players} activeRoomId={activeRoomId} />
     ) : page === "championships" ? (
       <ChampionshipPage players={players} teams={teams} activeRoomId={activeRoomId} roomRole={activeRoomRole} />
     ) : page === "profile" ? (
       <ProfilePage
+        dashboard={data}
         onEditProfile={() => {
           setPage("settings");
         }}
@@ -3976,14 +4615,14 @@ function ArenaApp({ user, onSignOut }: { user: AuthUser; onSignOut: () => void }
   const showArenaMenu = false;
   return (
     <div className="shell">
-      <aside>
+      <aside className="app-sidebar">
         <div className="brand">
           <Gamepad2 />
           <b>
             FC <em>ARENA</em>
           </b>
         </div>
-        <nav>
+        <nav className="app-navigation">
           {nav.map(([id, label, Icon]) => (
             <button
               className={page === id ? "active" : ""}
@@ -4003,38 +4642,94 @@ function ArenaApp({ user, onSignOut }: { user: AuthUser; onSignOut: () => void }
           <small>v0.1.0 · dados locais</small>
         </div>
       </aside>
-      <main>{view}</main>
-      <div className="account-menu" ref={accountMenuRef}>
-        <button
-          type="button"
-          className="account-menu-trigger"
-          onClick={() => setAccountMenuOpen((open) => !open)}
-          aria-expanded={accountMenuOpen}
-          aria-haspopup="menu"
-        >
-          <span className="account-menu-avatar">
-            {user.displayName.slice(0, 1).toUpperCase()}
-          </span>
+      <main className="app-main">{view}</main>
+      <div className="account-actions" ref={accountActionsRef}>
+        <div className="notification-menu">
+          <button
+            type="button"
+            className="notification-menu-trigger"
+            onClick={() => {
+              setNotificationsOpen((open) => !open);
+              setAccountMenuOpen(false);
+            }}
+            aria-expanded={notificationsOpen}
+            aria-haspopup="menu"
+            aria-label="Notificações"
+          >
+            <Bell size={18} />
+            {notifications.length > 0 && <span className="notification-badge">{notifications.length}</span>}
+          </button>
+          {notificationsOpen && (
+            <div className="notification-menu-panel" role="menu">
+              <div className="notification-menu-head">
+                <strong>Notificações</strong>
+              </div>
+              {notificationError && <p role="alert">{notificationError}</p>}
+              {notifications.length === 0 ? (
+                <p className="notification-empty">Nenhuma notificação nova.</p>
+              ) : (
+                notifications.map((notification) => {
+                  const senderName = typeof notification.payload.senderName === "string"
+                    ? notification.payload.senderName
+                    : "Um amigo";
+                  const roomName = typeof notification.payload.roomName === "string"
+                    ? notification.payload.roomName
+                    : "uma sala";
+                  return (
+                    <article className="notification-item" key={notification.id}>
+                      <p>{senderName} te convidou para a sala {roomName}.</p>
+                      {notification.type === "room_invite" && (
+                        <button
+                          type="button"
+                          className="primary"
+                          onClick={() => void acceptRoomInvite(notification)}
+                          disabled={notificationActionId === notification.id}
+                        >
+                          {notificationActionId === notification.id ? "Aceitando..." : "Aceitar"}
+                        </button>
+                      )}
+                    </article>
+                  );
+                })
+              )}
+            </div>
+          )}
+        </div>
+        <div className="account-menu">
+          <button
+            type="button"
+            className="account-menu-trigger"
+            onClick={() => {
+              setAccountMenuOpen((open) => !open);
+              setNotificationsOpen(false);
+            }}
+            aria-expanded={accountMenuOpen}
+            aria-haspopup="menu"
+          >
+            <span className="account-menu-avatar">
+              {user.displayName.slice(0, 1).toUpperCase()}
+            </span>
 
-          <span className="account-menu-identity">
-            <strong>{user.displayName}</strong>
-            <small>{user.email}</small>
-          </span>
+            <span className="account-menu-identity">
+              <strong>{user.displayName}</strong>
+              <small>{user.email}</small>
+            </span>
 
-          <ChevronDown
-            size={15}
-            className={
-              accountMenuOpen
-                ? "account-menu-chevron open"
-                : "account-menu-chevron"
-            }
-          />
-        </button>
+            <ChevronDown
+              size={15}
+              className={
+                accountMenuOpen
+                  ? "account-menu-chevron open"
+                  : "account-menu-chevron"
+              }
+            />
+          </button>
 
-        {accountMenuOpen && (
+          {accountMenuOpen && (
           <div className="account-menu-panel" role="menu">
             <button
               type="button"
+              className="button--ghost account-menu-panel-action"
               role="menuitem"
               onClick={() => {
                 setPage("profile");
@@ -4047,6 +4742,7 @@ function ArenaApp({ user, onSignOut }: { user: AuthUser; onSignOut: () => void }
 
             <button
               type="button"
+              className="button--ghost account-menu-panel-action"
               role="menuitem"
               onClick={() => {
                 setPage("settings");
@@ -4072,10 +4768,12 @@ function ArenaApp({ user, onSignOut }: { user: AuthUser; onSignOut: () => void }
               <span>Sair</span>
             </button>
           </div>
-        )}
+          )}
+        </div>
       </div>
 
       {showArenaMenu && <ArenaTools mutators={MUTATORS} teams={teams} />}
+      <Toast message={toast} />
     </div>
   );
 }
@@ -4083,6 +4781,7 @@ function App() {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [authError, setAuthError] = useState("");
+  const [sessionMessage, setSessionMessage] = useState("");
 
   useEffect(() => {
     void window.arena.auth.session()
@@ -4119,7 +4818,17 @@ function App() {
   }
 
   if (!user) {
-    return <AuthPage onAuthenticated={setUser} />;
+    return (
+      <>
+        <Toast message={sessionMessage} />
+        <AuthPage
+          onAuthenticated={(nextUser) => {
+            setSessionMessage("");
+            setUser(nextUser);
+          }}
+        />
+      </>
+    );
   }
 
   return (
@@ -4127,6 +4836,10 @@ function App() {
       user={user}
       onSignOut={() => {
         void window.arena.auth.signOut().then(() => setUser(null));
+      }}
+      onSessionExpired={() => {
+        setSessionMessage(SESSION_EXPIRED_MESSAGE);
+        setUser(null);
       }}
     />
   );

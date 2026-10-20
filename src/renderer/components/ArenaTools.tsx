@@ -143,7 +143,7 @@ export function ArenaTools({ mutators, teams }: { mutators: Array<{ title: strin
                     ))}
                   </div>
                 </div>
-                <button type="button" onClick={spin} disabled={spinning}>Girar</button>
+                <button type="button" className="button button--primary" onClick={spin} disabled={spinning}>Girar</button>
                 <p aria-live="polite">{spinning ? "Sorteando..." : winner ? `Time sorteado: ${winner.name}` : "Gire para sortear um time."}</p>
               </> : <p>Nenhum time disponível para sortear.</p>}
             </div>

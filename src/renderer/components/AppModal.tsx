@@ -47,13 +47,28 @@ export function AppModal({
 
   return (
     <div className="app-modal-backdrop" onMouseDown={onClose}>
-      <div className="app-modal" onMouseDown={(e) => e.stopPropagation()}>
+      <div
+        className="app-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="app-modal-title"
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <button
+          type="button"
+          className="app-modal-close"
+          onClick={onClose}
+          disabled={loading}
+          aria-label="Fechar"
+        >
+          ×
+        </button>
         <div className={`app-modal-icon ${danger ? "danger" : ""}`}>
           {danger ? "!" : "?"}
         </div>
 
         <div className="app-modal-content">
-          <h2>{title}</h2>
+          <h2 id="app-modal-title">{title}</h2>
           <p>{message}</p>
         </div>
 
