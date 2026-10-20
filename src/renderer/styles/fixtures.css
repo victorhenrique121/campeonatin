@@ -57,6 +57,86 @@
     white-space: nowrap;
 }
 
+.bracket {
+    display: flex;
+    align-items: stretch;
+    gap: 42px;
+    min-width: min-content;
+    padding: 8px 18px 16px 4px;
+    overflow-x: auto;
+}
+
+.bracket-round {
+    display: flex;
+    flex: 0 0 220px;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.bracket-round h3 {
+    margin: 0 0 12px;
+    color: var(--arena-text-secondary);
+    font-size: 12px;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+}
+
+.bracket-matches {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    justify-content: space-around;
+    gap: 18px;
+}
+
+.bracket-match {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: center;
+    gap: 8px;
+    min-height: 46px;
+    padding: 10px;
+    border: 1px solid rgba(255, 255, 255, .10);
+    border-radius: 8px;
+    background: var(--arena-card);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, .18);
+    font-size: 12px;
+}
+
+.bracket-match span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.bracket-match span:last-child { text-align: right; }
+.bracket-match b { color: var(--arena-accent); font-family: 'Space Grotesk'; }
+
+/* Liga cada confronto à coluna seguinte sem depender da lógica do campeonato. */
+.bracket-round:not(:last-child) .bracket-match::after {
+    position: absolute;
+    top: 50%;
+    left: 100%;
+    width: 42px;
+    height: 1px;
+    background: color-mix(in srgb, var(--arena-accent) 45%, transparent);
+    content: "";
+}
+
+.bracket-round:not(:last-child) .bracket-match:nth-child(odd)::before {
+    position: absolute;
+    top: 50%;
+    left: calc(100% + 42px);
+    width: 1px;
+    height: calc(100% + 18px);
+    background: color-mix(in srgb, var(--arena-accent) 45%, transparent);
+    content: "";
+}
+
+.group-fixtures { margin-top: 22px; }
+
 @media(max-width:600px) {
     .fixture {
         grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
@@ -66,6 +146,9 @@
     .fixture small {
         grid-column: 1 / -1;
     }
+
+    .bracket { gap: 26px; }
+    .bracket-round { flex-basis: 190px; }
 }
 /* Botão de registro de resultado no confronto pendente (P1-1). */
 .fixture-register {

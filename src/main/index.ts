@@ -212,9 +212,8 @@ app.whenReady().then(async () => {
     await updateChampionshipName(db, id, name);
     return repo.championshipDetail(id).championship;
   }));
-  ipcMain.handle("championships:delete", (_, id) => withContext(({ repo }) => {
-    ensureRoomGlobalOnly();
-    return deleteChampionship(repo, id);
+  ipcMain.handle("championships:delete", (_, id) => withContext(({ db }) => {
+    return deleteChampionship(db, id);
   }));
 
 

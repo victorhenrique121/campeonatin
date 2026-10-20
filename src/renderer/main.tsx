@@ -2870,6 +2870,12 @@ function ChampionshipDetailView({
   onRegistered: () => Promise<void>;
 }) {
   const [registering, setRegistering] = useState<Fixture | null>(null);
+  const knockoutRounds = detail.fixtures
+    .filter((fixture) => fixture.stage === "knockout")
+    .reduce<Record<number, Fixture[]>>((all, fixture) => {
+      (all[fixture.round] ??= []).push(fixture);
+      return all;
+    }, {});
   const grouped = detail.fixtures.reduce<Record<string, Fixture[]>>(
     (all, fixture) => {
       const group =
@@ -2878,6 +2884,32 @@ function ChampionshipDetailView({
       return all;
     },
     {},
+  );
+  const knockoutRoundLabel: Record<number, string> = {
+    1: "Oitavas",
+    2: "Quartas",
+    3: "Semifinal",
+    4: "Final",
+  };
+  const renderFixture = (fixture: Fixture, compact = false) => (
+    <div className={compact ? "bracket-match" : "fixture"} key={fixture.id}>
+      {!compact && <small>{fixture.stage === "league" ? `Rodada ${fixture.round}` : knockoutRoundLabel[fixture.round] ?? "Mata-mata"}</small>}
+      <span>{fixture.player1}</span>
+      {fixture.matchId ? (
+        <b>{fixture.score1} × {fixture.score2}</b>
+      ) : canWrite ? (
+        <button
+          type="button"
+          className="fixture-register"
+          onClick={() => setRegistering(fixture)}
+        >
+          vs · Registrar
+        </button>
+      ) : (
+        <span>vs</span>
+      )}
+      <span>{fixture.player2}</span>
+    </div>
   );
   return (
     <section className="grid championship-detail">
@@ -2918,35 +2950,49 @@ function ChampionshipDetailView({
             {detail.championship.format === "league" ? "Calendário" : "Chave"}
           </h2>
         </div>
-        <div className="fixtures">
-          {Object.entries(grouped).map(([stage, fixtures]) => (
-            <React.Fragment key={stage}>
-              <p className="fixture-stage">{stage}</p>
-              {fixtures.map((f) => (
-                <div className="fixture" key={f.id}>
-                  <small>{stage}</small>
-                  <span>{f.player1}</span>
-                  {f.matchId ? (
-                    <b>
-                      {f.score1} × {f.score2}
-                    </b>
-                  ) : canWrite ? (
-                    <button
-                      type="button"
-                      className="fixture-register"
-                      onClick={() => setRegistering(f)}
-                    >
-                      vs · Registrar
-                    </button>
-                  ) : (
-                    <span>vs</span>
-                  )}
-                  <span>{f.player2}</span>
-                </div>
-              ))}
-            </React.Fragment>
-          ))}
-        </div>
+        {detail.championship.format === "league" ? (
+          <div className="fixtures">
+            {Object.entries(grouped).map(([stage, fixtures]) => (
+              <React.Fragment key={stage}>
+                <p className="fixture-stage">{stage}</p>
+                {fixtures.map((fixture) => renderFixture(fixture))}
+              </React.Fragment>
+            ))}
+          </div>
+        ) : (
+          <>
+            {Object.keys(knockoutRounds).length ? (
+              <div className="bracket" aria-label="Chave do mata-mata">
+                {Object.entries(knockoutRounds)
+                  .sort(([first], [second]) => Number(first) - Number(second))
+                  .map(([round, fixtures]) => (
+                    <section className="bracket-round" key={round}>
+                      <h3>{knockoutRoundLabel[Number(round)] ?? `Rodada ${round}`}</h3>
+                      <div className="bracket-matches">
+                        {fixtures
+                          .sort((first, second) => (first.bracketPosition ?? first.id) - (second.bracketPosition ?? second.id))
+                          .map((fixture) => renderFixture(fixture, true))}
+                      </div>
+                    </section>
+                  ))}
+              </div>
+            ) : (
+              <Empty text="A chave será gerada quando a fase de grupos terminar." />
+            )}
+            {detail.championship.format === "groups_knockout" && (
+              <div className="fixtures group-fixtures">
+                {Object.entries(grouped)
+                  .filter(([stage]) => stage.startsWith("Rodada"))
+                  .map(([stage, fixtures]) => (
+                    <React.Fragment key={stage}>
+                      <p className="fixture-stage">{stage}</p>
+                      {fixtures.map((fixture) => renderFixture(fixture))}
+                    </React.Fragment>
+                  ))}
+              </div>
+            )}
+          </>
+        )}
       </article>
       {registering && (
         <FixtureResultModal

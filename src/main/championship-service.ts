@@ -1,18 +1,16 @@
 import type Database from "better-sqlite3";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Championship, DuoInput } from "../shared/models";
-import type { repository } from "./repository";
+import { repository } from "./repository";
 import { ensureAuthenticated, getSessionUserId, getSupabase, getUserSessionClient } from "./supabase";
 
 export async function deleteChampionship(
-  repo: Pick<ReturnType<typeof repository>, "deleteChampionship">,
+  db: Database.Database,
   id: number,
 ): Promise<void> {
   const failureMessage = "Não foi possível excluir o campeonato. Verifique sua conexão.";
   try {
-    const auth = await ensureAuthenticated();
-    const supabase = getSupabase();
-    if (!auth.ok || !supabase) throw new Error(failureMessage);
+    const supabase = await getUserSessionClient();
 
     const { data, error } = await supabase.from("championships")
       .delete().eq("id", id).select("id");
@@ -21,7 +19,7 @@ export async function deleteChampionship(
     throw new Error(failureMessage);
   }
 
-  repo.deleteChampionship(id);
+  repository(db).deleteChampionship(id);
 }
 
 export async function getOrCreateDuoRemote(
