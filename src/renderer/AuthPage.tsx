@@ -279,7 +279,7 @@ export function AuthPage({ onAuthenticated }: Props) {
           <span>
             {mode === "login" ? "Ainda não tem uma conta?" : "Já tem uma conta?"}
           </span>
-          <button type="button" onClick={() => changeMode(mode === "login" ? "signup" : "login")}>
+          <button className="button--ghost" type="button" onClick={() => changeMode(mode === "login" ? "signup" : "login")}>
             {mode === "login" ? "Criar conta" : "Entrar"}
           </button>
         </div>

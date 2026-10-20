@@ -1,3 +1,5 @@
+import "./styles/tokens.css";
+import "./styles/base.css";
 import "./styles/config.css";
 import { AccountSettings } from "./settings/AccountSettings";
 import { PasswordSettings } from "./settings/PasswordSettings";
@@ -87,6 +89,7 @@ import "./styles/app.css";
 import "./styles/account-menu.css";
 import "./styles/fixtures.css";
 import "./styles/HeadToHeadCard.css";
+import "./styles/components.css";
 
 type Page =
   | "dashboard"
@@ -99,6 +102,9 @@ type Page =
   | "settings"
   | "profile"
   | "teams";
+const DesignGallery = import.meta.env.DEV
+  ? React.lazy(() => import("./components/DesignGallery").then(({ DesignGallery: Component }) => ({ default: Component })))
+  : null;
 const date = (value: string) =>
   new Intl.DateTimeFormat("pt-BR", { dateStyle: "medium" }).format(
     new Date(value),
@@ -2808,6 +2814,7 @@ function ChampionshipPage({
             {teamQuery.trim() && (
               <button
                 type="button"
+                className="button--icon"
                 onClick={() => setTeamQuery("")}
                 aria-label="Limpar busca"
               >
@@ -2875,7 +2882,7 @@ function ChampionshipPage({
               A roleta define obrigatoriamente o desafio da rodada antes do
               apito inicial.
             </p>
-            <button type="button" onClick={drawMutator} disabled={rolling}>
+            <button type="button" className="button button--primary" onClick={drawMutator} disabled={rolling}>
               <Shuffle size={17} />{" "}
               {rolling ? "Roleta girando..." : "Sortear 5 desafios"}
             </button>
@@ -2980,7 +2987,7 @@ function ChampionshipPage({
               <b>Modo dupla ativo.</b> Selecione dois jogadores por vez para
               formar uma dupla ou deixe a Arena equilibrar os esquadrões.
             </span>
-            <button type="button" onClick={pairPlayers}>
+            <button type="button" className="button--secondary" onClick={pairPlayers}>
               <Shuffle size={14} /> Sortear duplas
             </button>
           </div>
@@ -3163,6 +3170,7 @@ function ChampionshipPage({
                 >
                   <button
                     type="button"
+                    className="button--icon"
                     title="Editar nome"
                     aria-label={`Editar nome de ${c.name}`}
                     onClick={() => setRenaming(c)}
@@ -4165,7 +4173,11 @@ function SettingsPage({ reload }: { reload: () => Promise<void> }) {
               </div>
             </article>
           ) : section === "notifications" ? (
-            <NotificationsSettings onOpenAppearance={() => setSection("appearance")} />
+            <NotificationsSettings
+              onOpenAppearance={() => setSection("appearance")}
+              soundEnabled={!muted}
+              onToggleSound={() => setMuted((value) => !value)}
+            />
           ) : section === "privacy" ? (
             <PrivacySettings />
           ) : section === "about" ? (
@@ -4435,8 +4447,13 @@ function ArenaApp({ user, onSignOut, onSessionExpired }: { user: AuthUser; onSig
     ["championships", "Campeonatos", Trophy],
     ["friends", "Amigos", UsersRound],
   ];
+  const designGalleryEnabled = import.meta.env.DEV && window.location.hash === "#design";
   const view =
-    switchingRoom ? (
+    designGalleryEnabled && DesignGallery ? (
+      <React.Suspense fallback={<main className="loading">Carregando galeria...</main>}>
+        <DesignGallery />
+      </React.Suspense>
+    ) : switchingRoom ? (
       <main className="loading">Carregando sala...</main>
     ) : page === "dashboard" ? (
       <DashboardPage data={data} players={players} go={setPage} reload={reload} showRoomOnlyTabs={showRoomOnlyTabs} />
@@ -4473,14 +4490,14 @@ function ArenaApp({ user, onSignOut, onSessionExpired }: { user: AuthUser; onSig
   const showArenaMenu = false;
   return (
     <div className="shell">
-      <aside>
+      <aside className="app-sidebar">
         <div className="brand">
           <Gamepad2 />
           <b>
             FC <em>ARENA</em>
           </b>
         </div>
-        <nav>
+        <nav className="app-navigation">
           {nav.map(([id, label, Icon]) => (
             <button
               className={page === id ? "active" : ""}
@@ -4500,7 +4517,7 @@ function ArenaApp({ user, onSignOut, onSessionExpired }: { user: AuthUser; onSig
           <small>v0.1.0 · dados locais</small>
         </div>
       </aside>
-      <main>{view}</main>
+      <main className="app-main">{view}</main>
       <div className="account-actions" ref={accountActionsRef}>
         <div className="notification-menu">
           <button
@@ -4587,6 +4604,7 @@ function ArenaApp({ user, onSignOut, onSessionExpired }: { user: AuthUser; onSig
           <div className="account-menu-panel" role="menu">
             <button
               type="button"
+              className="button--ghost account-menu-panel-action"
               role="menuitem"
               onClick={() => {
                 setPage("profile");
@@ -4599,6 +4617,7 @@ function ArenaApp({ user, onSignOut, onSessionExpired }: { user: AuthUser; onSig
 
             <button
               type="button"
+              className="button--ghost account-menu-panel-action"
               role="menuitem"
               onClick={() => {
                 setPage("settings");

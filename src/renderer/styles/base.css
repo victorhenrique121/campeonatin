@@ -1,0 +1,80 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  font-family: var(--font-sans);
+  text-rendering: optimizeLegibility;
+}
+
+body,
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+button,
+input,
+select,
+textarea {
+  border: 0;
+  border-radius: 0;
+  color: inherit;
+}
+
+button {
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+input,
+select,
+textarea {
+  background: transparent;
+}
+
+textarea {
+  resize: vertical;
+}
+
+button:disabled,
+input:disabled,
+select:disabled,
+textarea:disabled {
+  cursor: not-allowed;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent-strong);
+  outline-offset: 2px;
+}
+
+* {
+  scrollbar-color: var(--surface-border) var(--surface-canvas);
+  scrollbar-width: thin;
+}
+
+*::-webkit-scrollbar {
+  width: var(--space-2);
+  height: var(--space-2);
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--surface-canvas);
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--surface-border);
+  border: 3px solid var(--surface-canvas);
+  border-radius: var(--radius-full);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--surface-border) 68%, white);
+}

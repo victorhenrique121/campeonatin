@@ -1,0 +1,71 @@
+:root {
+  --font-sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-full: 999px;
+
+  --text-12: 12px;
+  --text-13: 13px;
+  --text-15: 15px;
+  --text-17: 17px;
+  --text-20: 20px;
+  --text-24: 24px;
+  --text-28: 28px;
+  --text-34: 34px;
+
+  --leading-12: 16px;
+  --leading-13: 18px;
+  --leading-15: 22px;
+  --leading-17: 24px;
+  --leading-20: 28px;
+  --leading-24: 32px;
+  --leading-28: 36px;
+  --leading-34: 40px;
+
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+
+  --border-width: 1px;
+  --focus-width: 2px;
+  --control-sm: var(--space-8);
+  --control-md: var(--space-10);
+  --control-lg: var(--space-12);
+  --settings-content-max: 800px;
+
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 18%);
+  --shadow-md: 0 8px 24px rgb(0 0 0 / 24%);
+  --shadow-lg: 0 20px 48px rgb(0 0 0 / 32%);
+
+  --duration-fast: 120ms;
+  --duration-normal: 180ms;
+  --duration-slow: 280ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  --surface-canvas: var(--arena-bg, #0a0c10);
+  --surface-1: color-mix(in srgb, var(--arena-bg, #0a0c10) 94%, white);
+  --surface-2: color-mix(in srgb, var(--arena-bg, #0a0c10) 88%, white);
+  --surface-3: color-mix(in srgb, var(--arena-bg, #0a0c10) 82%, white);
+  --surface-border: color-mix(in srgb, var(--arena-bg, #0a0c10) 72%, white);
+  --accent-subtle: color-mix(in srgb, var(--arena-accent, #7e5ff0) 14%, transparent);
+  --accent-strong: var(--arena-accent, #7e5ff0);
+  --text-primary: color-mix(in srgb, var(--surface-canvas) 4%, white);
+  --text-secondary: color-mix(in srgb, var(--surface-canvas) 42%, white);
+  --text-muted: color-mix(in srgb, var(--surface-canvas) 58%, white);
+  --color-danger: hsl(0 82% 64%);
+  --color-success: hsl(150 94% 61%);
+}
