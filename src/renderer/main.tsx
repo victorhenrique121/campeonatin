@@ -1336,8 +1336,14 @@ function PlayersPage({
                   <b>{p.name}</b>
                   <small>@{p.nickname}</small>
                 </div>
-                {canWrite && <button className="danger" onClick={() => setDeletePlayer(p)}>
-                  Excluir
+                {canWrite && <button
+                  type="button"
+                  className="button--icon danger"
+                  onClick={() => setDeletePlayer(p)}
+                  aria-label={`Excluir ${p.name}`}
+                  title="Excluir jogador"
+                >
+                  <Trash2 size={16} />
                 </button>}
               </div>
             ))}
