@@ -315,9 +315,36 @@ export async function getSessionUserId(): Promise<string | null> {
 
 export async function createRoom(name: string): Promise<{ id: string; name: string; entryCode: string }> {
   const client = await roomSessionClient();
+  const { data: userData, error: userError } = await client.auth.getUser();
+  const userId = userData.user?.id;
+  if (userError || !userId) {
+    throw new Error("Sua sessão expirou. Entre novamente para continuar.");
+  }
+
+  const { count, error: countError } = await client
+    .from("room_members")
+    .select("room_id, rooms!inner(deleted_at)", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .eq("role", "owner")
+    .is("rooms.deleted_at", null);
+  if (countError) throw new Error("Algo deu errado. Tente novamente em instantes.");
+  if ((count ?? 0) >= 3) {
+    throw new Error(
+      "Você já atingiu o limite de 3 salas como proprietário. Exclua uma sala antiga para criar outra.",
+    );
+  }
+
   const { data, error } = await client.rpc("create_room", { p_name: name });
   if (error || !data) throw new Error("Algo deu errado. Tente novamente em instantes.");
   return { id: data.id, name: data.name, entryCode: data.entry_code };
+}
+
+export async function getRoomMemberRole(
+  roomId: string,
+): Promise<"owner" | "admin" | "participant" | null> {
+  const data = await roomRpc("room_member_role", { p_room_id: roomId });
+  if (data === "owner" || data === "admin" || data === "participant") return data;
+  return null;
 }
 
 export async function listMyRooms(): Promise<Array<{ id: string; name: string; role: string; entryCode: string; memberCount: number }>> {

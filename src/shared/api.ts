@@ -65,6 +65,7 @@ export type AuthSignUpResult = {
 };
 
 export type Api = {
+  getRoomMemberRole: (roomId: string) => Promise<"owner" | "admin" | "participant" | null>;
   listRoomMembers: (roomId: string) => Promise<Array<{ userId: string; role: string; displayName: string; username: string | null; avatarUrl: string | null }>>;
   promoteRoomAdmin: (roomId: string, userId: string) => Promise<void>;
   removeRoomMember: (roomId: string, userId: string) => Promise<void>;
@@ -99,7 +100,7 @@ export type Api = {
   deletePlayer: (id: number) => Promise<void>;
   teams: (query?: string) => Promise<Team[]>;
   matches: () => Promise<Match[]>;
-  saveMatch: (match: MatchInput) => Promise<number>;
+  saveMatch: (match: MatchInput, roomId: string | null) => Promise<number>;
   updateMatch: (match: MatchInput & { id: number }) => Promise<number>;
   deleteMatch: (id: number) => Promise<void>;
   clearMatches: () => Promise<void>;

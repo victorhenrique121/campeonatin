@@ -4,8 +4,8 @@ import type { MatchInput } from "../shared/models";
 import { setChampionshipStatus } from "./championship-service";
 import type { repository } from "./repository";
 import {
-  ensureAuthenticated,
-  getSupabase,
+  getSessionUserId,
+  getUserSessionClient,
   isNetworkErrorMessage,
 } from "./supabase";
 
@@ -52,7 +52,7 @@ const MATCH_COLUMNS =
 
 export type MatchesService = {
   /** Registra partida: Supabase primeiro (id remoto) + transação local intacta. */
-  save(match: MatchInput): Promise<number>;
+  save(match: MatchInput, roomId: string | null): Promise<number>;
   /** Edita partida: Supabase primeiro + atualização local. */
   update(match: MatchInput & { id: number }): Promise<number>;
   /** Exclui partida no Supabase e no SQLite (fixtures.match_id -> NULL). */
@@ -98,7 +98,7 @@ function toFriendlyError(err: unknown): Error {
     }
     if (code === "PGRST301") {
       return new Error(
-        "Sessão recusada pelo Supabase. Verifique as credenciais da conta de serviço no .env.",
+        "Sua sessão foi recusada. Entre novamente para continuar.",
       );
     }
     if (code === "42501" || /row-level security/i.test(err.message)) {
@@ -133,15 +133,10 @@ function toFriendlyError(err: unknown): Error {
   return new Error(`Erro inesperado ao acessar o Supabase: ${String(err)}`);
 }
 
-function isAuthRejection(err: unknown): boolean {
-  return (
-    isPostgrestErrorLike(err) && (err.code === "PGRST301" || err.code === "401")
-  );
-}
-
 export function createMatchesService(
   db: Database.Database,
   repo: Repository,
+  roomId: string | null,
 ): MatchesService {
   const matchColumns = db.prepare("PRAGMA table_info(matches)").all() as { name: string }[];
   const hasDuoColumns = ["team1_duo_id", "team2_duo_id"].every((name) =>
@@ -162,18 +157,10 @@ export function createMatchesService(
       played_at=excluded.played_at
   `);
 
-  async function requireAuth(force = false): Promise<string> {
-    const auth = await ensureAuthenticated(force ? { force: true } : {});
-    if (!auth.ok) throw new Error(auth.message);
-    const supabase = getSupabase();
-    if (!supabase) throw new Error("Supabase não configurado.");
-    const { data, error } = await supabase.auth.getSession();
-    const userId = data.session?.user?.id;
-    if (error || !userId) {
-      throw new Error(
-        "Sessão da conta de serviço indisponível — não foi possível registrar created_by no Supabase.",
-      );
-    }
+  async function requireAuth(): Promise<string> {
+    await getUserSessionClient();
+    const userId = await getSessionUserId();
+    if (!userId) throw new Error("Sua sessão expirou. Entre novamente para continuar.");
     return userId;
   }
 
@@ -191,14 +178,6 @@ export function createMatchesService(
     try {
       return await run(userId);
     } catch (err) {
-      if (isAuthRejection(err)) {
-        const freshUserId = await requireAuth(true);
-        try {
-          return await run(freshUserId);
-        } catch (retryErr) {
-          throw toFriendlyError(retryErr);
-        }
-      }
       throw toFriendlyError(err);
     }
   }
@@ -287,13 +266,13 @@ export function createMatchesService(
   }
 
   async function compensateRemoteDelete(remoteId: number): Promise<void> {
-    const supabase = getSupabase();
-    if (!supabase) return;
     try {
+      const supabase = await getUserSessionClient();
       const { error } = await supabase
         .from("matches")
         .delete()
-        .eq("id", remoteId);
+        .eq("id", remoteId)
+        .eq("room_id", roomId);
       if (error) {
         console.warn(
           `${LOG_PREFIX} compensação remota falhou para id=${remoteId}:`,
@@ -322,9 +301,11 @@ export function createMatchesService(
     return err instanceof Error ? err : new Error(message);
   }
 
-  async function save(m: MatchInput): Promise<number> {
-    const supabase = getSupabase();
-    if (!supabase) return repo.saveMatch(m);
+  async function save(m: MatchInput, requestedRoomId: string | null): Promise<number> {
+    if (requestedRoomId !== roomId) {
+      throw new Error("A sala selecionada foi alterada. Tente novamente.");
+    }
+    const supabase = await getUserSessionClient();
 
     const championshipId = m.championshipId ? Number(m.championshipId) : null;
     const isDuo = m.team1DuoId != null || m.team2DuoId != null;
@@ -364,6 +345,7 @@ export function createMatchesService(
           score2: m.score2,
           championship_id: championshipId,
           played_at: playedAt,
+          room_id: roomId,
           created_by: userId,
         })
         .select(MATCH_COLUMNS),
@@ -391,10 +373,13 @@ export function createMatchesService(
           .get(remoteId) as { id: number } | undefined;
 
         if (localFixture) {
-          const { error } = await supabase
+          const fixtureUpdate = supabase
             .from("fixtures")
             .update({ match_id: remoteId })
             .eq("id", localFixture.id);
+          const { error } = await (roomId === null
+            ? fixtureUpdate.is("room_id", null)
+            : fixtureUpdate.eq("room_id", roomId));
           if (error) throw toFriendlyError(error);
         }
       }
@@ -404,14 +389,13 @@ export function createMatchesService(
     }
 
     if (championshipId !== null && repo.maybeFinishLeagueChampionship(championshipId)) {
-      await setChampionshipStatus(db, null, championshipId, "finished");
+      await setChampionshipStatus(db, roomId, championshipId, "finished");
     }
     return remoteId;
   }
 
   async function update(m: MatchInput & { id: number }): Promise<number> {
-    const supabase = getSupabase();
-    if (!supabase) return repo.updateMatch(m);
+    const supabase = await getUserSessionClient();
 
     if (!m.id || !m.player1Id || !m.player2Id || !m.team1Id || !m.team2Id)
       throw new Error("Selecione os dois jogadores e os dois times.");
@@ -452,7 +436,7 @@ export function createMatchesService(
         .prepare("SELECT status FROM championships WHERE id=?")
         .get(existing.championship_id) as { status: string } | undefined;
       if (championship?.status === "finished") {
-        await setChampionshipStatus(db, null, existing.championship_id, "active");
+        await setChampionshipStatus(db, roomId, existing.championship_id, "active");
       }
     }
 
@@ -472,6 +456,7 @@ export function createMatchesService(
           played_at: playedAt,
         })
         .eq("id", m.id)
+        .eq("room_id", roomId)
         .select(MATCH_COLUMNS),
     );
     const patchedRows = Array.isArray(patched)
@@ -494,6 +479,7 @@ export function createMatchesService(
             score2: m.score2,
             championship_id: championshipId,
             played_at: playedAt,
+            room_id: roomId,
             created_by: userId,
           })
           .select(MATCH_COLUMNS),
@@ -506,17 +492,13 @@ export function createMatchesService(
       playedAt,
     });
     if (championshipId !== null && repo.maybeFinishLeagueChampionship(championshipId)) {
-      await setChampionshipStatus(db, null, championshipId, "finished");
+      await setChampionshipStatus(db, roomId, championshipId, "finished");
     }
     return updatedId;
   }
 
   async function remove(id: number): Promise<void> {
-    const supabase = getSupabase();
-    if (!supabase) {
-      repo.deleteMatch(id);
-      return;
-    }
+    const supabase = await getUserSessionClient();
 
     const existing = db.prepare("SELECT id, championship_id FROM matches WHERE id=?").get(id) as
       | { id: number; championship_id: number | null }
@@ -530,12 +512,16 @@ export function createMatchesService(
           | undefined;
 
     // Desvincula o match_id da fixture remota antes de excluir a partida
-    await execWithAuthRetry(() =>
-      supabase.from("fixtures").update({ match_id: null }).eq("match_id", id),
-    );
+    await execWithAuthRetry(() => {
+      const query = supabase.from("fixtures").update({ match_id: null }).eq("match_id", id);
+      return roomId === null ? query.is("room_id", null) : query.eq("room_id", roomId);
+    });
 
     const deleted = await execWithAuthRetry<Array<{ id: number | string }>>(
-      () => supabase.from("matches").delete().eq("id", id).select("id"),
+      () => {
+        const query = supabase.from("matches").delete().eq("id", id);
+        return (roomId === null ? query.is("room_id", null) : query.eq("room_id", roomId)).select("id");
+      },
     );
 
     if (!deleted || deleted.length === 0) {
@@ -546,7 +532,7 @@ export function createMatchesService(
 
     repo.deleteMatch(id);
     if (existing.championship_id !== null && championship?.status === "finished") {
-      await setChampionshipStatus(db, null, existing.championship_id, "active");
+      await setChampionshipStatus(db, roomId, existing.championship_id, "active");
     }
   }
 
@@ -555,17 +541,7 @@ export function createMatchesService(
   }
 
   async function syncMirror(roomId: string | null): Promise<number> {
-    const supabase = getSupabase();
-    if (!supabase) {
-      if (roomId !== null) throw new Error("Não foi possível sincronizar as partidas da sala.");
-      return 0;
-    }
-
-    const auth = await ensureAuthenticated();
-    if (!auth.ok) {
-      if (roomId !== null) throw new Error("Não foi possível sincronizar as partidas da sala.");
-      return 0;
-    }
+    const supabase = await getUserSessionClient();
 
     let rows: SupabaseMatchRow[];
     try {

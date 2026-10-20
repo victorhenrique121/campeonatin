@@ -206,7 +206,7 @@ function Game({
 }: {
   match: Match;
   players: Player[];
-  onEdit: (match: Match) => void;
+  onEdit?: (match: Match) => void;
   onDelete?: (match: Match) => void;
   onShare?: (match: Match) => void;
 }) {
@@ -243,15 +243,17 @@ function Game({
         </div>
       </div>
       <div className="game-actions">
-      <button
-        type="button"
-        className="edit-match-btn"
-        onClick={() => onEdit(match)}
-        aria-label={`Editar partida entre ${match.player1} e ${match.player2}`}
-        title="Editar resultado"
-      >
-        <SquarePen size={15} />
-      </button>
+      {onEdit && (
+        <button
+          type="button"
+          className="edit-match-btn"
+          onClick={() => onEdit(match)}
+          aria-label={`Editar partida entre ${match.player1} e ${match.player2}`}
+          title="Editar resultado"
+        >
+          <SquarePen size={15} />
+        </button>
+      )}
       {onDelete && (
         <button
           type="button"
@@ -930,14 +932,18 @@ function PlayersPage({
   players,
   reload,
   activeRoomId,
+  roomRole,
 }: {
   players: Player[];
   reload: () => Promise<void>;
   activeRoomId: string | null;
+  roomRole: "owner" | "admin" | "participant" | null;
 }) {
   const [name, setName] = useState("");
   const [nickname, setNickname] = useState("");
   const [deletePlayer, setDeletePlayer] = useState<Player | null>(null);
+  const canWrite =
+    activeRoomId === null || roomRole === "owner" || roomRole === "admin";
   const save = async (e: FormEvent) => {
     e.preventDefault();
     await window.arena.savePlayer({ name, nickname }, activeRoomId);
@@ -954,7 +960,7 @@ function PlayersPage({
         </div>
       </section>
       <section className="grid players-layout">
-        <article className="panel">
+        {canWrite && <article className="panel">
           <div className="panel-head">
             <h2>Adicionar jogador</h2>
           </div>
@@ -977,7 +983,7 @@ function PlayersPage({
             </label>
             <button className="primary">Adicionar jogador</button>
           </form>
-        </article>
+        </article>}
         <article className="panel wide">
           <div className="cards players-list">
             {players.map((p) => (
@@ -987,9 +993,9 @@ function PlayersPage({
                   <b>{p.name}</b>
                   <small>@{p.nickname}</small>
                 </div>
-                <button className="danger" onClick={() => setDeletePlayer(p)}>
+                {canWrite && <button className="danger" onClick={() => setDeletePlayer(p)}>
                   Excluir
-                </button>
+                </button>}
               </div>
             ))}
             {!players.length && <Empty text="Adicione o primeiro jogador." />}
@@ -1260,11 +1266,15 @@ function MatchesPage({
   teams,
   reload,
   totalMatches,
+  activeRoomId,
+  roomRole,
 }: {
   players: Player[];
   teams: Team[];
   reload: () => Promise<void>;
   totalMatches: number;
+  activeRoomId: string | null;
+  roomRole: "owner" | "admin" | "participant" | null;
 }) {
   const [matches, setMatches] = useState<Match[]>([]);
   const [competitionFilter, setCompetitionFilter] = useState<"all" | "championship" | "casual">("all");
@@ -1285,6 +1295,8 @@ function MatchesPage({
     player2Id: "",
     team2Id: "",
   });
+  const canWrite =
+    activeRoomId === null || roomRole === "owner" || roomRole === "admin";
 
   useEffect(() => {
     window.arena
@@ -1368,7 +1380,7 @@ function MatchesPage({
         team2Id,
         score1: Number(form.score1),
         score2: Number(form.score2),
-      });
+      }, activeRoomId);
       playArenaSound("whistle");
 
       setMatches(await window.arena.matches());
@@ -1419,7 +1431,7 @@ function MatchesPage({
         </article>
       </section>
       <section className="matches-layout">
-        <article className="panel">
+        {canWrite && <article className="panel">
           <form className="form match-form" onSubmit={submit}>
             <div className="match-lanes">
               <div className="match-lane">
@@ -1470,13 +1482,13 @@ function MatchesPage({
             player2Id={form.player2Id}
             loading={!matchesLoaded}
           />
-        </article>
+        </article>}
         <article className="panel wide">
           <div className="panel-head">
             <h2>Últimas partidas</h2>
-            <button className="danger" onClick={() => setShowClearModal(true)}>
+            {canWrite && <button className="danger" onClick={() => setShowClearModal(true)}>
               Limpar histórico
-            </button>
+            </button>}
           </div>
           <div className="matches-filters form">
             <label>
@@ -1505,8 +1517,8 @@ function MatchesPage({
                 key={m.id}
                 match={m}
                 players={players}
-                onEdit={setEditingMatch}
-                onDelete={setDeletingMatch}
+                onEdit={canWrite ? setEditingMatch : undefined}
+                onDelete={canWrite ? setDeletingMatch : undefined}
                 onShare={async (match) => {
                   await copyMatchSummary(match);
                   showToast("Resumo copiado para o WhatsApp.");
@@ -2117,10 +2129,12 @@ function ChampionshipPage({
   players,
   teams,
   activeRoomId,
+  roomRole,
 }: {
   players: Player[];
   teams: Team[];
   activeRoomId: string | null;
+  roomRole: "owner" | "admin" | "participant" | null;
 }) {
   const [news, setNews] = useState<ArenaNews[]>([]);
   const [items, setItems] = useState<Championship[]>([]),
@@ -2142,6 +2156,8 @@ function ChampionshipPage({
     [renaming, setRenaming] = useState<Championship | null>(null),
     [teamQuery, setTeamQuery] = useState(""),
     [searchedTeams, setSearchedTeams] = useState<Team[] | null>(null);
+  const canWrite =
+    activeRoomId === null || roomRole === "owner" || roomRole === "admin";
   useEffect(() => {
     if (!team && teams[0]) setTeam(teams[0]);
   }, [teams, team]);
@@ -2290,7 +2306,7 @@ function ChampionshipPage({
         </div>
       </section>
 
-      <section className="mode-switcher" aria-label="Modo do campeonato">
+      {canWrite && <section className="mode-switcher" aria-label="Modo do campeonato">
         <button
           className={mode === "classic" ? "active" : ""}
           onClick={() => setMode("classic")}
@@ -2310,9 +2326,9 @@ function ChampionshipPage({
           </span>
           <Sparkles className="mode-glint" />
         </button>
-      </section>
+      </section>}
 
-      <section className="championship-builder">
+      {canWrite && <section className="championship-builder">
         <article className="arena-create-card">
           <div className="create-card-top">
             <div>
@@ -2463,9 +2479,9 @@ function ChampionshipPage({
             modos.
           </p>
         </article>
-      </section>
+      </section>}
 
-      {mode === "mad" && (
+      {canWrite && mode === "mad" && (
         <section className="mutator-zone">
           <div className="mutator-copy">
             <span className="eyebrow">
@@ -2558,7 +2574,7 @@ function ChampionshipPage({
         </section>
       )}
 
-      <section className="enrollment-section">
+      {canWrite && <section className="enrollment-section">
         <div className="section-label">
           <div>
             <span className="eyebrow">
@@ -2677,7 +2693,7 @@ function ChampionshipPage({
         {!players.length && (
           <Empty text="Cadastre jogadores para montar o campeonato." />
         )}
-      </section>
+      </section>}
 
       <div className="championship-overview">
         <div className="championship-overview-main">
@@ -2733,7 +2749,7 @@ function ChampionshipPage({
                 <span>
                   Ver arena <ArrowRight size={15} />
                 </span>
-                <div
+                {canWrite && <div
                   className="season-card-actions"
                   onClick={(event) => event.stopPropagation()}
                 >
@@ -2754,7 +2770,7 @@ function ChampionshipPage({
                   >
                     <Trash2 size={14} />
                   </button>
-                </div>
+                </div>}
               </footer>
               {detail?.championship.id === c.id && (
                 <div className="season-avatars" aria-label="Avatares dos participantes">
@@ -2772,6 +2788,8 @@ function ChampionshipPage({
         <ChampionshipDetailView
           detail={detail}
           teams={teams}
+          roomId={activeRoomId}
+          canWrite={canWrite}
           onDelete={() => setDeletingChampionship(detail.championship)}
           onRegistered={async () => {
             await load();
@@ -2839,11 +2857,15 @@ function ChampionshipPage({
 function ChampionshipDetailView({
   detail,
   teams,
+  roomId,
+  canWrite,
   onDelete,
   onRegistered,
 }: {
   detail: ChampionshipDetail;
   teams: Team[];
+  roomId: string | null;
+  canWrite: boolean;
   onDelete: () => void;
   onRegistered: () => Promise<void>;
 }) {
@@ -2869,13 +2891,13 @@ function ChampionshipDetailView({
             </h2>
             <ModeBadge championship={detail.championship} />
           </div>
-          <button
+          {canWrite && <button
             type="button"
             className="delete-championship-btn"
             onClick={onDelete}
           >
             <Trash2 size={15} /> Apagar campeonato
-          </button>
+          </button>}
         </div>
         <Ranking rows={detail.standing} />
       </article>
@@ -2908,7 +2930,7 @@ function ChampionshipDetailView({
                     <b>
                       {f.score1} × {f.score2}
                     </b>
-                  ) : (
+                  ) : canWrite ? (
                     <button
                       type="button"
                       className="fixture-register"
@@ -2916,6 +2938,8 @@ function ChampionshipDetailView({
                     >
                       vs · Registrar
                     </button>
+                  ) : (
+                    <span>vs</span>
                   )}
                   <span>{f.player2}</span>
                 </div>
@@ -2929,6 +2953,7 @@ function ChampionshipDetailView({
           fixture={registering}
           championship={detail.championship}
           teams={teams}
+          roomId={roomId}
           onClose={() => setRegistering(null)}
           onSaved={onRegistered}
         />
@@ -3076,12 +3101,14 @@ function FixtureResultModal({
   fixture,
   championship,
   teams,
+  roomId,
   onClose,
   onSaved,
 }: {
   fixture: Fixture;
   championship: Championship;
   teams: Team[];
+  roomId: string | null;
   onClose: () => void;
   onSaved: () => Promise<void>;
 }) {
@@ -3136,7 +3163,7 @@ function FixtureResultModal({
         score1: goals1,
         score2: goals2,
         championshipId: championship.id,
-      });
+      }, roomId);
       playArenaSound("whistle");
       await onSaved();
       onClose();
@@ -3754,6 +3781,9 @@ function SettingsPage({ reload }: { reload: () => Promise<void> }) {
 
 function ArenaApp({ user, onSignOut }: { user: AuthUser; onSignOut: () => void }) {
   const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
+  const [activeRoomRole, setActiveRoomRole] = useState<
+    "owner" | "admin" | "participant" | null
+  >(null);
   const [loadedRoomId, setLoadedRoomId] = useState<string | null | undefined>(undefined);
   const [roomLoadAttempt, setRoomLoadAttempt] = useState(0);
   const switchingRoom = loadedRoomId !== activeRoomId;
@@ -3817,6 +3847,24 @@ function ArenaApp({ user, onSignOut }: { user: AuthUser; onSignOut: () => void }
     return () => { current = false; };
   }, [activeRoomId, roomLoadAttempt]);
   useEffect(() => {
+    if (!activeRoomId) {
+      setActiveRoomRole(null);
+      return;
+    }
+    let current = true;
+    window.arena
+      .getRoomMemberRole(activeRoomId)
+      .then((role) => {
+        if (current) setActiveRoomRole(role);
+      })
+      .catch(() => {
+        if (current) setActiveRoomRole(null);
+      });
+    return () => {
+      current = false;
+    };
+  }, [activeRoomId]);
+  useEffect(() => {
     const onDocumentClick = (event: MouseEvent) => {
       if (
         accountMenuRef.current &&
@@ -3860,13 +3908,13 @@ function ArenaApp({ user, onSignOut }: { user: AuthUser; onSignOut: () => void }
     ) : page === "friends" ? (
       <FriendsPage />
     ) : page === "players" ? (
-      <PlayersPage players={players} reload={reload} activeRoomId={activeRoomId} />
+      <PlayersPage players={players} reload={reload} activeRoomId={activeRoomId} roomRole={activeRoomRole} />
     ) : page === "matches" ? (
-      <MatchesPage players={players} teams={teams} reload={reload} totalMatches={data.matches} />
+      <MatchesPage players={players} teams={teams} reload={reload} totalMatches={data.matches} activeRoomId={activeRoomId} roomRole={activeRoomRole} />
     ) : page === "ranking" ? (
       <RankingPage data={data} players={players} />
     ) : page === "championships" ? (
-      <ChampionshipPage players={players} teams={teams} activeRoomId={activeRoomId} />
+      <ChampionshipPage players={players} teams={teams} activeRoomId={activeRoomId} roomRole={activeRoomRole} />
     ) : page === "profile" ? (
       <ProfilePage
         onEditProfile={() => {

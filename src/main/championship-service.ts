@@ -108,15 +108,15 @@ export async function setChampionshipStatus(
   const championship = db.prepare("SELECT id FROM championships WHERE id = ?").get(championshipId);
   if (!championship) throw new Error("Campeonato não encontrado.");
 
-  const auth = await ensureAuthenticated();
-  const supabase = getSupabase();
-  if (!auth.ok || !supabase) throw new Error("Não foi possível atualizar o campeonato. Verifique sua conexão.");
+  const supabase = await getUserSessionClient();
 
-  const { data, error } = await supabase
+  const query = supabase
     .from("championships")
     .update({ status })
-    .eq("id", championshipId)
-    .select("id");
+    .eq("id", championshipId);
+  const { data, error } = await (roomId === null
+    ? query.is("room_id", null)
+    : query.eq("room_id", roomId)).select("id");
 
   if (error || !data || data.length !== 1) {
     throw new Error("Não foi possível atualizar o campeonato. Tente novamente.");
@@ -308,14 +308,14 @@ export async function saveChampionship(
     }
   }
 
-  const fixtures: Array<{ championship_id: number; room_id: string | null; stage: string; round_number: number; player1_id: number | null; player2_id: number | null; team1_duo_id?: number; team2_duo_id?: number }> = [];
+  const fixtures: Array<{ championship_id: number; room_id: string | null; created_by: string; stage: string; round_number: number; player1_id: number | null; player2_id: number | null; team1_duo_id?: number; team2_duo_id?: number }> = [];
   const p = isDuo ? duoIds : payload.participantIds;
   let roundNum = 1;
   for (let i = 0; i < p.length; i++) {
     for (let j = i + 1; j < p.length; j++) {
       fixtures.push(isDuo
-        ? { championship_id: id, room_id: roomId, stage: "league", round_number: roundNum, player1_id: null, player2_id: null, team1_duo_id: p[i], team2_duo_id: p[j] }
-        : { championship_id: id, room_id: roomId, stage: "league", round_number: roundNum, player1_id: p[i], player2_id: p[j] });
+        ? { championship_id: id, room_id: roomId, created_by: userId, stage: "league", round_number: roundNum, player1_id: null, player2_id: null, team1_duo_id: p[i], team2_duo_id: p[j] }
+        : { championship_id: id, room_id: roomId, created_by: userId, stage: "league", round_number: roundNum, player1_id: p[i], player2_id: p[j] });
       roundNum++;
     }
   }

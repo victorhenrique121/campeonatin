@@ -9,6 +9,7 @@ import {
   changeEmail,
   changePassword,
   createRoom,
+  getRoomMemberRole,
   listRoomMembers,
   promoteRoomAdmin,
   removeRoomMember,
@@ -79,7 +80,7 @@ function switchRoom(roomId: string | null): Promise<void> {
     const db = createDatabase(dbPath(roomId));
     try {
       const repo = repository(db);
-      const next: RoomContext = { roomId, db, repo, players: createPlayersService(db, repo, roomId), matches: createMatchesService(db, repo), teams: createTeamsService(repo) };
+      const next: RoomContext = { roomId, db, repo, players: createPlayersService(db, repo, roomId), matches: createMatchesService(db, repo, roomId), teams: createTeamsService(repo) };
       if (roomId !== null) {
         await next.players.syncMirror(roomId);
         await getChampionships(db, roomId);
@@ -132,6 +133,7 @@ app.whenReady().then(async () => {
 
   ipcMain.handle("auth:session", () => getAuthSession());
   ipcMain.handle("rooms:create", (_, name: string) => createRoom(name));
+  ipcMain.handle("rooms:member-role", (_, roomId: string) => getRoomMemberRole(roomId));
   ipcMain.handle("rooms:set-active", async (_, roomId: string | null) => { await switchRoom(roomId); return { ok: true }; });
   ipcMain.handle("rooms:list-mine", () => listMyRooms());
   ipcMain.handle("rooms:join", (_, code: string) => joinRoom(code));
@@ -181,9 +183,16 @@ app.whenReady().then(async () => {
   ipcMain.handle("players:delete", (_, id) => withContext(({ players }) => players.remove(id)));
   ipcMain.handle("teams:list", (_, q) => withContext(({ teams }) => teams.list(q)));
   ipcMain.handle("matches:list", () => withContext(({ repo }) => repo.matches()));
-  ipcMain.handle("matches:save", (_, m) => withContext(({ matches }) => { ensureRoomGlobalOnly(); return matches.save(m); }));
+  ipcMain.handle("matches:save", (_, m, roomId: string | null) =>
+    withContext(({ matches, roomId: currentRoomId }) => {
+      if (roomId !== currentRoomId) {
+        throw new Error("A sala selecionada foi alterada. Tente novamente.");
+      }
+      return matches.save(m, roomId);
+    }),
+  );
   ipcMain.handle("matches:update", (_, m) => withContext(({ matches }) => { ensureRoomGlobalOnly(); return matches.update(m); }));
-  ipcMain.handle("matches:delete", (_, id) => withContext(({ matches }) => { ensureRoomGlobalOnly(); return matches.remove(id); }));
+  ipcMain.handle("matches:delete", (_, id) => withContext(({ matches }) => matches.remove(id)));
   ipcMain.handle("matches:clear", () => withContext(({ matches }) => { ensureRoomGlobalOnly(); return matches.clear(); }));
   ipcMain.handle("ranking", () => withContext(({ repo }) => repo.ranking()));
 

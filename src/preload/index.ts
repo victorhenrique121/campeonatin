@@ -12,10 +12,16 @@ const invokeRoom = (channel: string) => async (...args: unknown[]) => {
     if (message.includes("Sua sessão expirou. Entre novamente para continuar.")) {
       throw new Error("Sua sessão expirou. Entre novamente para continuar.");
     }
+    if (message.includes("limite de 3 salas")) {
+      throw new Error(
+        "Você já atingiu o limite de 3 salas como proprietário. Exclua uma sala antiga para criar outra.",
+      );
+    }
     throw new Error("Algo deu errado. Tente novamente em instantes.");
   }
 };
 const api: Api = {
+  getRoomMemberRole: invokeRoom("rooms:member-role"),
   listRoomMembers: invokeRoom("rooms:list-members"),
   promoteRoomAdmin: invokeRoom("rooms:promote-admin"),
   removeRoomMember: invokeRoom("rooms:remove-member"),
