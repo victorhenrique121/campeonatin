@@ -929,16 +929,18 @@ function DashboardPage({
 function PlayersPage({
   players,
   reload,
+  activeRoomId,
 }: {
   players: Player[];
   reload: () => Promise<void>;
+  activeRoomId: string | null;
 }) {
   const [name, setName] = useState("");
   const [nickname, setNickname] = useState("");
   const [deletePlayer, setDeletePlayer] = useState<Player | null>(null);
   const save = async (e: FormEvent) => {
     e.preventDefault();
-    await window.arena.savePlayer({ name, nickname });
+    await window.arena.savePlayer({ name, nickname }, activeRoomId);
     setName("");
     setNickname("");
     await reload();
@@ -953,6 +955,9 @@ function PlayersPage({
       </section>
       <section className="grid players-layout">
         <article className="panel">
+          <div className="panel-head">
+            <h2>Adicionar jogador</h2>
+          </div>
           <form className="form" onSubmit={save}>
             <label>
               Nome
@@ -970,7 +975,7 @@ function PlayersPage({
                 required
               />
             </label>
-            <button className="primary">Salvar jogador</button>
+            <button className="primary">Adicionar jogador</button>
           </form>
         </article>
         <article className="panel wide">
@@ -3839,6 +3844,7 @@ function ArenaApp({ user, onSignOut }: { user: AuthUser; onSignOut: () => void }
     ...(showRoomOnlyTabs
       ? ([["matches", "Partidas", Gamepad2], ["ranking", "Ranking", BarChart3]] as [Page, string, React.ElementType][])
       : []),
+    ["players", "Jogadores", Users],
     ["championships", "Campeonatos", Trophy],
     ["friends", "Amigos", UsersRound],
   ];
@@ -3852,7 +3858,7 @@ function ArenaApp({ user, onSignOut }: { user: AuthUser; onSignOut: () => void }
     ) : page === "friends" ? (
       <FriendsPage />
     ) : page === "players" ? (
-      <PlayersPage players={players} reload={reload} />
+      <PlayersPage players={players} reload={reload} activeRoomId={activeRoomId} />
     ) : page === "matches" ? (
       <MatchesPage players={players} teams={teams} reload={reload} totalMatches={data.matches} />
     ) : page === "ranking" ? (

@@ -177,8 +177,8 @@ app.whenReady().then(async () => {
   ipcMain.handle("dashboard", () => withContext(({ repo }) => repo.dashboard()));
   ipcMain.handle("arena:news", () => withContext(({ repo }) => repo.arenaNews()));
   ipcMain.handle("players:list", () => withContext(({ players, repo, roomId }) => roomId === null ? players.list() : repo.players()));
-  ipcMain.handle("players:save", (_, p) => withContext(({ players }) => { ensureRoomGlobalOnly(); return players.save(p); }));
-  ipcMain.handle("players:delete", (_, id) => withContext(({ players }) => { ensureRoomGlobalOnly(); return players.remove(id); }));
+  ipcMain.handle("players:save", (_, p, roomId: string | null) => withContext(({ players }) => players.save(p, roomId)));
+  ipcMain.handle("players:delete", (_, id) => withContext(({ players }) => players.remove(id)));
   ipcMain.handle("teams:list", (_, q) => withContext(({ teams }) => teams.list(q)));
   ipcMain.handle("matches:list", () => withContext(({ repo }) => repo.matches()));
   ipcMain.handle("matches:save", (_, m) => withContext(({ matches }) => { ensureRoomGlobalOnly(); return matches.save(m); }));

@@ -29,6 +29,7 @@ type Repository = ReturnType<typeof repository>;
 /** Linha de public.players no Supabase (snake_case). */
 type SupabasePlayerRow = {
   id: number | string;
+  room_id?: string | null;
   name: string;
   nickname: string;
   avatar: string | null;
@@ -44,13 +45,13 @@ type PostgrestErrorLike = {
 };
 
 const LOG_PREFIX = "[players]";
-const PLAYER_COLUMNS = "id,name,nickname,avatar,created_at";
+const PLAYER_COLUMNS = "id,room_id,name,nickname,avatar,created_at";
 
 export type PlayersService = {
   /** Lista jogadores (Supabase quando disponível; espelho local como fallback). */
   list(): Promise<Player[]>;
   /** Cria/edita jogador no Supabase e sincroniza o espelho local. */
-  save(player: Partial<Player>): Promise<Player>;
+  save(player: Partial<Player>, requestedRoomId?: string | null): Promise<Player>;
   /** Exclui jogador no Supabase (com cascata local de partidas/confrontos). */
   remove(id: number): Promise<void>;
   /** Sincroniza o espelho local a partir do Supabase (boot). Retorna nº de linhas. */
@@ -149,9 +150,10 @@ export function createPlayersService(
   // alterado; apenas escrevemos nas colunas que já existem.
   // ---------------------------------------------------------------------------
   const mirrorUpsert = db.prepare(`
-    INSERT INTO players(id,name,nickname,avatar,created_at)
-    VALUES (@id,@name,@nickname,@avatar,@created_at)
+    INSERT INTO players(id,room_id,name,nickname,avatar,created_at)
+    VALUES (@id,@room_id,@name,@nickname,@avatar,@created_at)
     ON CONFLICT(id) DO UPDATE SET
+      room_id=excluded.room_id,
       name=excluded.name,
       nickname=excluded.nickname,
       avatar=excluded.avatar
@@ -173,6 +175,7 @@ export function createPlayersService(
   function mirrorUpsertRow(row: SupabasePlayerRow) {
     const values = {
       id: Number(row.id),
+      room_id: row.room_id ?? null,
       name: row.name,
       nickname: row.nickname,
       avatar: row.avatar ?? null,
@@ -231,7 +234,9 @@ export function createPlayersService(
     }
   }
 
-  async function save(player: Partial<Player>): Promise<Player> {
+  async function save(player: Partial<Player>, requestedRoomId = roomId): Promise<Player> {
+    if (requestedRoomId !== roomId) throw new Error("A sala selecionada foi alterada. Tente novamente.");
+    const targetRoomId = requestedRoomId ?? null;
     const name = player.name?.trim();
     const nickname = player.nickname?.trim();
     if (!name || !nickname) {
@@ -242,8 +247,8 @@ export function createPlayersService(
     const supabase = await getUserSessionClient();
     const userId = await getSessionUserId();
     if (!userId) throw new Error("Sua sessão expirou. Entre novamente para continuar.");
-    if (roomId !== null) {
-      const { data: role, error } = await supabase.rpc("room_member_role", { p_room_id: roomId });
+    if (targetRoomId !== null) {
+      const { data: role, error } = await supabase.rpc("room_member_role", { p_room_id: targetRoomId });
       if (error || (role !== "owner" && role !== "admin")) {
         throw new Error("Você não tem permissão para realizar esta ação.");
       }
@@ -254,10 +259,10 @@ export function createPlayersService(
     const result = player.id
       ? await execWithAuthRetry<SupabasePlayerRow[] | SupabasePlayerRow>(() => {
           const query = supabase.from("players").update(payload).eq("id", player.id as number);
-          return (roomId === null ? query.is("room_id", null) : query.eq("room_id", roomId)).select(PLAYER_COLUMNS);
+          return (targetRoomId === null ? query.is("room_id", null) : query.eq("room_id", targetRoomId)).select(PLAYER_COLUMNS);
         })
       : await execWithAuthRetry<SupabasePlayerRow[] | SupabasePlayerRow>(() =>
-          supabase.from("players").insert({ ...payload, room_id: roomId, created_by: userId }).select(PLAYER_COLUMNS),
+          supabase.from("players").insert({ ...payload, room_id: targetRoomId, created_by: userId }).select(PLAYER_COLUMNS),
         );
 
     // Defensivo: o PostgREST responde array, mas normalizamos por segurança.

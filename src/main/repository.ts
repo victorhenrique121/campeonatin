@@ -35,7 +35,7 @@ export function createDatabase(file: string) {
   db.pragma("foreign_keys = ON");
   db.pragma("journal_mode = WAL");
   db.exec(`
-    CREATE TABLE IF NOT EXISTS players (id INTEGER PRIMARY KEY, name TEXT NOT NULL, nickname TEXT NOT NULL UNIQUE, avatar TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+    CREATE TABLE IF NOT EXISTS players (id INTEGER PRIMARY KEY, room_id TEXT, name TEXT NOT NULL, nickname TEXT NOT NULL UNIQUE, avatar TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
     CREATE TABLE IF NOT EXISTS teams2v2 (id INTEGER PRIMARY KEY, room_id TEXT, player1_id INTEGER, player2_id INTEGER, name TEXT, created_at TEXT, updated_at TEXT);
     CREATE TABLE IF NOT EXISTS teams (id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE, league TEXT NOT NULL, country TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS championships (id INTEGER PRIMARY KEY, name TEXT NOT NULL, format TEXT NOT NULL CHECK(format IN ('league','knockout','groups_knockout')), mode TEXT NOT NULL DEFAULT 'classic' CHECK(mode IN ('classic','duo','mad')), mutator TEXT, starts_at TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'draft');
@@ -45,6 +45,10 @@ export function createDatabase(file: string) {
     CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
     CREATE INDEX IF NOT EXISTS idx_matches_played_at ON matches(played_at DESC); CREATE INDEX IF NOT EXISTS idx_matches_players ON matches(player1_id, player2_id);
   `);
+  const playerColumns = db.prepare("PRAGMA table_info(players)").all() as Array<{ name: string }>;
+  if (!playerColumns.some((column) => column.name === "room_id")) {
+    db.exec("ALTER TABLE players ADD COLUMN room_id TEXT");
+  }
   const duoColumns = db.prepare("PRAGMA table_info(teams2v2)").all() as { name: string }[];
   if (!duoColumns.some((column) => column.name === "team_id")) {
     db.exec("ALTER TABLE teams2v2 ADD COLUMN team_id INTEGER REFERENCES teams(id) ON DELETE RESTRICT");
