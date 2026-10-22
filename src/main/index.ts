@@ -1,4 +1,5 @@
 import { app, BrowserWindow, ipcMain } from "electron";
+import fs from "node:fs";
 import path from "node:path";
 import { createDatabase, repository } from "./repository";
 import type { ChangeEmailInput } from "../shared/api";
@@ -69,6 +70,26 @@ const windowIconPath = app.isPackaged
   ? path.join(process.resourcesPath, "icon.ico")
   : path.join(__dirname, "../../build/icon.ico");
 const SESSION_EXPIRED_MESSAGE = "Sua sessão expirou. Faça login novamente.";
+
+function loadPackagedSupabaseEnv(): void {
+  if (!app.isPackaged) return;
+
+  const publicEnvPath = path.join(process.resourcesPath, "supabase.env");
+  try {
+    if (!fs.existsSync(publicEnvPath)) {
+      console.warn("[config] Arquivo público do Supabase não encontrado no pacote.");
+      return;
+    }
+    process.loadEnvFile(publicEnvPath);
+  } catch (error) {
+    console.warn(
+      "[config] Não foi possível carregar a configuração pública do Supabase.",
+      error instanceof Error ? error.message : error,
+    );
+  }
+}
+
+loadPackagedSupabaseEnv();
 
 function enqueueContext<T>(operation: () => T | Promise<T>): Promise<T> {
   const result = contextQueue.then(operation);
@@ -161,11 +182,12 @@ function createWindow() {
   });
 
   const devUrl = process.env.VITE_DEV_SERVER_URL || "http://localhost:5173";
+  const rendererIndexPath = path.join(__dirname, "../../dist/index.html");
 
   if (!app.isPackaged) {
     window.loadURL(devUrl);
   } else {
-    window.loadFile(path.join(__dirname, "../../dist/index.html"));
+    window.loadFile(rendererIndexPath);
   }
 }
 

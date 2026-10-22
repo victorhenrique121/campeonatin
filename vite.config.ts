@@ -4,6 +4,9 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   plugins: [react()],
 
+  // O renderer é aberto pelo Electron via file:// no pacote.
+  base: './',
+
   root: 'src/renderer',
 
   build: {

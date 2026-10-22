@@ -24,6 +24,7 @@
     "generate:icon": "node scripts/generate-icon.mjs",
     "start": "electron-forge start",
     "package": "electron-forge package",
+    "premake": "node scripts/generate-supabase-env.mjs",
     "make": "electron-forge make"
   },
   "dependencies": {

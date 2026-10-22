@@ -7,6 +7,7 @@ dist-electron/
 
 .env
 .env.*
+supabase.env
 !.env.example
 
 *.log
@@ -19,7 +20,6 @@ simulate-match.js
 
 out/
 
-forge.config.js
 supabase/local_test/
 
 generate-icon.mjs
